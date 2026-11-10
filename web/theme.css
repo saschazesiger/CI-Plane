@@ -1,0 +1,36 @@
+/*
+ * The CI-Plane theme: tokens only, loaded after ds.css and unlayered, so it
+ * wins over the defaults of Dashboard-Style. It sets the brand roles (an
+ * indigo accent) and their dark tones, and the project's own tokens (--cp-*)
+ * that app.css reads. Never motion tokens, never a component's look.
+ */
+
+.ds-theme {
+  --ds-primary: #4355b9;
+  --ds-on-primary: #ffffff;
+  --ds-accent: #dee0ff;
+  --ds-on-accent: #00105c;
+  --ds-inverse-primary: #bac3ff;
+  --ds-backdrop: #f3f4fb;
+
+  /* Interactive cards lift a little on hover. */
+  --ds-card-hover-shadow: var(--ds-elev-hover);
+
+  /* Two tiles per row on a phone keep the overview short. */
+  --ds-tile-min-width: 128px;
+
+  --cp-logo-size: 32px;
+  --cp-meter-width: 88px;
+}
+
+/* The dark tones of the accent. themes/dark.css loads after this file with the same media query and sets its own
+   primary; the doubled class outweighs its plain .ds-theme. */
+@media (prefers-color-scheme: dark) {
+  .ds-theme.ds-base {
+    --ds-primary: #bac3ff;
+    --ds-on-primary: #08218a;
+    --ds-accent: #293ca0;
+    --ds-on-accent: #dee0ff;
+    --ds-inverse-primary: #4355b9;
+  }
+}

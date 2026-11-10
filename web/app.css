@@ -1,0 +1,106 @@
+/*
+ * Layout glue of CI-Plane, prefix cp-. Tokens only (--ds-* and the --cp-*
+ * of theme.css): no colour, radius, font, shadow, duration or curve
+ * literals, no keyframes, and no rule that restyles a .ds-* component.
+ *
+ *   .cp-logo        the brand mark: a plane on the primary colour
+ *   .cp-brand-row   the mark and the name above the sign-in card
+ *   .cp-row         a wrapping row of buttons or chips
+ *   .cp-grow        takes the room left in a row (a code block beside its copy button)
+ *   .cp-capacity    the grid of per-worker capacity blocks on the overview
+ *   .cp-meters      the live CPU, memory and disk meters of a worker row
+ *   .cp-meter       one labelled meter in it
+ *   .cp-tier        a tier heading inside the workers list
+ *   .cp-col-*       stable widths for table columns with live values
+ *   .cp-limit       the narrow number field of a parallel-jobs limit
+ */
+
+.cp-logo {
+  display: inline-block;
+  flex: none;
+  position: relative;
+  width: var(--cp-logo-size);
+  height: var(--cp-logo-size);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-primary);
+}
+
+.cp-logo::after {
+  content: '';
+  position: absolute;
+  inset: 22% 20% 18%;
+  background: var(--ds-on-primary);
+  clip-path: polygon(50% 0, 100% 100%, 50% 74%, 0 100%);
+}
+
+.cp-brand-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-3);
+}
+
+.cp-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+
+.cp-grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Capacity on the overview: one block per worker, as many per row as fit. */
+.cp-capacity {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--ds-space-4);
+}
+
+/* A worker row: three small meters with their figure above. */
+.cp-meters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(var(--cp-meter-width), 1fr));
+  gap: var(--ds-space-3);
+  flex: 0 1 calc(var(--cp-meter-width) * 3 + var(--ds-space-3) * 2);
+  min-width: 0;
+}
+
+.cp-meter {
+  display: grid;
+  gap: var(--ds-space-1);
+  min-width: 0;
+}
+
+/* A tier heading in the workers list: a row of its own, not draggable. */
+.cp-tier {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-4) var(--ds-space-4) var(--ds-space-2);
+}
+
+.cp-col-status {
+  min-width: 136px;
+}
+
+.cp-col-time {
+  min-width: 96px;
+}
+
+.cp-limit {
+  width: 96px;
+}
+
+@media (forced-colors: active) {
+  .cp-logo {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .cp-logo::after {
+    background: Canvas;
+  }
+}

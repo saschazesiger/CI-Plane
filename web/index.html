@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en" class="ds-theme ds-base">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CI-Plane</title>
+<meta name="description" content="CI-Plane starts ephemeral GitHub Actions runners on your own servers.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<!-- Fonts, the design system, the CI-Plane theme (tokens only), the shipped dark theme when the device asks for it,
+     then the layout glue. No inline scripts: the Content-Security-Policy forbids them. -->
+<link rel="stylesheet" href="vendor/dashboard-style/fonts/fonts.css">
+<link rel="stylesheet" href="vendor/dashboard-style/ds.css">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="vendor/dashboard-style/themes/dark.css" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<!-- While the session loads: shows only when that takes a moment. -->
+<div class="ds-boot" role="status" id="boot"><span class="ds-loader" aria-hidden="true"></span>Starting CI-Plane ...</div>
+
+<!-- Sign in. -->
+<div class="ds-auth" id="auth" hidden>
+  <div class="ds-auth__alert" id="auth-alert"></div>
+  <section class="ds-card ds-card--elevated ds-auth__card" aria-labelledby="auth-title">
+    <div class="cp-brand-row"><span class="cp-logo" aria-hidden="true"></span><span class="ds-brand__name">CI-Plane</span></div>
+    <h1 class="ds-card__title" id="auth-title" tabindex="-1">Sign in</h1>
+    <form class="ds-form" id="login-form" novalidate>
+      <div class="ds-field">
+        <label class="ds-field__label" for="login-password">Admin password</label>
+        <input class="ds-input" id="login-password" name="password" type="password" autocomplete="current-password" required aria-describedby="login-hint">
+        <small class="ds-field__hint" id="login-hint">Forgot it? Start CI-Plane with the environment variable CI_PLANE_ADMIN_PASSWORD set to a new password.</small>
+      </div>
+      <div class="ds-form-actions">
+        <button class="ds-btn ds-btn--primary" type="submit"><span class="ds-btn__faces">
+          <span class="ds-btn__face">Sign in</span>
+          <span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--sm"></span>Signing in</span>
+          <span class="ds-btn__face ds-btn__face--done" aria-hidden="true" data-icon-done>Signed in</span>
+        </span></button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<div class="ds-app ds-app--drawer" id="app" hidden>
+  <a class="ds-skip" href="#main">Skip to content</a>
+
+  <div class="ds-topbar">
+    <button class="ds-btn ds-btn--quiet ds-btn--icon ds-topbar__menu" type="button" aria-label="Menu" aria-expanded="false" aria-controls="drawer" id="menu" data-icon="menu" data-icon-place="start"></button>
+    <a class="ds-brand" href="#/overview"><span class="cp-logo" aria-hidden="true"></span><span class="ds-brand__name">CI-Plane</span></a>
+    <span class="ds-tag" id="demo-tag" hidden data-tip="Simulated GitHub, Cloudflare and workers: nothing real is touched">Demo</span>
+    <div class="ds-topbar__actions">
+      <a class="ds-btn ds-btn--quiet ds-btn--icon" href="https://github.com/saschazesiger/CI-Plane#readme" target="_blank" rel="noopener" aria-label="Documentation (opens GitHub)" data-tip="Documentation" data-icon="helpCircle" data-icon-place="start"></a>
+    </div>
+    <div class="ds-account ds-account--capsule" id="account">
+      <div class="ds-account__text" aria-hidden="true"><div class="ds-account__name" id="account-name">Admin</div><div class="ds-account__email" id="account-email"></div></div>
+      <span class="ds-account__avatar" role="img" id="account-avatar" aria-label="Admin" data-tip="Admin">A</span>
+      <span class="ds-account__divider"></span>
+      <button class="ds-btn ds-btn--text" type="button" id="sign-out">Sign out</button>
+    </div>
+  </div>
+
+  <div class="ds-scrim"></div>
+  <nav class="ds-drawer" id="drawer" aria-label="Main" tabindex="-1">
+    <div class="ds-drawer__head" aria-hidden="true"><span class="cp-logo"></span><span class="ds-brand__name">CI-Plane</span></div>
+    <div class="ds-drawer__list" id="nav">
+      <div class="ds-drawer__group">
+        <a class="ds-drawer__item" href="#/overview" data-route="overview" data-icon="overview" data-icon-place="start"><span class="ds-drawer__label">Overview</span></a>
+        <a class="ds-drawer__item" href="#/jobs" data-route="jobs" data-icon="activity" data-icon-place="start"><span class="ds-drawer__label">Jobs</span></a>
+        <a class="ds-drawer__item" href="#/workers" data-route="workers" data-icon="server" data-icon-place="start"><span class="ds-drawer__label">Workers</span></a>
+        <a class="ds-drawer__item" href="#/repositories" data-route="repositories" data-icon="folder" data-icon-place="start"><span class="ds-drawer__label">Repositories</span></a>
+        <a class="ds-drawer__item" href="#/settings" data-route="settings" data-icon="settings" data-icon-place="start"><span class="ds-drawer__label">Settings</span></a>
+      </div>
+    </div>
+    <div class="ds-drawer__foot">
+      <a class="ds-drawer__item" href="#/setup" data-route="setup" data-icon="sparkles" data-icon-place="start" data-tip="Setup assistant"><span class="ds-drawer__label">Setup assistant</span></a>
+    </div>
+  </nav>
+
+  <div class="ds-panel">
+    <main class="ds-view" id="main" tabindex="-1">
+      <div class="ds-content">
+        <div class="ds-page" id="page"></div>
+      </div>
+      <!-- Unsaved edits of the settings form: the last child of the view (DS.overlay.savebar()). -->
+      <div class="ds-savebar" id="savebar">
+        <div class="ds-savebar__bar ds-presence" role="region" aria-label="Unsaved changes" hidden>
+          <p class="ds-savebar__text" id="savebar-text">1 unsaved change</p>
+          <div class="ds-savebar__actions">
+            <button class="ds-btn ds-btn--text" type="button" id="savebar-discard">Discard</button>
+            <button class="ds-btn ds-btn--primary" type="submit" form="settings-form" id="savebar-save"><span class="ds-btn__faces">
+              <span class="ds-btn__face">Save settings</span>
+              <span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--sm"></span>Saving</span>
+              <span class="ds-btn__face ds-btn__face--done" aria-hidden="true" data-icon-done>Saved</span>
+            </span></button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Right after .ds-app: DS.overlay.toast() adds its live regions next to it. -->
+<div class="ds-toasts" id="toasts"></div>
+
+<!-- One side sheet for the record opened from a list (a job, a worker). -->
+<dialog class="ds-sheet" id="sheet" aria-labelledby="sheet-title">
+  <div class="ds-sheet__backdrop" data-close></div>
+  <section class="ds-sheet__panel">
+    <div class="ds-sheet__head">
+      <div class="ds-sheet__heading">
+        <h2 class="ds-sheet__title" id="sheet-title">Details</h2>
+        <p class="ds-sheet__subtitle" id="sheet-subtitle"></p>
+      </div>
+      <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Close" data-tip="Close" data-close data-icon="close" data-icon-place="start"></button>
+    </div>
+    <div class="ds-sheet__body" tabindex="0" id="sheet-body"></div>
+  </section>
+</dialog>
+
+<!-- Edit a worker: its name and tier. -->
+<dialog class="ds-dialog" id="worker-dialog" aria-labelledby="worker-dialog-title">
+  <div class="ds-dialog__backdrop" data-close></div>
+  <form class="ds-dialog__box ds-form" id="worker-form" novalidate>
+    <h2 class="ds-dialog__title" id="worker-dialog-title">Edit worker</h2>
+    <div class="ds-field">
+      <label class="ds-field__label" for="worker-name">Name</label>
+      <input class="ds-input" id="worker-name" name="name" autocomplete="off" maxlength="40" aria-describedby="worker-name-hint">
+      <small class="ds-field__hint" id="worker-name-hint">Shown in CI-Plane and in the names of its runners on GitHub.</small>
+    </div>
+    <div class="ds-field">
+      <label class="ds-field__label" for="worker-tier">Tier</label>
+      <select class="ds-input" id="worker-tier" name="tier" aria-describedby="worker-tier-hint"></select>
+      <small class="ds-field__hint" id="worker-tier-hint">Tier 1 is filled first; a higher tier only gets jobs when the tiers before it are full or off.</small>
+    </div>
+    <div class="ds-dialog__actions">
+      <button class="ds-btn ds-btn--text" type="button" data-close>Cancel</button>
+      <button class="ds-btn ds-btn--primary" type="submit"><span class="ds-btn__faces">
+        <span class="ds-btn__face">Save</span>
+        <span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--sm"></span>Saving</span>
+        <span class="ds-btn__face ds-btn__face--done" aria-hidden="true" data-icon-done>Saved</span>
+      </span></button>
+    </div>
+  </form>
+</dialog>
+
+<!-- After a worker was removed: the command that removes CI-Plane from the server. -->
+<dialog class="ds-dialog ds-dialog--wide" id="removed-dialog" aria-labelledby="removed-title">
+  <div class="ds-dialog__backdrop" data-close></div>
+  <div class="ds-dialog__box">
+    <h2 class="ds-dialog__title" id="removed-title">Worker removed</h2>
+    <div class="ds-dialog__body">
+      <p class="ds-dialog__text" id="removed-text">CI-Plane no longer uses it. To remove what CI-Plane set up on the server, run this as root there:</p>
+      <div class="ds-field__row ds-field__row--top">
+        <pre class="ds-code-block ds-code-block--wrap cp-grow" id="removed-command" tabindex="0" aria-label="Remove command"><code></code></pre>
+        <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Copy the command" data-tip="Copy the command" data-copy="removed-command"><span class="ds-icon-swap" data-swap="a"><span class="ds-icon-swap__a" data-icon="copy"></span><span class="ds-icon-swap__b" data-icon="check"></span></span></button>
+      </div>
+      <p class="ds-meta">It deletes the user ci-plane, the registry mirror and every container, volume and network labelled ci-plane. Docker itself stays.</p>
+    </div>
+    <div class="ds-dialog__actions">
+      <button class="ds-btn ds-btn--primary" type="button" data-close>Done</button>
+    </div>
+  </div>
+</dialog>
+
+<script src="vendor/dashboard-style/ds.js"></script>
+<script type="module" src="app/main.js"></script>
+</body>
+</html>
