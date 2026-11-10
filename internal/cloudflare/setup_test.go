@@ -199,7 +199,7 @@ func TestSetupWithoutZeroTrust(t *testing.T) {
 	h.cf.noOrg = true
 	err := h.svc.Setup(context.Background(), setupReq(), nil)
 	if err == nil || !strings.Contains(err.Error(), "Zero Trust is not enabled") || !strings.Contains(err.Error(), "Free plan") ||
-		!strings.Contains(err.Error(), "Try again") {
+		!strings.Contains(err.Error(), "run the setup again") {
 		t.Fatalf("err = %v", err)
 	}
 	if tun, _, _, _ := h.counts(); tun != 0 {

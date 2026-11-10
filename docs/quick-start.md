@@ -58,7 +58,7 @@ GitHub has to reach CI-Plane to deliver jobs. A Cloudflare Tunnel does that with
    takes about a minute; you may leave the page meanwhile.
 
 If Zero Trust was never enabled on the account, the step says so: open <https://one.dash.cloudflare.com/> once, choose
-a team name and the free plan, then choose **Set up the tunnel** again (the error text calls this "Try again").
+a team name and the free plan, then choose **Set up the tunnel** again.
 
 When the step shows **The tunnel is up**, choose **Next: GitHub**.
 
