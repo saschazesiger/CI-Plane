@@ -20,7 +20,7 @@ const sessionDuration = "24h"
 // errZeroTrust is shown when the account has no Zero Trust organisation.
 var errZeroTrust = errors.New("Cloudflare Zero Trust is not enabled on this Cloudflare account yet, and CI-Plane needs it " +
 	"for the login (Cloudflare Access). Open https://one.dash.cloudflare.com/ once, pick this account, choose a team " +
-	"name and the Free plan (no payment details are needed for it), then come back and press \"Try again\"")
+	"name and the Free plan (no payment details are needed for it), then come back and run the setup again")
 
 func normHost(h string) string {
 	h = strings.ToLower(strings.TrimSpace(h))
@@ -141,7 +141,7 @@ func (s *Service) Setup(ctx context.Context, req api.TunnelSetup, progress func(
 		return missing(err, permTunnel)
 	}
 	if tunnelTok == "" {
-		return errors.New("Cloudflare did not return a token for the tunnel. Press \"Try again\"")
+		return errors.New("Cloudflare did not return a token for the tunnel. Run the setup again")
 	}
 	if err := s.save(cur, map[string]string{secretTunnelTok: tunnelTok}); err != nil {
 		return err
@@ -209,7 +209,7 @@ func (s *Service) teamDomain(ctx context.Context, token, acct string) (string, e
 		// A missing organisation can also come back as 403, so say both.
 		return "", fmt.Errorf("Cloudflare refused to show the Zero Trust organisation. Either the API token lacks %q "+
 			"(create a new token with the link on this page), or Zero Trust is not enabled yet: open "+
-			"https://one.dash.cloudflare.com/ once, choose a team name and the Free plan, then press \"Try again\". Details: %w", permOrg, err)
+			"https://one.dash.cloudflare.com/ once, choose a team name and the Free plan, then run the setup again. Details: %w", permOrg, err)
 	default:
 		var e *apiError
 		if errors.As(err, &e) && e.Status < 500 {
@@ -263,12 +263,12 @@ func (s *Service) ensureTunnel(ctx context.Context, token, acct, known, host str
 		var e *apiError
 		if errors.As(err, &e) && e.Status == http.StatusConflict {
 			return "", fmt.Errorf("a tunnel named %s exists in Cloudflare but is managed by a configuration file, "+
-				"not by CI-Plane. Delete it under Zero Trust > Networks > Tunnels, then press \"Try again\"", name)
+				"not by CI-Plane. Delete it under Zero Trust > Networks > Tunnels, then run the setup again", name)
 		}
 		return "", missing(err, permTunnel)
 	}
 	if t.ID == "" {
-		return "", errors.New("Cloudflare created the tunnel but did not say its ID. Press \"Try again\"")
+		return "", errors.New("Cloudflare created the tunnel but did not say its ID. Run the setup again")
 	}
 	return t.ID, nil
 }
@@ -292,7 +292,7 @@ func (s *Service) ensureRecord(ctx context.Context, token string, cur state, hos
 			(r.Comment == recordComment && strings.HasSuffix(strings.ToLower(r.Content), ".cfargotunnel.com")))
 		if !mine {
 			return "", fmt.Errorf("the DNS record %s already exists (%s %s) and was not made by CI-Plane, so it is "+
-				"left alone. Choose another subdomain, or delete that record in the Cloudflare dashboard under DNS and press \"Try again\"",
+				"left alone. Choose another subdomain, or delete that record in the Cloudflare dashboard under DNS and run the setup again",
 				host, r.Type, r.Content)
 		}
 		ours = &recs[i]
@@ -391,7 +391,7 @@ func (s *Service) ensureApp(ctx context.Context, token, acct, known string, want
 			}
 			if !strings.HasPrefix(a.Name, appPrefix) {
 				return appObj{}, fmt.Errorf("Cloudflare Access already has an application %q for %s that CI-Plane did not "+
-					"create. Delete it under Zero Trust > Access > Applications, or choose another subdomain, then press \"Try again\"",
+					"create. Delete it under Zero Trust > Access > Applications, or choose another subdomain, then run the setup again",
 					a.Name, want.Domain)
 			}
 			have = a
@@ -453,7 +453,7 @@ func (s *Service) ensureAccess(ctx context.Context, token string, cur *state, ho
 		return err
 	}
 	if app.AUD == "" {
-		return errors.New("Cloudflare created the Access application but did not return its AUD tag. Press \"Try again\"")
+		return errors.New("Cloudflare created the Access application but did not return its AUD tag. Run the setup again")
 	}
 	cur.AppID, cur.AppAUD = app.ID, app.AUD
 	return s.save(*cur, nil)
@@ -479,7 +479,7 @@ func (s *Service) waitConnected(ctx context.Context) error {
 			default:
 				msg += " Check that this machine may open outgoing connections on port 7844 (UDP and TCP)."
 			}
-			return errors.New(msg + " Then press \"Try again\"")
+			return errors.New(msg + " Then run the setup again")
 		}
 		select {
 		case <-ctx.Done():

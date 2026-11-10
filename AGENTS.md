@@ -1,7 +1,7 @@
 # Working on CI-Plane
 
 CI-Plane starts ephemeral GitHub Actions runners on your own servers. One Go binary, one container, one SQLite
-file. Read [docs/PLAN.md](docs/PLAN.md) for the design before changing behaviour.
+file. Read [docs/how-it-works.md](docs/how-it-works.md) for the design before changing behaviour.
 
 ## Layout
 

@@ -18,6 +18,8 @@ jobs:
           go-version-file: go.mod
       - name: Vendored Dashboard-Style is untouched
         run: sh web/vendor/dashboard-style/tools/verify.sh web/vendor/dashboard-style
+      - name: Interface follows the Dashboard-Style project rules
+        run: node web/vendor/dashboard-style/tools/check-project.mjs --config web/ds-check.json
       - run: go vet ./...
       - run: go test -race ./...
       - name: Build image
