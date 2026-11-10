@@ -12,6 +12,9 @@ import (
 // HandleJob records what GitHub reported about a job. It is safe to call
 // with the same event many times and with events out of order.
 func (e *Engine) HandleJob(ev JobEvent) error {
+	if ev.Action != "queued" && ev.Action != "in_progress" && ev.Action != "completed" {
+		return nil // e.g. "waiting" for an approval: no runner is needed yet
+	}
 	if ev.At == 0 {
 		ev.At = e.now()
 	}

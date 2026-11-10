@@ -273,6 +273,26 @@ func TestIgnoredJobs(t *testing.T) {
 	}
 }
 
+func TestJobWaitingForApprovalGetsNoRunner(t *testing.T) {
+	r := newRig(t)
+	r.worker("alpha", 1)
+	ev := engine.JobEvent{ID: 900, AccountID: orgID, RepoID: 1, Repo: "acme/api", Labels: []string{"self-hosted", "ci-plane"}}
+	for _, action := range []string{"", "waiting"} {
+		ev.Action = action
+		must(t, r.eng.HandleJob(ev))
+	}
+	r.pass(2)
+	if a := r.active(); len(a) != 0 {
+		t.Fatalf("runner started for a job that is not queued: %+v", a)
+	}
+	ev.Action = "queued"
+	must(t, r.eng.HandleJob(ev))
+	r.pass(2)
+	if j := r.job(900); j.State != model.JobAssigned {
+		t.Fatalf("job after it was queued: %s", j.State)
+	}
+}
+
 func TestLostWebhooks(t *testing.T) {
 	r := newRig(t)
 	w := r.worker("alpha", 1)
