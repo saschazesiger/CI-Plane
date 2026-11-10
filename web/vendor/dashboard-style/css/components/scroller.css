@@ -1,0 +1,197 @@
+/*
+ * Sideways scrollers: a strip wider than its panel (months, a row of
+ * cards, a wide chart) that scrolls on its own, with a fade at each end
+ * that still has content to show, and the place of a "Latest" pill in a
+ * log that sticks to its end.
+ *
+ *   <div class="ds-scroll-x" tabindex="0" role="region" aria-label="Months">
+ *     <div>... content wider than the panel ...</div>
+ *   </div>
+ *   DS.dom.scrollEdges(scroller)   the attribute fallback (below)
+ *
+ *   tabindex="0" role="region" aria-label  only when nothing inside can
+ *                       take focus: the scroller is then the tab stop that
+ *                       arrow keys scroll (WebKit gives a scroller none by
+ *                       itself); its ring is inset (it rests at 0 and snaps
+ *                       to minus its width) and never masked
+ *
+ *   <div class="ds-jump"><div class="ds-presence" hidden>
+ *     <button class="ds-btn ds-btn--tonal ds-btn--icon" type="button" aria-label="Latest">(arrowDown)</button>
+ *   </div></div>
+ *                       the last child of a scrolling log: a pill that
+ *                       floats --ds-space-4 above the log's bottom edge
+ *                       while the log is not at its end (DS.dom.followEnd()
+ *                       toggles hidden on the .ds-presence and scrolls to
+ *                       the end on a click); the place takes no room
+ *
+ * The fade: the mask is a gradient whose two ends are the registered
+ * numbers --ds-scroll-edge-start and --ds-scroll-edge-end (0 or 1, also
+ * in between) times the fade length, so 0 is no fade. Where scroll
+ * timelines exist, ds-scroll-edge-start and ds-scroll-edge-end (motion.css)
+ * drive them on the scroller's own scroll(self inline) timeline: the start
+ * fade grows while the first --ds-space-8 scroll away, the end fade goes
+ * over the last --ds-space-8; a strip that fits has an inactive timeline
+ * and fades nowhere. Elsewhere DS.dom.scrollEdges() writes
+ * data-ds-overflow-start and data-ds-overflow-end (more to scroll at that
+ * end), which set the numbers to 1 over --ds-dur-fast (the first
+ * measurement at once: the transition waits for data-ds-edges, which it
+ * writes after the first edges, so nothing moves on load); without it the
+ * strip shows no fade. The mask leaves the scrollbar strip opaque: its height is
+ * --ds-scrollbar-height (written by DS.dom.scrollEdges(); 0px without it).
+ * The gradient runs left to right (left-to-right pages only).
+ * Focus inside lands outside the fades (scroll-padding-inline).
+ *
+ * The table wrappers of table.css fade on the same two numbers, and the
+ * menus (menu.css: shades of their surface) and combobox lists
+ * (combobox.css: the same mask) reuse them on the block axis.
+ *
+ * Hook: --ds-scroll-fade (the fade length, default --ds-space-8; 0px turns
+ * the fades of every scroller off: .ds-scroll-x, the card table wrappers
+ * and the menu edges).
+ *
+ * Runtime property (written by DS.dom.scrollEdges(), read with a 0px
+ * fallback): --ds-scrollbar-height (its block-axis twin,
+ * --ds-scrollbar-width, is read by the combobox list's mask).
+ *
+ * Print: the strip shows all of its content, unmasked; the jump pill is
+ * hidden.
+ *
+ * Progressive:
+ * - scroll-driven animations (animation-timeline: scroll(), animation-range;
+ *   the fades follow the scroll position): without them the
+ *   data-ds-overflow-* attributes of DS.dom.scrollEdges() set the fades,
+ *   or none show.
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar): without
+ *   them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+/* The two ends of the fade, as numbers: registered, so they interpolate
+   (the scroll-linked keyframes and the attribute transitions); they do not
+   inherit, so a scroller inside a scroller keeps its own. */
+@property --ds-scroll-edge-start {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --ds-scroll-edge-end {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@layer ds.components {
+  /* Positioned: absolutely placed content (a .ds-sr label) is clipped by
+     the strip instead of widening the page. The block padding is the room
+     of the focus rings inside; the mask covers the content box and leaves
+     the scrollbar strip opaque. */
+  .ds-scroll-x {
+    position: relative;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    padding-block: var(--ds-space-1);
+    scroll-padding-inline: var(--ds-scroll-fade, var(--ds-space-8));
+    -webkit-mask-image:
+      linear-gradient(to right, transparent, #000 calc(var(--ds-scroll-edge-start) * var(--ds-scroll-fade, var(--ds-space-8))), #000 calc(100% - var(--ds-scroll-edge-end) * var(--ds-scroll-fade, var(--ds-space-8))), transparent),
+      linear-gradient(#000, #000);
+    mask-image:
+      linear-gradient(to right, transparent, #000 calc(var(--ds-scroll-edge-start) * var(--ds-scroll-fade, var(--ds-space-8))), #000 calc(100% - var(--ds-scroll-edge-end) * var(--ds-scroll-fade, var(--ds-space-8))), transparent),
+      linear-gradient(#000, #000);
+    -webkit-mask-size: 100% calc(100% - var(--ds-scrollbar-height, 0px)), 100% var(--ds-scrollbar-height, 0px);
+    mask-size: 100% calc(100% - var(--ds-scrollbar-height, 0px)), 100% var(--ds-scrollbar-height, 0px);
+    -webkit-mask-position: 0 0, 0 100%;
+    mask-position: 0 0, 0 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+
+  /* The fallback: DS.dom.scrollEdges() says which end has more. Where a
+     scroll timeline drives the numbers, the animation wins over these.
+     The fades glide only once it has measured (data-ds-edges comes after
+     the first edges), so a strip shows its first fades still on load. */
+  .ds-scroll-x[data-ds-edges] {
+    transition:
+      --ds-scroll-edge-start var(--ds-dur-fast) var(--ds-ease-in-out),
+      --ds-scroll-edge-end var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-scroll-x[data-ds-overflow-start] {
+    --ds-scroll-edge-start: 1;
+  }
+
+  .ds-scroll-x[data-ds-overflow-end] {
+    --ds-scroll-edge-end: 1;
+  }
+
+  /* Scroll-linked: the shorthand first (it resets animation-timeline);
+     one timeline for both animations. */
+  @supports (animation-timeline: scroll()) {
+    .ds-scroll-x {
+      animation: ds-scroll-edge-start linear both, ds-scroll-edge-end linear both;
+      animation-timeline: scroll(self inline);
+      animation-range: 0 var(--ds-space-8), calc(100% - var(--ds-space-8)) 100%;
+    }
+  }
+
+  /* A scroller that is a tab stop: an inset ring, solid from the first
+     frame, that snaps from the edge inward; the mask would cut it, so the
+     focused strip shows unmasked. */
+  .ds-scroll-x[tabindex] {
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-scroll-x[tabindex][data-ds-edges] {
+    transition:
+      --ds-scroll-edge-start var(--ds-dur-fast) var(--ds-ease-in-out),
+      --ds-scroll-edge-end var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-scroll-x[tabindex]:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  /*
+   * The place of a "Latest" pill: sticky at the bottom of its log, no room
+   * of its own (height 0), so the log's content never moves when the pill
+   * comes; only the pill takes the pointer, the place lets clicks through
+   * to the log under it. The pill keeps its own height (not stretched to
+   * the place's 0) and is lifted by its whole height.
+   */
+  .ds-jump {
+    position: sticky;
+    inset-block-end: var(--ds-space-4);
+    z-index: var(--ds-z-sticky);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    height: 0;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  .ds-jump > * {
+    pointer-events: auto;
+    translate: 0 -100%;
+  }
+
+  @media print {
+    .ds-scroll-x {
+      overflow: visible;
+      -webkit-mask-image: none;
+      mask-image: none;
+    }
+
+    .ds-jump {
+      display: none;
+    }
+  }
+}

@@ -1,0 +1,150 @@
+/*
+ * Save bar: the unsaved edits of a view, saved or discarded together. A
+ * floating bar at the bottom of the view, centred in the page column,
+ * sticky while the view scrolls; it takes no room of its own (height 0),
+ * the view keeps its end clear of it while it shows.
+ *
+ *   <main class="ds-view" id="main" tabindex="-1">
+ *     <div class="ds-content"> ... </div>
+ *     <div class="ds-savebar">
+ *       <div class="ds-savebar__bar ds-presence" role="region" aria-label="Unsaved changes" hidden>
+ *         <p class="ds-savebar__text">2 unsaved changes</p>
+ *         <div class="ds-savebar__actions">
+ *           <button class="ds-btn ds-btn--text" type="button">Discard</button>
+ *           <button class="ds-btn ds-btn--primary" type="button"><span class="ds-btn__faces">...</span></button>
+ *         </div>
+ *       </div>
+ *     </div>
+ *   </main>
+ *
+ *   const bar = DS.overlay.savebar(document.querySelector('.ds-savebar'), { focusTarget: () => form });
+ *   bar.show();  bar.hide();  bar.update(() => { text.textContent = ... });
+ *
+ * Motion: .ds-presence (motion.css) with --ds-motion-scale at
+ * --ds-scale-enter from the bottom edge: it fades in and grows on the
+ * spring, leaves faster; a toggle mid-way continues from where it is.
+ *
+ * Runtime (written by DS.overlay.savebar(), owned): data-ds-savebar on the
+ * view while the bar shows, data-ds-savebar-rest after a hide at the end of
+ * the page (the room stays until the page scrolls away from the end), and
+ * --ds-savebar-height (the bar's height, px). The view's scroll padding and
+ * the content's bottom padding keep the bar's room: its height, its offset
+ * and --ds-space-2; the room of snackbars that stay (--ds-toast-reserve)
+ * moves into the content's padding meanwhile (a padding of the view would
+ * lift the sticky bar).
+ *
+ * Hooks: --ds-savebar-offset (distance from the view's bottom edge,
+ * --ds-space-4), --ds-savebar-inset (from the view's sides, the page pad
+ * --ds-content-pad-x), --ds-savebar-min-height (56px),
+ * --ds-savebar-radius (--ds-radius-card), --ds-savebar-bg
+ * (--ds-surface-popover, the floating surface: the dark theme lifts it like
+ * a menu), --ds-savebar-shadow (--ds-elev-overlay).
+ *
+ * Progressive:
+ * - @starting-style and transition-behavior: allow-discrete (the
+ *   .ds-presence entrance and exit): without them the bar shows and hides
+ *   at once.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+@layer ds.components {
+  .ds-savebar {
+    position: sticky;
+    bottom: 0;
+    z-index: var(--ds-z-sticky);
+    flex-shrink: 0;
+    height: 0;
+    /* Under short content it still sits at the view's bottom (the view is
+       a flex column, shell.css). */
+    margin-top: auto;
+  }
+
+  .ds-savebar__bar {
+    position: absolute;
+    bottom: var(--ds-savebar-offset, var(--ds-space-4));
+    /* The page column: the view's pad on both sides, at most as wide as
+       the page, centred. */
+    inset-inline: var(--ds-savebar-inset, var(--ds-content-pad-x, var(--ds-space-8)));
+    max-width: var(--ds-content-max);
+    margin-inline: auto;
+    box-sizing: border-box;
+    min-height: var(--ds-savebar-min-height, 56px);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2) var(--ds-space-4);
+    padding-block: var(--ds-space-2);
+    padding-inline: var(--ds-space-5) var(--ds-space-3);
+    border-radius: var(--ds-savebar-radius, var(--ds-radius-card));
+    background: var(--ds-savebar-bg, var(--ds-surface-popover));
+    color: var(--ds-text);
+    box-shadow: var(--ds-savebar-shadow, var(--ds-elev-overlay));
+    /* Invisible; forced colors paint it, so the bar keeps an edge. */
+    outline: 1px solid transparent;
+    --ds-motion-scale: var(--ds-scale-enter);
+    transform-origin: 50% 100%;
+  }
+
+  /* Hidden also without .ds-base; .ds-presence keeps it displayed through
+     its exit (display steps with allow-discrete). */
+  .ds-savebar__bar[hidden] {
+    display: none;
+  }
+
+  .ds-savebar__text {
+    flex: 1 1 12em;
+    min-width: 0;
+    margin: 0;
+    font: var(--ds-font-body);
+    color: var(--ds-text);
+  }
+
+  .ds-savebar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--ds-space-2);
+    margin-inline-start: auto;
+  }
+
+  /* While it shows (or rests after a hide at the end of the page), the view
+     keeps its end clear of it: scrolling into view stops above the bar, and
+     the content's last element can scroll above it. */
+  .ds-view[data-ds-savebar] {
+    scroll-padding-bottom: max(calc(var(--ds-savebar-height, 0px) + var(--ds-savebar-offset, var(--ds-space-4)) + var(--ds-space-2)), var(--ds-toast-reserve, 0px));
+  }
+
+  /* The room of snackbars that stay (data-toast-reserve, toast.css) moves
+     from the view's padding to the content's: a padding of the view would
+     lift the sticky bar off the view's bottom, and the messages above it
+     with it. */
+  .ds-view[data-ds-savebar][data-toast-reserve] {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* --ds-content-pad-bottom is the content's own (page.css), phones
+     included. */
+  .ds-view:is([data-ds-savebar], [data-ds-savebar-rest]) > .ds-content {
+    padding-bottom: max(var(--ds-content-pad-bottom), calc(var(--ds-savebar-height, 0px) + var(--ds-savebar-offset, var(--ds-space-4)) + var(--ds-space-2)), var(--ds-toast-reserve, 0px));
+  }
+
+  /* Outside a .ds-view (no page pad to read) the phone pad. */
+  @media (max-width: 720px) {
+    .ds-savebar__bar {
+      inset-inline: var(--ds-savebar-inset, var(--ds-content-pad-x, var(--ds-space-4)));
+    }
+  }
+
+  @media (max-width: 600px) {
+    .ds-savebar__bar {
+      padding-inline-start: var(--ds-space-4);
+    }
+  }
+
+  @media print {
+    .ds-savebar {
+      display: none;
+    }
+  }
+}

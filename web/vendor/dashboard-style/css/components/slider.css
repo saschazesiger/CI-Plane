@@ -1,0 +1,240 @@
+/*
+ * Slider (Material 3): a value on a scale (a threshold, days of history),
+ * drawn on the native range input, so keyboard, forms and labels stay
+ * native. A 4px track in the tonal accent, its active part in the primary
+ * colour, and a 20px round handle with a halo (--ds-slider-halo, 40px)
+ * for hover, press and keyboard focus, like the switch's: the halo is the
+ * press (no ripple), and the handle never scales. Keyboard focus also
+ * rings the handle: solid from the first frame, it snaps from offset +
+ * width to the offset (outline-offset, --ds-dur-fast). The value never
+ * glides while it is dragged (direct manipulation): nothing transitions
+ * it.
+ *
+ *   <label class="ds-field__label" for="keep">Keep history for</label>
+ *   <div class="ds-field__row">
+ *     <input class="ds-slider" id="keep" type="range" min="7" max="365" value="90" aria-describedby="keep-out">
+ *     <output class="ds-slider__value" id="keep-out" for="keep">90 days</output>
+ *   </div>
+ *
+ * Firefox draws the active part itself (::-moz-range-progress). Elsewhere
+ * the page sets --ds-share (0 to 1, the value's share of the range) on the
+ * input when it renders and on every input event; without it the track
+ * shows no active part and the slider still works.
+ *
+ * Disabled (and aria-disabled="true"): the neutral ink for the handle and
+ * the active part, no halo; the handle lays the ink over --ds-surface, so
+ * it stays solid; it fades on --ds-dur-fast. Forced colours: the
+ * track in ButtonText, the handle in Highlight (GrayText when disabled).
+ *
+ * Hooks: --ds-slider-halo (40px).
+ *
+ * Print: track and handle keep their colours (print-color-adjust).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+@layer ds.components {
+  .ds-slider {
+    appearance: none;
+    -webkit-appearance: none;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    height: var(--ds-slider-halo, 40px);
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--ds-primary);
+    cursor: pointer;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* The ring sits on the handle, not around the whole input. */
+  .ds-slider:focus-visible {
+    outline: none;
+  }
+
+  /* The gradient runs left to right: the active part first (D9, LTR). */
+  .ds-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: var(--ds-radius-xs);
+    background: linear-gradient(to right, currentColor calc(var(--ds-share, 0) * 100%), var(--ds-accent) 0);
+  }
+
+  .ds-slider::-moz-range-track {
+    height: 4px;
+    border-radius: var(--ds-radius-xs);
+    background: var(--ds-accent);
+  }
+
+  .ds-slider::-moz-range-progress {
+    height: 4px;
+    border-radius: var(--ds-radius-xs);
+    background: currentColor;
+  }
+
+  /* The handle and its halo (the halo rests transparent at its full size,
+     so only its colour fades). The ring rests one width further out. */
+  .ds-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    box-sizing: border-box;
+    width: 20px;
+    height: 20px;
+    margin-top: -8px;
+    border: 0;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 calc((var(--ds-slider-halo, 40px) - 20px) / 2) transparent;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-slider::-moz-range-thumb {
+    box-sizing: border-box;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 calc((var(--ds-slider-halo, 40px) - 20px) / 2) transparent;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  @media (hover: hover) {
+    .ds-slider:not(:disabled, [aria-disabled="true"]):hover::-webkit-slider-thumb {
+      box-shadow: 0 0 0 calc((var(--ds-slider-halo, 40px) - 20px) / 2) color-mix(in srgb, currentColor calc(var(--ds-state-hover) * 100%), transparent);
+    }
+
+    .ds-slider:not(:disabled, [aria-disabled="true"]):hover::-moz-range-thumb {
+      box-shadow: 0 0 0 calc((var(--ds-slider-halo, 40px) - 20px) / 2) color-mix(in srgb, currentColor calc(var(--ds-state-hover) * 100%), transparent);
+    }
+  }
+
+  /* Keyboard focus: the ring snaps in and the halo appears with it (at
+     once), also on an aria-disabled slider, which stays in the tab order. */
+  .ds-slider:focus-visible::-webkit-slider-thumb {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+    box-shadow: 0 0 0 calc((var(--ds-slider-halo, 40px) - 20px) / 2) color-mix(in srgb, currentColor calc(var(--ds-state-focus) * 100%), transparent);
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow 0s,
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-slider:focus-visible::-moz-range-thumb {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+    box-shadow: 0 0 0 calc((var(--ds-slider-halo, 40px) - 20px) / 2) color-mix(in srgb, currentColor calc(var(--ds-state-focus) * 100%), transparent);
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow 0s,
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-slider:not(:disabled, [aria-disabled="true"]):active::-webkit-slider-thumb {
+    box-shadow: 0 0 0 calc((var(--ds-slider-halo, 40px) - 20px) / 2) color-mix(in srgb, currentColor calc(var(--ds-state-pressed) * 100%), transparent);
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-micro) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-slider:not(:disabled, [aria-disabled="true"]):active::-moz-range-thumb {
+    box-shadow: 0 0 0 calc((var(--ds-slider-halo, 40px) - 20px) / 2) color-mix(in srgb, currentColor calc(var(--ds-state-pressed) * 100%), transparent);
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-micro) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* Disabled: the neutral ink for the handle and the active part (a theme
+     that dims instead keeps the slider's colours). */
+  .ds-slider:is(:disabled, [aria-disabled="true"]) {
+    color: var(--ds-disabled-ink, var(--ds-primary));
+    opacity: var(--ds-disabled-opacity, var(--ds-state-disabled));
+    cursor: not-allowed;
+  }
+
+  /* The ink is translucent: laid over the surface, the handle stays solid
+     and the track does not show through it. One engine's pseudo-element
+     per rule. */
+  .ds-slider:is(:disabled, [aria-disabled="true"])::-webkit-slider-thumb {
+    background: linear-gradient(currentColor, currentColor) var(--ds-surface);
+  }
+
+  .ds-slider:is(:disabled, [aria-disabled="true"])::-moz-range-thumb {
+    background: linear-gradient(currentColor, currentColor) var(--ds-surface);
+  }
+
+  /* The value beside the slider: tabular, so the row keeps its width. */
+  .ds-slider__value {
+    flex: none;
+    min-width: var(--ds-space-10);
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  @media (forced-colors: active) {
+    .ds-slider {
+      forced-color-adjust: none;
+      color: Highlight;
+    }
+
+    .ds-slider::-webkit-slider-runnable-track {
+      background: ButtonText;
+    }
+
+    .ds-slider::-moz-range-track,
+    .ds-slider::-moz-range-progress {
+      background: ButtonText;
+    }
+
+    .ds-slider::-webkit-slider-thumb,
+    .ds-slider:not(:disabled, [aria-disabled="true"]):hover::-webkit-slider-thumb,
+    .ds-slider:focus-visible::-webkit-slider-thumb,
+    .ds-slider:not(:disabled, [aria-disabled="true"]):active::-webkit-slider-thumb {
+      box-shadow: none;
+    }
+
+    .ds-slider::-moz-range-thumb,
+    .ds-slider:not(:disabled, [aria-disabled="true"]):hover::-moz-range-thumb,
+    .ds-slider:focus-visible::-moz-range-thumb,
+    .ds-slider:not(:disabled, [aria-disabled="true"]):active::-moz-range-thumb {
+      box-shadow: none;
+    }
+
+    /* One engine's pseudo-element per rule: a selector list with a pseudo-element
+       an engine does not know is dropped as a whole. */
+    .ds-slider:focus-visible::-webkit-slider-thumb {
+      outline-color: CanvasText;
+    }
+
+    .ds-slider:focus-visible::-moz-range-thumb {
+      outline-color: CanvasText;
+    }
+
+    .ds-slider:is(:disabled, [aria-disabled="true"]) {
+      color: GrayText;
+    }
+  }
+
+  /* Print: track and handle are backgrounds, which printing drops by
+     default; the value stays visible. */
+  @media print {
+    .ds-slider {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+}

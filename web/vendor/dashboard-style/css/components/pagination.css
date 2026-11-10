@@ -1,0 +1,95 @@
+/*
+ * Pagination: the footer of a table (or a list) whose records come in
+ * pages, as in Material data tables: rows per page, the range shown, and
+ * buttons to the first, previous, next and last page. No numbered pages.
+ *
+ *   <nav class="ds-pagination [ds-pagination--simple]" aria-label="Pages of devices">
+ *     <div class="ds-pagination__size">
+ *       <label class="ds-pagination__label" for="pp">Rows per page</label>
+ *       <select class="ds-input ds-input--filled" id="pp"><option>25</option><option selected>50</option><option>100</option></select>
+ *     </div>
+ *     <p class="ds-pagination__range" aria-live="polite">1–50 of 128</p>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="First page" aria-disabled="true" data-tip="First page">(chevronFirst 20)</button>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Previous page" aria-disabled="true" data-tip="Previous page">(chevronLeft 20)</button>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Next page" data-tip="Next page">(chevronRight 20)</button>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Last page" data-tip="Last page">(chevronLast 20)</button>
+ *   </nav>
+ *
+ *   .ds-pagination--simple  previous and next only (leave out first and last)
+ *
+ * End-aligned. At the end of a table card (after its .ds-table-wrap) it
+ * runs to the card's edges like the table, with a hairline above. The
+ * range is meta text with tabular figures; when the content area is at
+ * most 600px wide the size field drops and the range leads. A button that
+ * leads nowhere (first and previous on the first page) is aria-disabled,
+ * not disabled: focus stays on it, the click is blocked, and its tooltip
+ * still names it. The page holds the page number; a page change dims the
+ * rows (.ds-stale with the loading bar), then renders them through
+ * DS.motion.flip() and DS.dom.morphHtml() (docs/motion.md, "Data motion").
+ *
+ * Print: hidden.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+@layer ds.components {
+  .ds-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ds-space-1);
+    color: var(--ds-text-2);
+  }
+
+  /* After the table of a card: right under it (no card rhythm), with a
+     hairline, out to the card's edges like the table. */
+  .ds-card > .ds-table-wrap + .ds-pagination {
+    margin-top: 0;
+    margin-inline: calc(-1 * var(--ds-card-pad));
+    padding-block-start: var(--ds-space-2);
+    padding-inline: var(--ds-card-pad);
+    border-top: 1px solid var(--ds-line);
+  }
+
+  .ds-pagination__size {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin-inline-end: var(--ds-space-4);
+  }
+
+  .ds-pagination__label {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  /* The select keeps its own width (a field elsewhere fills its column). */
+  .ds-pagination__size .ds-input {
+    width: auto;
+  }
+
+  .ds-pagination__range {
+    margin: 0;
+    margin-inline-end: var(--ds-space-4);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  @container ds-content (max-width: 600px) {
+    .ds-pagination__size {
+      display: none;
+    }
+
+    .ds-pagination__range {
+      margin-inline-end: auto;
+    }
+  }
+
+  @media print {
+    .ds-pagination {
+      display: none;
+    }
+  }
+}

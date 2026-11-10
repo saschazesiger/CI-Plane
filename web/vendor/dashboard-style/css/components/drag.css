@@ -1,0 +1,349 @@
+/*
+ * Drag, drop and files (2.0): the grip and the dragged row of a list that
+ * DS.motion.sortable() reorders, the file field, the drop zone and the
+ * drop state of a page's own drop target (DS.dom.dropzone()).
+ *
+ *   <li class="ex-row">
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon ds-grip" type="button" aria-label="Reorder Monday">(grip 20)</button>
+ *     ...
+ *   </li>                                   DS.motion.sortable(list, { onChange })
+ *
+ *   [data-ds-dragging]        the row being moved (written by sortable()):
+ *                             raised (--ds-z-raised, --ds-elev-2) with the
+ *                             dragged state layer (currentColor at
+ *                             --ds-state-dragged) on --ds-dur-fast; nothing
+ *                             scales. ="end" while it settles: the look
+ *                             leaves in --ds-dur-instant
+ *
+ *   <input class="ds-input" type="file" accept=".csv">
+ *                             the field box; the chosen file's name in
+ *                             --ds-text-2; the browser's button is a small
+ *                             tonal pill that morphs on press
+ *
+ *   <label class="ds-dropzone">
+ *     <input class="ds-dropzone__input" type="file" accept=".csv" multiple>
+ *     <span class="ds-dropzone__disc" aria-hidden="true">(upload 24)</span>
+ *     <span class="ds-dropzone__title">
+ *       <span class="ds-dropzone__idle">Drop CSV files here or <span class="ds-dropzone__browse">browse</span></span>
+ *       <span class="ds-dropzone__over" aria-hidden="true">Release to add the files</span>
+ *     </span>
+ *     <span class="ds-dropzone__hint">Up to 10 MB each</span>
+ *   </label>                                DS.dom.dropzone(zone, { onFiles })
+ *
+ *   [data-ds-dragover]        files are dragged over it (written by
+ *                             DS.dom.dropzone()): the zone takes the accent
+ *                             with an inset primary edge (no layout shift)
+ *                             and says so in words (__over crossfades with
+ *                             __idle in one cell); any other element of a
+ *                             page (a pane, a chat) gets a dashed primary
+ *                             outline inside its edge
+ *
+ * The zone is a label: a click or Enter on its input opens the file
+ * dialog, and its input stays in the tab order (visually hidden) with the
+ * ring on the zone. It is a ripple host and morphs to
+ * --ds-radius-card-pressed like a radio card; disabled through its input
+ * (:has(input:disabled)). The list of chosen files is the page's (.ds-list
+ * rows with a .ds-progress and a remove button, rendered through flip()).
+ *
+ * Hooks: --ds-dropzone-border (1px dashed --ds-outline).
+ *
+ * Forced colours: the dragged row and a drop target are outlined in
+ * Highlight; the zone's dashed edge is ButtonText (Highlight while dragged
+ * over); the file button is ButtonFace / ButtonText with a ButtonText
+ * border; a disabled zone or file field is GrayText.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+@layer ds.components {
+  /* ── The grip and the dragged row ─────────────── */
+
+  .ds-grip {
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .ds-grip:active {
+    cursor: grabbing;
+  }
+
+  :where(.ds-theme) [data-ds-dragging] {
+    position: relative;
+    z-index: var(--ds-z-raised);
+    box-shadow: var(--ds-elev-2);
+    transition: box-shadow var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  :where(.ds-theme) [data-ds-dragging]::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: var(--ds-state-dragged);
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* Settling into its place: the raised look leaves (exit 100/150). */
+  :where(.ds-theme) [data-ds-dragging="end"] {
+    box-shadow: none;
+    transition: box-shadow var(--ds-dur-instant) var(--ds-ease-in-out);
+  }
+
+  :where(.ds-theme) [data-ds-dragging="end"]::after {
+    opacity: 0;
+    transition: opacity var(--ds-dur-instant) var(--ds-ease-in-out);
+  }
+
+  /* ── The file field ───────────────────────────── */
+
+  .ds-input[type="file"] {
+    display: flex;
+    align-items: center;
+    padding-block: var(--ds-space-1);
+    padding-inline-start: var(--ds-space-1);
+    color: var(--ds-text-2);
+    cursor: pointer;
+  }
+
+  /* A pseudo-element has no ::before of its own: its hover and press mix
+     the state layer into its fill. */
+  .ds-input[type="file"]::file-selector-button {
+    block-size: 32px;
+    margin-inline-end: var(--ds-space-3);
+    padding-inline: var(--ds-space-3);
+    border: 0;
+    border-radius: min(var(--ds-radius-action), var(--ds-space-4));
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+    font: var(--ds-font-label);
+    cursor: pointer;
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  @media (hover: hover) {
+    .ds-input[type="file"]:not(:disabled):hover::file-selector-button {
+      background: color-mix(in srgb, var(--ds-on-accent) calc(var(--ds-state-hover) * 100%), var(--ds-accent));
+    }
+  }
+
+  .ds-input[type="file"]:not(:disabled):active::file-selector-button {
+    border-radius: min(var(--ds-radius-action-pressed), var(--ds-radius-action), var(--ds-space-4));
+    background: color-mix(in srgb, var(--ds-on-accent) calc(var(--ds-state-pressed) * 100%), var(--ds-accent));
+    transition:
+      background-color var(--ds-dur-micro) var(--ds-ease-out),
+      border-radius var(--ds-dur-micro) var(--ds-ease-out);
+  }
+
+  .ds-input[type="file"]:disabled {
+    cursor: not-allowed;
+  }
+
+  .ds-input[type="file"]:disabled::file-selector-button {
+    background: var(--ds-disabled-fill);
+    color: var(--ds-disabled-ink);
+    cursor: not-allowed;
+  }
+
+  /* ── The drop zone ────────────────────────────── */
+
+  .ds-dropzone {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    justify-items: center;
+    gap: var(--ds-space-2);
+    padding: var(--ds-space-6) var(--ds-space-5);
+    border: var(--ds-dropzone-border, 1px dashed var(--ds-outline));
+    border-radius: var(--ds-radius-card);
+    background: var(--ds-surface);
+    color: var(--ds-text);
+    text-align: center;
+    cursor: pointer;
+    /* The ring (on keyboard focus of its input) rests one width further out
+       and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* State layer in the content colour, over the border. */
+  .ds-dropzone::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-dropzone:hover:not(:has(input:disabled))::before {
+      opacity: var(--ds-state-hover-lg);
+    }
+  }
+
+  .ds-dropzone:has(.ds-dropzone__input:focus-visible):not(:has(input:disabled))::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  .ds-dropzone:active:not(:has(input:disabled)),
+  .ds-dropzone.ds-pressed:not(:has(input:disabled)) {
+    border-radius: min(var(--ds-radius-card-pressed), var(--ds-radius-card));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-micro) var(--ds-ease-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-dropzone:active:not(:has(input:disabled))::before,
+  .ds-dropzone.ds-pressed:not(:has(input:disabled))::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-dropzone:has(.ds-dropzone__input:focus-visible) {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  /* Visually hidden, still in the tab order: the zone shows its focus. */
+  .ds-dropzone__input {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    clip-path: inset(50%);
+  }
+
+  .ds-dropzone__input:focus-visible {
+    outline: none;
+  }
+
+  .ds-dropzone__disc {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+  }
+
+  .ds-dropzone__title {
+    display: grid;
+    font: var(--ds-font-label);
+  }
+
+  /* The two titles share one cell, so the zone never changes its size. */
+  .ds-dropzone__idle,
+  .ds-dropzone__over {
+    grid-area: 1 / 1;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-dropzone__over {
+    opacity: 0;
+    transition-duration: var(--ds-dur-instant);
+  }
+
+  .ds-dropzone__browse {
+    color: var(--ds-link);
+    text-decoration: underline;
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+    text-decoration-color: var(--ds-link-underline);
+    text-underline-offset: var(--ds-link-underline-offset);
+  }
+
+  .ds-dropzone__hint {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-dropzone[data-ds-dragover] {
+    background: var(--ds-accent);
+    box-shadow: inset 0 0 0 var(--ds-focus-width) var(--ds-primary);
+  }
+
+  .ds-dropzone[data-ds-dragover] .ds-dropzone__idle {
+    opacity: 0;
+    transition-duration: var(--ds-dur-instant);
+  }
+
+  .ds-dropzone[data-ds-dragover] .ds-dropzone__over {
+    opacity: 1;
+    transition-duration: var(--ds-dur-fast);
+  }
+
+  .ds-dropzone:has(input:disabled) {
+    border-color: var(--ds-disabled-fill);
+    color: var(--ds-disabled-ink);
+    cursor: not-allowed;
+    transition:
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-dropzone:has(input:disabled) .ds-dropzone__disc {
+    background: var(--ds-disabled-fill);
+    color: var(--ds-disabled-ink);
+  }
+
+  /* A page's own drop target (a pane, a chat) while files are over it. */
+  :where(.ds-theme) [data-ds-dragover]:not(.ds-dropzone) {
+    outline: var(--ds-focus-width) dashed var(--ds-primary);
+    outline-offset: calc(-1 * var(--ds-space-2));
+  }
+
+  @media (forced-colors: active) {
+    :where(.ds-theme) [data-ds-dragging] {
+      outline: var(--ds-focus-width) solid Highlight;
+    }
+
+    :where(.ds-theme) [data-ds-dragover]:not(.ds-dropzone) {
+      outline-color: Highlight;
+    }
+
+    .ds-dropzone {
+      border: 1px dashed ButtonText;
+    }
+
+    .ds-dropzone[data-ds-dragover] {
+      border-color: Highlight;
+      box-shadow: inset 0 0 0 var(--ds-focus-width) Highlight;
+    }
+
+    .ds-input[type="file"]::file-selector-button {
+      border: 1px solid ButtonText;
+      background: ButtonFace;
+      color: ButtonText;
+    }
+
+    /* Blocked is one system colour (D8). */
+    .ds-dropzone:has(input:disabled),
+    .ds-dropzone:has(input:disabled) .ds-dropzone__disc {
+      border-color: GrayText;
+      color: GrayText;
+    }
+
+    .ds-input[type="file"]:disabled,
+    .ds-input[type="file"]:disabled::file-selector-button {
+      border-color: GrayText;
+      color: GrayText;
+    }
+  }
+}

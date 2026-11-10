@@ -1,0 +1,186 @@
+/*
+ * Disclosure: a styled <details> that opens and closes like any
+ * .ds-collapsible (motion.css: the height and the fade, the .ds-chevron
+ * turning on the spring), and accordion rows.
+ *
+ *   <details class="ds-collapsible ds-disclosure">
+ *     <summary>Advanced [icon chevronDown 20 .ds-chevron]</summary>
+ *     <div class="ds-disclosure__body"> ... </div>
+ *   </details>
+ *
+ *   <div class="ds-disclosure-list">
+ *     <details class="ds-collapsible ds-disclosure ds-disclosure--row" name="faq">
+ *       <summary><span class="ds-disclosure__title">Sync</span><span class="ds-disclosure__meta">Nightly</span>[icon chevronDown 20 .ds-chevron]</summary>
+ *       <div class="ds-disclosure__body"> ... </div>
+ *     </details>
+ *   </div>
+ *
+ * The plain summary is a pill of the label font (at least
+ * --ds-disclosure-height high) whose state layer hangs --ds-space-2 into
+ * the space at its sides, so its text stays in line with the content
+ * around it: hover --ds-state-hover, press --ds-state-pressed in
+ * --ds-dur-micro, the focus layer and a ring that snaps in from offset +
+ * width, the press morph (squarer in --ds-dur-micro, springing back over
+ * --ds-dur-medium) and the ripple (js/ripple.js). The body starts
+ * --ds-space-3 below the summary.
+ *
+ * .ds-disclosure--row: a full-width summary (--ds-disclosure-row-height)
+ * with a title, a quiet meta and the chevron at the end; rows in a
+ * .ds-disclosure-list are divided by hairlines and run to the edges of a
+ * card (through --ds-card-pad). A row takes a rectangular layer (hover
+ * --ds-state-hover-lg), an inset ring, the ripple and no morph.
+ *
+ * Rows that share a name (an exclusive accordion) open one at a time.
+ * The errors list of alert.css (.ds-errors) keeps its own summary.
+ *
+ * Hooks: --ds-disclosure-height (40px), --ds-disclosure-row-height (48px).
+ *
+ * Progressive:
+ * - details[name] (an HTML attribute: rows that share a name open one at
+ *   a time): without it every row opens and closes on its own.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+@layer ds.components {
+  .ds-disclosure > summary {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    box-sizing: border-box;
+    width: fit-content;
+    max-width: calc(100% + 2 * var(--ds-space-2));
+    min-height: var(--ds-disclosure-height, 40px);
+    margin-inline: calc(-1 * var(--ds-space-2));
+    padding-inline: var(--ds-space-2);
+    border-radius: min(var(--ds-radius-action), calc(var(--ds-disclosure-height, 40px) / 2));
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+    list-style: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-disclosure > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .ds-disclosure > summary::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-disclosure > summary:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+
+    /* A row's larger hover layer; before the focus and press layers, which
+       win at the same specificity. */
+    .ds-disclosure--row > summary:hover::before {
+      opacity: var(--ds-state-hover-lg);
+    }
+  }
+
+  /* Keyboard focus: the layer appears with the ring and fades out on blur. */
+  .ds-disclosure > summary:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  /* Press-in in --ds-dur-micro (.ds-pressed: js/ripple.js holds it). */
+  .ds-disclosure > summary:active::before,
+  .ds-disclosure > summary.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  /* The press morph: squarer while pressed (never rounder than at rest),
+     springing back on release. */
+  .ds-disclosure:not(.ds-disclosure--row) > summary:active,
+  .ds-disclosure:not(.ds-disclosure--row) > summary.ds-pressed {
+    border-radius: min(var(--ds-radius-action-pressed), calc(var(--ds-disclosure-height, 40px) / 2));
+    transition:
+      border-radius var(--ds-dur-micro) var(--ds-ease-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-disclosure > summary:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-disclosure > summary > svg {
+    flex: none;
+  }
+
+  .ds-disclosure__body {
+    padding-top: var(--ds-space-3);
+  }
+
+  /*
+   * Accordion rows: a full-width summary, rectangular, running to the
+   * card's edges inside a .ds-disclosure-list.
+   */
+  /* In a card the rows run to its edges, their text in line with the card's. */
+  .ds-card .ds-disclosure-list {
+    margin-inline: calc(-1 * var(--ds-card-pad));
+  }
+
+  .ds-disclosure-list > .ds-disclosure + .ds-disclosure {
+    border-top: 1px solid var(--ds-line);
+  }
+
+  .ds-disclosure--row > summary {
+    width: auto;
+    max-width: none;
+    min-height: var(--ds-disclosure-row-height, 48px);
+    margin-inline: 0;
+    padding: var(--ds-space-2) var(--ds-space-4);
+    border-radius: 0;
+    gap: var(--ds-space-3);
+    /* An inset ring: it rests on the edge and snaps inward. */
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-disclosure--row > summary:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-disclosure__title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ds-disclosure__meta {
+    flex: none;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+
+  .ds-disclosure--row > .ds-disclosure__body {
+    padding: 0 var(--ds-space-4) var(--ds-space-4);
+  }
+
+  .ds-card .ds-disclosure-list > .ds-disclosure--row > summary,
+  .ds-card .ds-disclosure-list > .ds-disclosure--row > .ds-disclosure__body {
+    padding-inline: var(--ds-card-pad);
+  }
+}

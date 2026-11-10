@@ -1,0 +1,31 @@
+/*
+ * Google Sans, variable (weight 400-700, optical size axis: the Text design
+ * below 18px, Display from 18px). Optional: load this file before ds.css
+ * to self-host the default typeface; without it the stack in
+ * --ds-font falls back to Roboto, Segoe UI or the system UI font.
+ *
+ * Files from @fontsource-variable/google-sans 5.3.1, licensed under the
+ * SIL Open Font License 1.1 (OFL.txt next to this file). Keep the licence
+ * with the files and do not rename or re-subset them.
+ *
+ * latin-ext is only downloaded for characters outside latin (unicode-range).
+ * URLs are relative to this file, so the folder can live anywhere.
+ */
+
+@font-face {
+  font-family: 'Google Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 700;
+  src: url('google-sans-latin-ext-opsz-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Google Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 700;
+  src: url('google-sans-latin-opsz-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

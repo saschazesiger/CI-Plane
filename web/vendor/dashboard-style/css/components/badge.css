@@ -1,0 +1,117 @@
+/*
+ * Badge: a count on a button, chip, tab or drawer item ("3 new"). Counts
+ * only: a label of words is a tag (.ds-tag, status.css), a state is a
+ * status chip (.ds-status).
+ *
+ *   <button class="ds-btn" type="button">(mail 16)Inbox <span class="ds-badge">3</span></button>
+ *   <span class="ds-badge ds-badge--error">2</span>
+ *
+ *   (none: the tint)  --neutral  --ok  --warning  --error
+ *
+ * A pill of at least --ds-badge-size (20px) in the caption type with
+ * tabular figures, on --ds-badge-bg / --ds-badge-color (the tint,
+ * --ds-accent / --ds-on-accent); the tones take their container and
+ * on-container pair, and a toned badge needs its word in the row (colour
+ * is never the only signal: "2 failed"). An empty badge (:empty) takes no
+ * room. On a tinted host (a pressed toggle, a tonal button, an open
+ * disclosure button, a checked chip, an input chip, a selected table row)
+ * the default badge turns to --ds-primary / --ds-on-primary and the
+ * neutral one to --ds-surface / --ds-text-2, so it never melts into the
+ * tint. In a blocked host (a disabled or aria-disabled button, chip, tab
+ * or drawer item) it takes the disabled model: --ds-disabled-fill and
+ * --ds-disabled-ink over any tone (GrayText in forced colours).
+ *
+ * Motion: colours glide on --ds-dur-fast. A count that appears pops in
+ * (DS.motion.enter(badge, 'pop')), one that goes pops out
+ * (DS.motion.leave(badge, 'pop', { then: 'hide' })); the number itself
+ * changes at once, and nothing plays on load.
+ *
+ * Forced colours: Canvas / CanvasText with a CanvasText outline (GrayText
+ * in a blocked host).
+ *
+ * Hooks: --ds-badge-size (20px), --ds-badge-radius (--ds-radius-action,
+ * never above half the size), --ds-badge-bg, --ds-badge-color.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+@layer ds.components {
+  .ds-badge {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--ds-badge-size, 20px);
+    height: var(--ds-badge-size, 20px);
+    padding-inline: var(--ds-space-1);
+    border-radius: min(var(--ds-badge-radius, var(--ds-radius-action)), calc(var(--ds-badge-size, 20px) / 2));
+    background: var(--ds-badge-bg, var(--ds-accent));
+    color: var(--ds-badge-color, var(--ds-on-accent));
+    font: var(--ds-font-caption);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-badge:empty {
+    display: none;
+  }
+
+  .ds-badge--neutral {
+    --ds-badge-bg: var(--ds-surface-high);
+    --ds-badge-color: var(--ds-text-2);
+  }
+
+  .ds-badge--ok {
+    --ds-badge-bg: var(--ds-success-container);
+    --ds-badge-color: var(--ds-on-success-container);
+  }
+
+  .ds-badge--warning {
+    --ds-badge-bg: var(--ds-warning-container);
+    --ds-badge-color: var(--ds-on-warning-container);
+  }
+
+  .ds-badge--error {
+    --ds-badge-bg: var(--ds-error-container);
+    --ds-badge-color: var(--ds-on-error-container);
+  }
+
+  /* On a tinted host the tint badge would vanish: the strong pair instead. */
+  :is(.ds-btn[aria-pressed="true"], .ds-btn--tonal, .ds-btn--disclosure[aria-expanded="true"], .ds-btn[aria-haspopup="dialog"][aria-expanded="true"], .ds-chip__input:checked + .ds-chip__body, .ds-chip--input, .ds-table__row--selected, tr:has(> td input[type="checkbox"]:checked)) .ds-badge:not(.ds-badge--neutral, .ds-badge--ok, .ds-badge--warning, .ds-badge--error) {
+    --ds-badge-bg: var(--ds-primary);
+    --ds-badge-color: var(--ds-on-primary);
+  }
+
+  :is(.ds-btn[aria-pressed="true"], .ds-btn--tonal, .ds-btn--disclosure[aria-expanded="true"], .ds-btn[aria-haspopup="dialog"][aria-expanded="true"], .ds-chip__input:checked + .ds-chip__body, .ds-chip--input, .ds-table__row--selected, tr:has(> td input[type="checkbox"]:checked)) .ds-badge--neutral {
+    --ds-badge-bg: var(--ds-surface);
+    --ds-badge-color: var(--ds-text-2);
+  }
+
+  /* In a blocked host (disabled, aria-disabled) the disabled model, over
+     any tone: the 12% container and the 38% ink. A theme that dims instead
+     (--ds-disabled-fill and -ink set to initial) keeps the badge's colours
+     and the host's opacity fades it. */
+  :is(.ds-btn:disabled, .ds-btn[aria-disabled="true"]:not([aria-busy="true"]), .ds-chip__input:is(:disabled, [aria-disabled="true"]) + .ds-chip__body, :is(button, a).ds-chip:is(:disabled, [aria-disabled="true"]), .ds-tabs__tab:is(:disabled, [aria-disabled="true"]), .ds-drawer__item:is(:disabled, [aria-disabled="true"])) .ds-badge {
+    background: var(--ds-disabled-fill, var(--ds-badge-bg, var(--ds-accent)));
+    color: var(--ds-disabled-ink, var(--ds-badge-color, var(--ds-on-accent)));
+  }
+
+  @media (forced-colors: active) {
+    .ds-badge {
+      forced-color-adjust: none;
+      outline: 1px solid CanvasText;
+      outline-offset: -1px;
+      background: Canvas;
+      color: CanvasText;
+    }
+
+    :is(.ds-btn:disabled, .ds-btn[aria-disabled="true"]:not([aria-busy="true"]), .ds-chip__input:is(:disabled, [aria-disabled="true"]) + .ds-chip__body, :is(button, a).ds-chip:is(:disabled, [aria-disabled="true"]), .ds-tabs__tab:is(:disabled, [aria-disabled="true"]), .ds-drawer__item:is(:disabled, [aria-disabled="true"])) .ds-badge {
+      outline-color: GrayText;
+      color: GrayText;
+    }
+  }
+}

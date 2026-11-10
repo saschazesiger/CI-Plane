@@ -1,0 +1,79 @@
+/*
+ * Dark theme: the default palette in the Material 3 dark tones. Load it
+ * after ds.css and after your own theme, for the dark colour scheme only:
+ *
+ *   <link rel="stylesheet" href="vendor/dashboard-style/ds.css">
+ *   <link rel="stylesheet" href="css/theme.css">
+ *   <link rel="stylesheet" href="vendor/dashboard-style/themes/dark.css"
+ *         media="(prefers-color-scheme: dark)" id="ds-dark">
+ *
+ * A user's choice (light, dark or the system's) sets that link's media
+ * before the first paint (docs/theming.md, "Dark, compact and contrast"):
+ * "all" for dark, "not all" for light, the query for the system.
+ *
+ * It sets every colour role of tokens.css that does not follow another
+ * role by itself (the derived mixes --ds-primary-hover, --ds-fill-round,
+ * --ds-disabled-* and --ds-link-underline, and the var() roles such as
+ * --ds-link, follow), plus the floating surfaces, the colour scheme and
+ * the shadows. A brand theme copies this file and changes the primary and
+ * the tint; keep the pairs at 4.5:1 for text and 3:1 for icons and
+ * outlines (the tests check these values, tools/check-theme.mjs checks
+ * yours). Never motion tokens or hooks; never in @layer.
+ */
+
+.ds-theme {
+  --ds-color-scheme: dark;
+
+  /* ── Surfaces: tone steps instead of shadows ── */
+  --ds-backdrop: #131314;
+  --ds-surface: #1e1f20;
+  --ds-surface-low: #1b1b1c;
+  --ds-surface-high: #282a2c;
+  --ds-surface-highest: #333537;
+  /* Dialogs, sheets, menus, lists and the save bar sit a tone above the page. */
+  --ds-surface-overlay: #282a2c;
+  --ds-surface-popover: #282a2c;
+
+  /* ── Text and lines ── */
+  --ds-text: #e3e3e3;
+  --ds-text-2: #c4c7c5;
+  --ds-text-3: #8e918f;
+  --ds-line: #444746;
+  --ds-line-2: #5c5f5e;
+  --ds-outline: #8e918f;
+
+  /* ── Primary and tint ── */
+  --ds-primary: #a8c7fa;
+  --ds-on-primary: #062e6f;
+  --ds-accent: #0842a0;
+  --ds-on-accent: #d3e3fd;
+
+  /* ── Status: light inks on dark containers ── */
+  --ds-error: #f2b8b5;
+  --ds-error-container: #8c1d18;
+  --ds-on-error-container: #f9dedc;
+  --ds-success: #6dd58c;
+  --ds-success-container: #0f5223;
+  --ds-on-success-container: #c4eed0;
+  --ds-warning: #fdd663;
+  --ds-warning-container: #5c4300;
+  --ds-on-warning-container: #ffdf99;
+  --ds-warning-surface: #2a2416;
+
+  /* ── Inverse: light snackbars and tooltips ── */
+  --ds-inverse: #e3e3e3;
+  --ds-on-inverse: #303030;
+  --ds-inverse-primary: #0b57d0;
+
+  /* ── Chart series: lighter tones, 3:1 on the dark surfaces and the track ── */
+  --ds-chart-2: #f0a35c;
+  --ds-chart-3: #4fd8c4;
+  --ds-chart-4: #c58af9;
+
+  /* ── Scrims and shadows on black ── */
+  --ds-scrim: rgba(0, 0, 0, .48);
+  --ds-scrim-nested: rgba(0, 0, 0, .24);
+  --ds-elev-1: 0 1px 2px 0 rgba(0, 0, 0, .3), 0 1px 3px 1px rgba(0, 0, 0, .15);
+  --ds-elev-2: 0 1px 2px 0 rgba(0, 0, 0, .3), 0 2px 6px 2px rgba(0, 0, 0, .15);
+  --ds-elev-3: 0 1px 3px 0 rgba(0, 0, 0, .3), 0 4px 8px 3px rgba(0, 0, 0, .15);
+}

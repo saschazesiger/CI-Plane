@@ -1,0 +1,253 @@
+/*
+ * Tabs: sections of one page or record, one row of labels over a hairline.
+ * The selected tab takes the primary ink, the label weight and a bar under
+ * it that glides between the tabs (js/indicator.js); selected is bar,
+ * weight and ARIA, never colour alone.
+ *
+ *   <div class="ds-tabs" role="tablist" aria-label="Device">
+ *     <button class="ds-tabs__tab" role="tab" type="button" id="t-overview" aria-selected="true" aria-controls="p-overview" data-label="Overview">Overview</button>
+ *     <button class="ds-tabs__tab" role="tab" type="button" id="t-activity" aria-selected="false" aria-controls="p-activity" tabindex="-1" data-label="Activity">Activity<span class="ds-badge">3</span></button>
+ *   </div>
+ *   <div class="ds-tabs__panel" role="tabpanel" id="p-overview" aria-labelledby="t-overview" tabindex="0"> ... </div>
+ *   <div class="ds-tabs__panel" role="tabpanel" id="p-activity" aria-labelledby="t-activity" tabindex="0" hidden> ... </div>
+ *
+ *   Link tabs (navigation between pages of a record):
+ *   <nav class="ds-tabs" aria-label="Device">
+ *     <a class="ds-tabs__tab" href="/devices/42" aria-current="page" data-label="Overview">Overview</a> ...
+ *   </nav>
+ *
+ *   createIndicator(tabs, { active: '[aria-selected="true"], [aria-current="page"]', className: 'ds-tabs__indicator' })
+ *   DS.dom.roving(tabs)   (arrow keys, Home, End; the page's click handler selects)
+ *
+ * data-label (the tab's text again) reserves the width of the heavier
+ * selected weight, so a selection change moves nothing (as on the
+ * segmented switch); a badge after the text keeps its place.
+ *
+ * Modifiers: --fill (equal widths across the row), --flush (no hairline).
+ * Blocked: :disabled or aria-disabled="true" (the disabled model; no
+ * hover, press or morph, aria-disabled keeps its focus layer).
+ *
+ * Press: the state layer is a pill inside the tab (--ds-space-1 from its
+ * top and bottom edge) that turns squarer while pressed
+ * (--ds-radius-action-pressed in --ds-dur-micro, back on the spring) and
+ * ripples (js/ripple.js); nothing moves. The keyboard ring is inset and
+ * snaps inward (outline-offset, --ds-dur-fast) with the focus layer.
+ *
+ * Switching: ARIA tabs toggle `hidden` on the panels and enter the new one
+ * (DS.motion.enter(panel, 'swap')); link tabs are navigation
+ * (DS.motion.transition(update, { type: 'fade-through' })). The labels
+ * change colour on the bar's timing (--ds-indicator-dur).
+ *
+ * Overflow: the row scrolls sideways without a scrollbar; DS.dom.roving()
+ * scrolls a focused tab into view, and createIndicator(..., { reveal:
+ * true }) keeps the selected one in view.
+ *
+ * Hooks: --ds-tabs-height (48px), --ds-tabs-indicator-height (3px),
+ * --ds-tabs-indicator-color (--ds-primary).
+ *
+ * Forced colours: the selected tab is a choice in a set (SelectedItem /
+ * SelectedItemText, the bar hidden), a focused one a CanvasText ring
+ * inside; blocked tabs GrayText.
+ *
+ * Print: the row wraps instead of scrolling.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (the row hides its scrollbar while
+ *   it scrolls sideways): without them the platform scrollbar shows under
+ *   the row.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+@layer ds.components {
+  .ds-tabs {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid var(--ds-line);
+    scrollbar-width: none;
+  }
+
+  .ds-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ds-tabs--flush {
+    border-bottom: 0;
+  }
+
+  .ds-tabs--fill > .ds-tabs__tab {
+    flex: 1 1 0;
+  }
+
+  /* The bar: the indicator's box is the selected tab; only its bottom edge
+     is painted, in the hook colour (square: --ds-indicator-radius keeps its
+     initial 0px). */
+  .ds-tabs__indicator {
+    background: linear-gradient(var(--ds-tabs-indicator-color, var(--ds-primary)), var(--ds-tabs-indicator-color, var(--ds-primary))) bottom / 100% var(--ds-tabs-indicator-height, 3px) no-repeat;
+  }
+
+  .ds-tabs__tab {
+    position: relative;
+    display: inline-grid;
+    grid-auto-flow: column;
+    align-items: center;
+    /* The rows pack in the middle: the 0px row of data-label takes none of
+       the free height, so the label sits on the tab's centre. */
+    align-content: center;
+    justify-content: center;
+    column-gap: var(--ds-space-2);
+    flex: none;
+    min-height: var(--ds-tabs-height, 48px);
+    margin: 0;
+    padding: 0 var(--ds-space-4);
+    border: 0;
+    /* The ring follows this radius; the layer inside is a pill too. */
+    border-radius: min(var(--ds-radius-action), calc(var(--ds-tabs-height, 48px) / 2));
+    background: none;
+    color: var(--ds-text-2);
+    font: var(--ds-font-label);
+    font-weight: var(--ds-weight-regular);
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    /* An inset ring (the scrolling row clips anything outside): it rests on
+       the edge and snaps inward. */
+    outline-offset: 0;
+    transition:
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* With the gliding bar, the label changes colour while the bar arrives
+     (on its timing, --ds-indicator-dur on the row). */
+  .ds-has-indicator > .ds-tabs__tab {
+    transition:
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-indicator-dur, var(--ds-dur-medium)) var(--ds-ease-in-out);
+  }
+
+  /* The label once more in the selected weight, without height and unseen,
+     under the text (a badge keeps its column). */
+  .ds-tabs__tab[data-label]::after {
+    content: attr(data-label);
+    grid-row: 2;
+    grid-column: 1;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-tabs__tab:is([aria-selected="true"], [aria-current="page"]) {
+    color: var(--ds-primary);
+    font-weight: var(--ds-weight-label);
+  }
+
+  /* State layer: a pill inside the tab, the colour of the label. */
+  .ds-tabs__tab::before {
+    content: '';
+    position: absolute;
+    inset: var(--ds-space-1) 0;
+    border-radius: min(var(--ds-radius-action), calc(var(--ds-tabs-height, 48px) / 2 - var(--ds-space-1)));
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  @media (hover: hover) {
+    .ds-tabs__tab:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-tabs__tab:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-tabs__tab:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s, var(--ds-dur-medium);
+  }
+
+  .ds-tabs__tab:active::before,
+  .ds-tabs__tab.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    border-radius: min(var(--ds-radius-action-pressed), var(--ds-radius-action), calc(var(--ds-tabs-height, 48px) / 2 - var(--ds-space-1)));
+    transition:
+      opacity var(--ds-dur-micro) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-micro) var(--ds-ease-out);
+  }
+
+  /* Blocked: the disabled model, no hover, press or morph; an
+     aria-disabled tab stays focusable and keeps its focus layer. */
+  .ds-tabs__tab:is(:disabled, [aria-disabled="true"]) {
+    color: var(--ds-disabled-ink);
+    opacity: var(--ds-disabled-opacity);
+    cursor: default;
+  }
+
+  @media (hover: hover) {
+    .ds-tabs__tab:is(:disabled, [aria-disabled="true"]):hover::before {
+      opacity: 0;
+    }
+  }
+
+  .ds-tabs__tab:is(:disabled, [aria-disabled="true"]):is(:active, .ds-pressed)::before {
+    opacity: 0;
+    border-radius: min(var(--ds-radius-action), calc(var(--ds-tabs-height, 48px) / 2 - var(--ds-space-1)));
+  }
+
+  .ds-tabs__tab[aria-disabled="true"]:focus-visible::before {
+    opacity: var(--ds-state-focus);
+  }
+
+  /* A panel takes focus as a whole (tabindex="0") when it holds nothing
+     focusable; its ring snaps in like every ring. */
+  .ds-tabs__panel {
+    min-width: 0;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-tabs__panel:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  @media (forced-colors: active) {
+    .ds-tabs__indicator {
+      display: none;
+    }
+
+    .ds-tabs__tab:is([aria-selected="true"], [aria-current="page"]) {
+      forced-color-adjust: none;
+      background: SelectedItem;
+      color: SelectedItemText;
+    }
+
+    .ds-tabs__tab:is([aria-selected="true"], [aria-current="page"]):focus-visible {
+      outline-color: CanvasText;
+    }
+
+    .ds-tabs__tab:is(:disabled, [aria-disabled="true"]) {
+      color: GrayText;
+    }
+  }
+
+  @media print {
+    .ds-tabs {
+      flex-wrap: wrap;
+      overflow: visible;
+    }
+  }
+}

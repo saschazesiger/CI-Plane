@@ -1,0 +1,254 @@
+/*
+ * Rendered rich text and code: .ds-prose for text the page does not mark
+ * up itself (Markdown, a help article, a release note), .ds-code-block for
+ * a block of code or a raw request.
+ *
+ *   <div class="ds-prose"> <h2>...</h2> <p>...</p> <ul><li>...</li></ul> <pre><code>...</code></pre> <table>...</table> </div>
+ *   <div class="ds-prose ds-prose--dense"> ... </div>        (the body role: in a card, a bubble, a side sheet)
+ *   <pre class="ds-code-block" tabindex="0" aria-label="Request"><code>GET /devices/42</code></pre>
+ *   <pre class="ds-code-block ds-code-block--wrap">...</pre> (long lines wrap)
+ *
+ * .ds-prose styles only bare elements inside it (every rule is under
+ * :where(.ds-prose), so a class of the page always wins): a rhythm of
+ * --ds-prose-gap between blocks (their margins reset first), headings on
+ * the type roles (h1 headline, h2 subtitle, h3 and h4 the label weight at
+ * the reading size), lists indented --ds-space-5, strong in
+ * --ds-prose-strong-weight, links underlined like every link, a pre as a
+ * code block, a table with hairline rows, a --ds-text-2 head and tabular
+ * figures that scrolls sideways when it is wider, a quote on
+ * --ds-surface-high, images at most as wide as the text. Font:
+ * --ds-prose-font (--ds-font-reading); --dense takes --ds-font-body. Long
+ * words hyphenate where the browser can, or break.
+ *
+ * .ds-code-block: the code role on --ds-code-bg in a card's radius, one
+ * line per line, scrolling sideways (a thin scrollbar); give it
+ * tabindex="0" and a name (aria-label) only when it can scroll, so a
+ * keyboard reaches it (an inset ring, solid from the first frame). A code
+ * element inside loses the inline chip. --wrap wraps long lines instead.
+ *
+ * Hooks: --ds-prose-gap (--ds-space-2), --ds-prose-font
+ * (--ds-font-reading), --ds-prose-strong-weight (--ds-weight-label).
+ *
+ * Forced colours: quotes, code blocks and the prose table keep their edges
+ * (a transparent outline that the forced colours paint).
+ *
+ * Print: code blocks and prose tables wrap and unclip.
+ *
+ * Progressive:
+ * - hyphenate-limit-chars (hyphens: auto breaks only words of 18
+ *   characters or more, keeping 8 on each side; a string with no
+ *   hyphenation point, such as a URL, still breaks): without it long
+ *   words break anywhere (overflow-wrap) instead of hyphenating.
+ * - text-wrap (headings and paragraphs avoid a lone last word): without it
+ *   lines wrap as usual.
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar under a
+ *   code block or a wide table): without them the platform scrollbar
+ *   shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+@layer ds.components {
+  .ds-prose {
+    min-width: 0;
+    color: var(--ds-text);
+    font: var(--ds-prose-font, var(--ds-font-reading));
+    overflow-wrap: anywhere;
+  }
+
+  .ds-prose--dense {
+    --ds-prose-font: var(--ds-font-body);
+  }
+
+  @supports (hyphenate-limit-chars: 1) {
+    /* Hyphenation points come first; break-word splits only a string with
+       no other break (a URL, a hash, a path). */
+    .ds-prose {
+      overflow-wrap: break-word;
+      -webkit-hyphens: auto;
+      hyphens: auto;
+      hyphenate-limit-chars: 18 8 8;
+    }
+  }
+
+  /* The rhythm: margins reset, then one gap between blocks. */
+  :where(.ds-prose) > * {
+    margin-block: 0;
+  }
+
+  :where(.ds-prose) > * + * {
+    margin-block-start: var(--ds-prose-gap, var(--ds-space-2));
+  }
+
+  :where(.ds-prose) :is(h1, h2, h3, h4, h5, h6) {
+    margin-block: 0;
+    color: var(--ds-text);
+    letter-spacing: 0;
+    text-wrap: balance;
+  }
+
+  /* A heading opens a section: more room above it than between paragraphs. */
+  :where(.ds-prose) > * + :is(h1, h2, h3, h4, h5, h6) {
+    margin-block-start: var(--ds-space-5);
+  }
+
+  :where(.ds-prose) h1 {
+    font: var(--ds-font-headline);
+  }
+
+  :where(.ds-prose) h2 {
+    font: var(--ds-font-subtitle);
+  }
+
+  :where(.ds-prose) :is(h3, h4, h5, h6) {
+    font: inherit;
+    font-weight: var(--ds-weight-label);
+  }
+
+  :where(.ds-prose) p {
+    text-wrap: pretty;
+  }
+
+  :where(.ds-prose) :is(ul, ol) {
+    padding-inline-start: var(--ds-space-5);
+  }
+
+  :where(.ds-prose) li > :is(ul, ol) {
+    margin-block-start: var(--ds-space-1);
+  }
+
+  :where(.ds-prose) li + li {
+    margin-block-start: var(--ds-space-1);
+  }
+
+  :where(.ds-prose) :is(strong, b) {
+    font-weight: var(--ds-prose-strong-weight, var(--ds-weight-label));
+  }
+
+  :where(.ds-prose) a {
+    color: var(--ds-link);
+    text-decoration-line: underline;
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+    text-underline-offset: var(--ds-link-underline-offset);
+    text-decoration-color: var(--ds-link-underline);
+  }
+
+  :where(.ds-prose) img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  :where(.ds-prose) blockquote {
+    margin-inline: 0;
+    padding: var(--ds-space-3) var(--ds-space-4);
+    border-radius: var(--ds-radius-card);
+    background: var(--ds-surface-high);
+    color: var(--ds-text);
+  }
+
+  :where(.ds-prose) hr {
+    border: 0;
+    border-top: 1px solid var(--ds-line);
+  }
+
+  /* A table of rendered text: hairline rows, a quiet head, tabular figures;
+     wider than the text, it scrolls on its own. */
+  :where(.ds-prose) table {
+    position: relative;
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font: var(--ds-font-body);
+    font-variant-numeric: tabular-nums;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+  }
+
+  :where(.ds-prose) :is(th, td) {
+    padding: var(--ds-space-2) var(--ds-space-3);
+    border-bottom: 1px solid var(--ds-line);
+    text-align: start;
+    vertical-align: top;
+  }
+
+  :where(.ds-prose) th {
+    color: var(--ds-text-2);
+    font: var(--ds-font-label);
+  }
+
+  /* A pre in prose is a code block. */
+  :where(.ds-prose) pre,
+  .ds-code-block {
+    position: relative;
+    margin: 0;
+    padding: var(--ds-space-4);
+    overflow-x: auto;
+    border-radius: var(--ds-radius-card);
+    background: var(--ds-code-bg);
+    color: var(--ds-text);
+    font: var(--ds-font-code);
+    white-space: pre;
+    tab-size: 2;
+    -webkit-hyphens: manual;
+    hyphens: manual;
+    overflow-wrap: normal;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    /* An inset ring (the block clips anything outside): it rests on the
+       edge and snaps inward. */
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  :where(.ds-prose) > * + pre {
+    margin-block-start: var(--ds-prose-gap, var(--ds-space-2));
+  }
+
+  .ds-code-block:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-code-block--wrap {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* Code inside a block (or a link) is just text: no inline chip per line. */
+  :where(.ds-prose, .ds-code-block) :where(pre, a) code,
+  .ds-code-block code {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+  }
+
+  /* Inline code in prose takes the size of the text around it. */
+  :where(.ds-prose) :not(pre) > code {
+    padding: 0 var(--ds-space-1);
+    border: 1px solid var(--ds-line);
+    border-radius: var(--ds-radius-xs);
+    background: var(--ds-code-bg);
+    font-family: var(--ds-font-mono);
+    font-size: inherit;
+  }
+
+  @media (forced-colors: active) {
+    :where(.ds-prose) blockquote,
+    :where(.ds-prose) pre,
+    .ds-code-block {
+      outline: 1px solid transparent;
+    }
+  }
+
+  @media print {
+    :where(.ds-prose) pre,
+    .ds-code-block,
+    :where(.ds-prose) table {
+      overflow: visible;
+      white-space: pre-wrap;
+    }
+  }
+}

@@ -1,0 +1,49 @@
+/*
+ * Compact density for desktop consoles: 13/18 UI text and shorter
+ * controls, rows and items. Load it after ds.css and your theme:
+ *
+ *   <link rel="stylesheet" href="vendor/dashboard-style/themes/compact.css">
+ *
+ * Under a coarse pointer (a phone, a tablet) the default heights come
+ * back, so a compact theme never shrinks a target below the default size
+ * on a touch screen. This is not touch density: bigger targets for a
+ * finger are opt-in through .ds-touch. Field text stays 16px on phones
+ * (--ds-font-input). The heights skip a theme root that carries
+ * .ds-touch itself (an unlayered theme would beat it on that element).
+ * Type roles and hooks only: no scales, no motion tokens or hooks, never
+ * in @layer.
+ */
+
+.ds-theme {
+  /* ── Type: the UI roles at 13/18 (headings, reading text and meta keep theirs) ── */
+  --ds-font-body: var(--ds-weight-regular) 13px/18px var(--ds-font);
+  --ds-font-dense: var(--ds-weight-regular) 13px/18px var(--ds-font);
+  --ds-font-label: var(--ds-weight-label) 13px/18px var(--ds-font);
+  --ds-font-chip: var(--ds-weight-label) 13px/18px var(--ds-font);
+}
+
+/* ── Heights (not where the theme root opted into touch targets) ── */
+.ds-theme:not(.ds-touch) {
+  --ds-btn-height: 32px;
+  --ds-input-height: 36px;
+  --ds-table-head-height: 40px;
+  --ds-table-row-height: 40px;
+  --ds-menu-item-height: 40px;
+  --ds-drawer-item-height: 40px;
+  --ds-chip-height: 28px;
+  --ds-tabs-height: 40px;
+}
+
+/* A finger gets the default heights back (not the larger touch targets of .ds-touch). */
+@media (pointer: coarse) {
+  .ds-theme:not(.ds-touch) {
+    --ds-btn-height: 36px;
+    --ds-input-height: 40px;
+    --ds-table-head-height: 48px;
+    --ds-table-row-height: 52px;
+    --ds-menu-item-height: 48px;
+    --ds-drawer-item-height: 48px;
+    --ds-chip-height: 32px;
+    --ds-tabs-height: 48px;
+  }
+}

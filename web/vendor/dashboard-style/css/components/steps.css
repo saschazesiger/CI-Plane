@@ -1,0 +1,232 @@
+/*
+ * Steps of a form (a wizard): where the user is in a short sequence. Steps
+ * are not buttons; going back is a link or a button of the page.
+ *
+ *   <ol class="ds-steps" aria-label="Report a problem">
+ *     <li class="ds-steps__step" data-status="done">
+ *       <span class="ds-steps__mark">(check 16, its path with pathLength="1")</span>
+ *       <span class="ds-steps__label">Device<span class="ds-sr">, done</span></span>
+ *     </li>
+ *     <li class="ds-steps__step" aria-current="step"><span class="ds-steps__mark">2</span><span class="ds-steps__label">Problem</span></li>
+ *     <li class="ds-steps__step"><span class="ds-steps__mark">3</span><span class="ds-steps__label">Contact</span></li>
+ *   </ol>
+ *
+ *   A bar instead of marks: <ol class="ds-steps ds-steps--bar" aria-label="Step 2 of 3"> (the same items)
+ *
+ * State, set by the page: data-status="done" on a finished step (as on
+ * .ds-tasks; never data-state, which DS.overlay writes on overlays) and
+ * aria-current="step" on the current one; the others are upcoming.
+ *
+ * Marks: a 24px disc. Done: --ds-primary with a check that draws itself
+ * when the step turns done in place (re-render with DS.dom.morphHtml, so
+ * the mark stays): the mark's stroke-dashoffset, which the pathLength="1"
+ * check inherits, runs from 1 to 0 over --ds-dur-medium after
+ * --ds-dur-micro; steps rendered with done ones stay still on load (a
+ * transition, not a keyframe). Current: --ds-primary
+ * with --ds-on-primary figures and the label weight on its label;
+ * upcoming: an --ds-outline ring in --ds-text-2. The connector after a
+ * done step turns --ds-primary (colours on --ds-dur-medium). Status is
+ * never colour alone: the check, the weight and aria-current. On narrow
+ * pages (600px of the content and below) only the current label shows;
+ * the others stay readable.
+ *
+ * --bar: one segment per step, --ds-steps-bar-height high; done and
+ * current segments fill with --ds-primary (a clip that glides on
+ * --ds-ease-value over --ds-dur-glide), the rest is --ds-accent. Marks and
+ * labels are visually hidden: the list's aria-label says where the user is.
+ *
+ * Moving between steps: DS.motion.transition(update, { type: 'forward' })
+ * (or 'back').
+ *
+ * Hooks: --ds-steps-bar-height (4px).
+ *
+ * Forced colours: done and current marks and segments Highlight,
+ * upcoming ones a CanvasText outline.
+ *
+ * Print: marks and segments keep their colours (print-color-adjust): the
+ * check of a done step is drawn on its filled mark.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+@layer ds.components {
+  .ds-steps {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-steps__step {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    flex: 0 1 auto;
+    min-width: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+
+  /* The connector: a hairline that takes the room between two steps. */
+  .ds-steps__step + .ds-steps__step {
+    flex: 1 1 0;
+  }
+
+  .ds-steps__step + .ds-steps__step::before {
+    content: '';
+    flex: 1 1 var(--ds-space-6);
+    min-width: var(--ds-space-4);
+    height: 1px;
+    background: var(--ds-line);
+    transition: background-color var(--ds-dur-medium) var(--ds-ease-in-out);
+  }
+
+  .ds-steps__step[data-status="done"] + .ds-steps__step::before {
+    background: var(--ds-primary);
+  }
+
+  .ds-steps__mark {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: var(--ds-space-6);
+    height: var(--ds-space-6);
+    border: 1px solid var(--ds-outline);
+    border-radius: 50%;
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    font-variant-numeric: tabular-nums;
+    /* Inherited by the check of a done step: undrawn until the step is
+       done. A transition, not a keyframe, so steps rendered with done ones
+       stay still on load. */
+    stroke-dashoffset: 1;
+    transition:
+      background-color var(--ds-dur-medium) var(--ds-ease-in-out),
+      border-color var(--ds-dur-medium) var(--ds-ease-in-out),
+      color var(--ds-dur-medium) var(--ds-ease-in-out),
+      stroke-dashoffset var(--ds-dur-medium) var(--ds-ease-out) var(--ds-dur-micro);
+  }
+
+  .ds-steps__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-steps__step:is([data-status="done"], [aria-current="step"]) {
+    color: var(--ds-text);
+  }
+
+  .ds-steps__step:is([data-status="done"], [aria-current="step"]) > .ds-steps__mark {
+    border-color: var(--ds-primary);
+    background: var(--ds-primary);
+    color: var(--ds-on-primary);
+  }
+
+  .ds-steps__step[aria-current="step"] > .ds-steps__label {
+    font: var(--ds-font-label);
+  }
+
+  .ds-steps__mark [pathLength] {
+    stroke-dasharray: 1;
+  }
+
+  /* The mark stays when a step turns done in place (DS.dom.morphHtml
+     patches it), so its offset glides to 0 and the new check draws itself;
+     the pathLength="1" path inherits it. */
+  .ds-steps__step[data-status="done"] > .ds-steps__mark {
+    stroke-dashoffset: 0;
+  }
+
+  /* Narrow pages: the current label only, the others read but unseen. */
+  @container ds-content (max-width: 600px) {
+    .ds-steps__step:not([aria-current="step"]) > .ds-steps__label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  /* The bar: equal segments; done and current ones fill. */
+  .ds-steps--bar {
+    gap: var(--ds-space-1);
+  }
+
+  .ds-steps--bar > .ds-steps__step {
+    position: relative;
+    flex: 1 1 0;
+    height: var(--ds-steps-bar-height, 4px);
+    overflow: hidden;
+    border-radius: var(--ds-radius-xs);
+    background: var(--ds-accent);
+  }
+
+  .ds-steps--bar > .ds-steps__step + .ds-steps__step::before {
+    content: none;
+  }
+
+  .ds-steps--bar > .ds-steps__step::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--ds-primary);
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path var(--ds-dur-glide) var(--ds-ease-value);
+  }
+
+  .ds-steps--bar > .ds-steps__step:is([data-status="done"], [aria-current="step"])::after {
+    clip-path: inset(0);
+  }
+
+  .ds-steps--bar .ds-steps__mark {
+    display: none;
+  }
+
+  .ds-steps--bar .ds-steps__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  @media (forced-colors: active) {
+    .ds-steps__mark {
+      border-color: CanvasText;
+    }
+
+    .ds-steps__step:is([data-status="done"], [aria-current="step"]) > .ds-steps__mark {
+      forced-color-adjust: none;
+      border-color: Highlight;
+      background: Highlight;
+      color: HighlightText;
+    }
+
+    .ds-steps--bar > .ds-steps__step {
+      outline: 1px solid CanvasText;
+      outline-offset: -1px;
+    }
+
+    .ds-steps--bar > .ds-steps__step::after {
+      forced-color-adjust: none;
+      background: Highlight;
+    }
+  }
+
+  /* Print: the filled marks and segments are backgrounds, which printing
+     drops by default (the check of a done step would vanish with them). */
+  @media print {
+    .ds-steps {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+}

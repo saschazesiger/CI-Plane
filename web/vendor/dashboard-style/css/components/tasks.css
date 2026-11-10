@@ -1,0 +1,129 @@
+/*
+ * Tasks: a checklist of the steps of a job (an import, a setup, a
+ * migration), each pending, running, done or failed.
+ *
+ *   <div class="ds-tasks__head"><h3 class="ds-card__title">Set up LAPTOP-0042</h3><p class="ds-meta">3 of 7</p></div>
+ *   <ol class="ds-tasks" aria-label="Steps">
+ *     <li class="ds-tasks__item" data-status="done"><span class="ds-tasks__mark">[icon checkCircle 20]</span><span class="ds-tasks__text">Copy the image<span class="ds-sr">: done</span></span></li>
+ *     <li class="ds-tasks__item" data-status="running"><span class="ds-tasks__mark"><span class="ds-spinner ds-spinner--sm"></span></span><span class="ds-tasks__text">Install updates<span class="ds-sr">: running</span></span></li>
+ *     <li class="ds-tasks__item" data-status="failed"><span class="ds-tasks__mark">[icon alertCircle 20]</span><span class="ds-tasks__text">Join the domain: failed, the server did not answer</span></li>
+ *     <li class="ds-tasks__item" data-status="pending"><span class="ds-tasks__mark"></span><span class="ds-tasks__text">Restart<span class="ds-sr">: waiting</span></span></li>
+ *   </ol>
+ *
+ * The status shows in the mark's shape and the text's weight, never in
+ * colour alone: pending a ring in --ds-outline, running the small spinner
+ * and the label weight, done the check in a circle (--ds-success) and
+ * the text in --ds-text-2, failed the alert circle in --ds-error with the
+ * word in the text. Put the status into the text for screen readers too
+ * (a .ds-sr word), and keep the count in the head ("3 of 7") in step. In
+ * forced colours the marks take CanvasText.
+ *
+ * Motion: when a step turns done in place (DS.dom.morphHtml patches the
+ * keyed item, so its mark stays), the tick of the new check draws itself:
+ * the mark's stroke-dashoffset, which the pathLength="1" tick inherits,
+ * runs from 1 to 0 over --ds-dur-medium after --ds-dur-micro. A list
+ * rendered with done steps stays still on load (a transition, not a
+ * keyframe).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+@layer ds.components {
+  .ds-tasks__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--ds-space-1) var(--ds-space-3);
+  }
+
+  /* No top margin of its own: inside a card the card's rhythm spaces it
+     (zero weight). */
+  :where(.ds-tasks) {
+    margin-top: 0;
+  }
+
+  .ds-tasks {
+    display: grid;
+    gap: var(--ds-space-2);
+    margin-inline: 0;
+    margin-bottom: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-tasks:empty {
+    display: none;
+  }
+
+  .ds-tasks__item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-3);
+    color: var(--ds-text);
+    font: var(--ds-font-body);
+  }
+
+  /* The mark sits on the first line of the text (20px). */
+  .ds-tasks__mark {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: var(--ds-space-5);
+    height: var(--ds-space-5);
+    color: var(--ds-text-2);
+    /* Inherited by the tick of a done step: undrawn until the step is done. */
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset var(--ds-dur-medium) var(--ds-ease-out) var(--ds-dur-micro);
+  }
+
+  .ds-tasks__text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ds-tasks__item[data-status="pending"] .ds-tasks__mark::before {
+    content: '';
+    box-sizing: border-box;
+    width: var(--ds-space-4);
+    height: var(--ds-space-4);
+    border: 2px solid var(--ds-outline);
+    border-radius: 50%;
+  }
+
+  .ds-tasks__item[data-status="running"] .ds-tasks__mark {
+    color: var(--ds-primary);
+  }
+
+  .ds-tasks__item[data-status="running"] .ds-tasks__text {
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-tasks__item[data-status="done"] .ds-tasks__mark {
+    color: var(--ds-success);
+    stroke-dashoffset: 0;
+  }
+
+  .ds-tasks__item[data-status="done"] .ds-tasks__text {
+    color: var(--ds-text-2);
+  }
+
+  .ds-tasks__item[data-status="done"] .ds-tasks__mark [pathLength] {
+    stroke-dasharray: 1;
+  }
+
+  .ds-tasks__item[data-status="failed"] .ds-tasks__mark {
+    color: var(--ds-error);
+  }
+
+  @media (forced-colors: active) {
+    .ds-tasks__mark,
+    .ds-tasks__item[data-status] .ds-tasks__mark {
+      color: CanvasText;
+    }
+
+    .ds-tasks__item[data-status="pending"] .ds-tasks__mark::before {
+      border-color: CanvasText;
+    }
+  }
+}

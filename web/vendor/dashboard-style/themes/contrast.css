@@ -1,0 +1,33 @@
+/*
+ * More contrast: quieter text, hairlines and outlines step up towards the
+ * text colour, focus rings widen, link underlines turn solid and the tint
+ * gets stronger. Load it last, for users who ask for more contrast:
+ *
+ *   <link rel="stylesheet" href="vendor/dashboard-style/themes/contrast.css"
+ *         media="(prefers-contrast: more)">
+ *
+ * Every value is mixed from the text and surface roles of the theme in
+ * use, so it works on the default palette, on a brand theme and on
+ * themes/dark.css alike. Roles only: no scales, no motion tokens or hooks,
+ * never in @layer. Forced colours (Windows contrast themes) are a separate
+ * mode that every component handles by itself.
+ */
+
+.ds-theme {
+  /* ── Text: secondary text reads as text ── */
+  --ds-text-2: var(--ds-text);
+  --ds-text-3: color-mix(in srgb, var(--ds-text) 80%, var(--ds-surface));
+
+  /* ── Lines: every edge at least 3:1, field borders stronger ── */
+  --ds-outline: color-mix(in srgb, var(--ds-text) 80%, var(--ds-surface));
+  --ds-line: var(--ds-outline);
+  --ds-line-2: color-mix(in srgb, var(--ds-text) 70%, var(--ds-surface));
+
+  /* ── Focus and links ── */
+  --ds-focus-width: 3px;
+  --ds-link-underline: currentColor;
+
+  /* ── A stronger tint, with the text colour on it ── */
+  --ds-accent: color-mix(in srgb, var(--ds-primary) 35%, var(--ds-surface));
+  --ds-on-accent: var(--ds-text);
+}

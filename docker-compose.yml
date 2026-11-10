@@ -1,0 +1,12 @@
+services:
+  ci-plane:
+    image: ghcr.io/saschazesiger/ci-plane:latest
+    container_name: ci-plane
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # web interface on your local network; keep it off the internet
+    volumes:
+      - ci-plane:/data
+
+volumes:
+  ci-plane:

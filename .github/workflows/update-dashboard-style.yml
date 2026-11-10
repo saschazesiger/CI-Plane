@@ -1,0 +1,126 @@
+# Keeps a vendored copy of Dashboard-Style on the latest main.
+#
+# Copy this file to .github/workflows/update-dashboard-style.yml in a project
+# that vendors Dashboard-Style (docs/install.md) and adjust the values under
+# `env`. Once a day it compares the commit in <DEST>/VERSION with main of
+# Dashboard-Style: unchanged, the run ends after that one request; changed, it
+# vendors main, verifies the copy against its SHA256SUMS (tools/verify.sh, no
+# Node needed), runs the project check and your checks, commits the new copy
+# to the default branch and starts your build.
+#
+# Why a build has to be started explicitly: a push made with GITHUB_TOKEN does
+# not trigger other workflows (GitHub prevents loops), but workflow_dispatch
+# does. Builds outside GitHub Actions that listen to pushes (Cloudflare Pages,
+# Netlify, Vercel) start by themselves; leave BUILD_WORKFLOW empty then.
+
+name: Update Dashboard-Style
+
+on:
+  schedule:
+    # Daily at 02:30 UTC. Off the full hour on purpose: scheduled runs at
+    # minute 0 queue the longest and are the first GitHub drops under load.
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # commit the new copy
+  actions: write    # start BUILD_WORKFLOW
+
+concurrency:
+  group: update-dashboard-style
+  cancel-in-progress: false
+
+env:
+  # Where the copy lives, relative to the repository root.
+  DEST: web/vendor/dashboard-style
+  # The toolchain your checks need: node (actions/setup-node, when the
+  # repository has a package.json), go (actions/setup-go, when it has a
+  # go.mod) or none (only the shell; the copy still verifies with
+  # tools/verify.sh). Uncomment another setup step below for anything else.
+  SETUP: go
+  # Optional: the project check of the copy (docs/install.md, "Check a
+  # project"), for example
+  #   node "$DEST/tools/check-project.mjs" --config ds-check.json
+  # Needs Node (SETUP: node). Empty to skip.
+  CHECK: ''
+  # Shell command that must pass before the update is committed (tests,
+  # linters); empty to skip. Runs after the copy was replaced.
+  VERIFY: 'go test ./...'
+  # File name of the workflow that builds and deploys (it needs a
+  # workflow_dispatch trigger); empty if your build starts on push by itself.
+  BUILD_WORKFLOW: ''
+  REPO: saschazesiger/Dashboard-Style
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Compare with main of Dashboard-Style
+        id: compare
+        run: |
+          current=$(sed -n 's/^commit //p' "$DEST/VERSION" 2>/dev/null || true)
+          latest=$(curl -fsSL -H 'Accept: application/vnd.github.sha' "https://api.github.com/repos/$REPO/commits/main")
+          echo "current ${current:-none}, latest $latest"
+          if [ "$current" = "$latest" ]; then
+            echo "Dashboard-Style is up to date; nothing to build." >> "$GITHUB_STEP_SUMMARY"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Vendor main
+        if: steps.compare.outputs.changed == 'true'
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/$REPO/${{ steps.compare.outputs.latest }}/scripts/vendor.sh" -o "$RUNNER_TEMP/vendor.sh"
+          sh "$RUNNER_TEMP/vendor.sh" "${{ steps.compare.outputs.latest }}" "$DEST"
+          # The copy verifies itself: every file against SHA256SUMS, nothing added or linked.
+          sh "$DEST/tools/verify.sh" "$DEST"
+
+      - uses: actions/setup-node@v5
+        if: steps.compare.outputs.changed == 'true' && env.SETUP == 'node' && (env.VERIFY != '' || env.CHECK != '') && (hashFiles('package.json') != '' || env.CHECK != '')
+        with:
+          node-version: 22
+
+      - uses: actions/setup-go@v5
+        if: steps.compare.outputs.changed == 'true' && env.SETUP == 'go' && env.VERIFY != '' && hashFiles('go.mod') != ''
+        with:
+          go-version-file: go.mod
+
+      # Another toolchain: add its setup step here, guarded like the two above.
+      # - uses: actions/setup-python@v5
+      #   if: steps.compare.outputs.changed == 'true' && env.VERIFY != ''
+      #   with:
+      #     python-version: '3.12'
+
+      - name: Check
+        if: steps.compare.outputs.changed == 'true' && env.CHECK != ''
+        run: ${{ env.CHECK }}
+
+      - name: Verify
+        if: steps.compare.outputs.changed == 'true' && env.VERIFY != ''
+        run: ${{ env.VERIFY }}
+
+      - name: Commit and push
+        id: commit
+        if: steps.compare.outputs.changed == 'true'
+        run: |
+          git add -A -- "$DEST"
+          if git diff --cached --quiet; then
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "Update Dashboard-Style to ${{ steps.compare.outputs.latest }}"
+          git push
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+          echo "Updated Dashboard-Style to ${{ steps.compare.outputs.latest }}." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Start the build
+        if: steps.commit.outputs.pushed == 'true' && env.BUILD_WORKFLOW != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run "$BUILD_WORKFLOW" --ref "${{ github.ref_name }}"

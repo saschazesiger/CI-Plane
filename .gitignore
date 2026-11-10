@@ -1,0 +1,9 @@
+/ci-plane
+/data/
+/dist/
+node_modules/
+*.db
+*.db-*
+.env
+test-results/
+playwright-report/

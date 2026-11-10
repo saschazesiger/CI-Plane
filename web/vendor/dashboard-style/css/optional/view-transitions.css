@@ -1,0 +1,114 @@
+/*
+ * Opt-in: View Transitions across page loads (multi-page apps, D15). Not
+ * part of ds.css; load it after ds.css on every page of the app, with a
+ * <link> in the markup of <head> (a stylesheet that a script inserts may
+ * apply only after Chromium revealed the new page, which then skips the
+ * transition):
+ *
+ *   <html class="ds-theme" lang="en">
+ *   <link rel="stylesheet" href="ds.css">
+ *   <link rel="stylesheet" href="css/optional/view-transitions.css">
+ *
+ * It affects the whole document and cannot be scoped: @view-transition
+ * opts every same-origin navigation of the page in, and the snapshots are
+ * of the whole page. So it requires .ds-theme on <html> (the
+ * ::view-transition-* rules of ds.css hang off it and inherit its
+ * tokens); an embedded widget never loads it. Navigations across origins
+ * never transition.
+ *
+ * What moves: the view fades through (the rules of ds.css for ds-view:
+ * the old page's content goes in --ds-dur-instant, the new one fades in
+ * and grows from --ds-scale-enter), the top bar stays in the root and
+ * stays still, a page with or without the drawer morphs the panel (the
+ * drawer-hidden rules of ds.css, over --ds-dur-slow: a page load cannot
+ * tell a morph from a plain swap, so it never sets data-ds-vt-morph), and
+ * an indicator created with a `name` glides from the old page's item to
+ * the new page's on the ::view-transition-group(*) spring. The names
+ * below are permanent here, where ds.css names the frame only while
+ * DS.motion.transition() runs, except while the modal drawer (at 900px
+ * and below, how phones navigate) or a dialog or side sheet is open:
+ * then the old page stays in the root under it and its scrim, and the
+ * new page's frame fades in over the root's crossfade.
+ *
+ * Indicators: create them before the new page is captured, each with a
+ * name unique on the page, from a classic script (not a module or a
+ * deferred script, which may run after the capture). Browsers may reveal
+ * a page while it still parses (WebKit does), so either load ds.js in
+ * <head> and create the indicator in an inline script right after its
+ * markup, or let the first render wait for the scripts at the end of
+ * <body> with rel=expect on an element after them:
+ *
+ *   <head> ... <link rel="expect" href="#rendered" blocking="render"> ...
+ *   <script src="ds.js"></script> <script src="app.js"></script>
+ *   <div id="rendered" hidden></div> </body>
+ *
+ *   DS.indicator.createIndicator(list, { active: '[aria-current="page"]',
+ *     className: 'ds-drawer__indicator', name: 'nav' });
+ *
+ * Chromium ends that wait early (console: "Did not find element expected
+ * to be parsed") once a script before the marker parses markup into the
+ * page with innerHTML or insertAdjacentHTML (an icon's <svg>, an <img>):
+ * create the named indicator in the same classic script that builds the
+ * navigation, or keep the links in the markup, and build markup through
+ * a <template> (DS.dom.morphHtml does) or DS.icons.iconElement().
+ *
+ * Direction (shared axis X instead of fade-through): a snippet for the
+ * page, not shipped code. The same attribute and the same rules as
+ * DS.motion.transition(); back and forward through the history move on
+ * the axis, a page that wants it for links too adds 'push' (a drill-down
+ * or the next record, never a top-level destination):
+ *
+ *   addEventListener('pagereveal', (event) => {
+ *     const activation = window.navigation?.activation;
+ *     if (!event.viewTransition || activation?.navigationType !== 'traverse' || !activation.from) return;
+ *     const root = document.documentElement;
+ *     root.dataset.dsVt = activation.entry.index < activation.from.index ? 'back' : 'forward';
+ *     event.viewTransition.finished.finally(() => { delete root.dataset.dsVt; });
+ *   });
+ *
+ * No smooth scrolling is turned on (scroll-behavior stays untouched), and
+ * motion is the same on every device (D8).
+ *
+ * Progressive:
+ * - cross-document View Transitions (@view-transition,
+ *   view-transition-name): without them, pages load as before.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+
+@view-transition {
+  navigation: auto;
+}
+
+@layer ds.utilities {
+  /* Named only while nothing modal covers the frame: a page left from the
+     open modal drawer, or from an open dialog or side sheet (opened by
+     DS.overlay, a native one shown by hand, or the div markup shown by
+     hand by removing hidden), keeps its view and panel in the root
+     snapshot, under the drawer or the overlay and its scrim (a group would
+     paint above them). The new page's frame then fades in on its own over
+     the root's crossfade. A contained dialog (.ds-dialog--contained) covers
+     its container inside the panel, not the frame: it is captured with the
+     panel and unnames nothing. */
+  .ds-theme:not(:has(.ds-app[data-drawer-open], .ds-dialog[data-state="open"]:not(.ds-dialog--contained), .ds-sheet[data-state="open"], dialog.ds-dialog[open]:not(.ds-dialog--contained), dialog.ds-sheet[open], .ds-dialog:not(dialog, [hidden], [data-state], .ds-dialog--contained, .ds-dialog--hidden, .ds-dialog--closing), .ds-sheet[aria-modal="true"]:not(dialog, [hidden], [data-state], .ds-sheet--closing))) .ds-view {
+    view-transition-name: ds-view;
+  }
+
+  .ds-theme:not(:has(.ds-app[data-drawer-open], .ds-dialog[data-state="open"]:not(.ds-dialog--contained), .ds-sheet[data-state="open"], dialog.ds-dialog[open]:not(.ds-dialog--contained), dialog.ds-sheet[open], .ds-dialog:not(dialog, [hidden], [data-state], .ds-dialog--contained, .ds-dialog--hidden, .ds-dialog--closing), .ds-sheet[aria-modal="true"]:not(dialog, [hidden], [data-state], .ds-sheet--closing))) .ds-panel {
+    view-transition-name: ds-panel;
+  }
+
+  /* Only the docked drawer: the modal one is never named. It is
+     transparent on the backdrop it lies on, so a named indicator's group,
+     which motion.css stacks under the drawer's, glides under the labels
+     instead of covering them. */
+  @media (min-width: 901px) {
+    .ds-theme .ds-drawer {
+      background: transparent;
+    }
+
+    .ds-theme:not(:has(.ds-dialog[data-state="open"]:not(.ds-dialog--contained), .ds-sheet[data-state="open"], dialog.ds-dialog[open]:not(.ds-dialog--contained), dialog.ds-sheet[open], .ds-dialog:not(dialog, [hidden], [data-state], .ds-dialog--contained, .ds-dialog--hidden, .ds-dialog--closing), .ds-sheet[aria-modal="true"]:not(dialog, [hidden], [data-state], .ds-sheet--closing))) .ds-drawer {
+      view-transition-name: ds-drawer;
+    }
+  }
+}
