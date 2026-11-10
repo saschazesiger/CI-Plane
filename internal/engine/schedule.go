@@ -281,7 +281,7 @@ func (e *Engine) designate(jobID int64, runnerID string) bool {
 func (e *Engine) place(s *snapshot, j model.Job, w model.Worker, z model.Size) bool {
 	id := newID()
 	r := model.Runner{
-		ID: id, Name: NamePrefix + slug(w.Name) + "-" + id, WorkerID: w.ID, AccountID: j.AccountID, RepoID: j.RepoID, Repo: j.Repo,
+		ID: id, Name: e.prefix + slug(w.Name) + "-" + id, WorkerID: w.ID, AccountID: j.AccountID, RepoID: j.RepoID, Repo: j.Repo,
 		JobID: j.ID, Labels: s.set.RunnerLabels(z.Name), Size: z.Name, CPUs: z.CPUs, MemMB: z.MemMB,
 		State: model.RunnerProvisioning, CreatedAt: s.now,
 	}

@@ -755,12 +755,13 @@ func TestRestartInTheMiddleOfACleanup(t *testing.T) {
 func TestOrphansAreRemoved(t *testing.T) {
 	r := newRig(t)
 	w := r.worker("alpha", 1)
-	r.world.AddContainer(w.ID, "ci-plane-alpha-dead1")
-	r.world.AddRunner(engine.Target{AccountID: orgID, Owner: "acme"}, "ci-plane-alpha-dead2")
+	r.world.AddContainer(w.ID, r.eng.Prefix()+"alpha-dead1")
+	r.world.AddContainer(w.ID, "ci-plane-000000-alpha-other") // another installation
+	r.world.AddRunner(engine.Target{AccountID: orgID, Owner: "acme"}, r.eng.Prefix()+"alpha-dead2")
 	r.world.AddRunner(engine.Target{AccountID: orgID, Owner: "acme"}, "somebody-elses-runner")
 	r.pass(3)
-	if c := r.world.Containers(w.ID); len(c) != 0 {
-		t.Errorf("orphan container left: %v", c)
+	if c := r.world.Containers(w.ID); len(c) != 1 || c[0] != "ci-plane-000000-alpha-other" {
+		t.Errorf("containers after the sweep: %v", c)
 	}
 	if reg := r.world.Registered(); len(reg) != 1 || reg[0] != "somebody-elses-runner" {
 		t.Errorf("registrations: %v", reg)
@@ -880,6 +881,71 @@ func TestRemovedAccountLeavesNothingBehind(t *testing.T) {
 	}
 	if c := r.world.Containers(w.ID); len(c) != 0 {
 		t.Errorf("containers left: %v", c)
+	}
+}
+
+func TestGitHubUnreachableForDeregistration(t *testing.T) {
+	r := newRig(t)
+	w := r.worker("alpha", 1)
+	done := r.queue("acme/api", 1)
+	r.run(6)
+	spare := r.queue("acme/api", 1)
+	r.pass(3)
+	r.world.Step()
+	r.pass(2)
+	r.world.FailDelete = 1 << 30 // e.g. the app was uninstalled
+	r.world.Cancel(spare)
+	for i := 0; i < 60; i++ {
+		r.pass(2)
+		r.advance(30)
+	}
+	if j := r.job(done); j.State != model.JobCompleted {
+		t.Fatalf("job: %s", j.State)
+	}
+	if a := r.active(); len(a) != 0 {
+		t.Fatalf("runners hold capacity although GitHub cannot be reached: %+v", a)
+	}
+	if c := r.world.Containers(w.ID); len(c) != 0 {
+		t.Fatalf("containers left: %v", c)
+	}
+}
+
+func TestStartTimeoutDoesNotKillARunnerThatWorks(t *testing.T) {
+	r := newRig(t)
+	w := r.worker("alpha", 1)
+	r.world.DropWebhooks = true
+	r.world.FailList = 1 << 30 // GitHub's runner listing is down
+	id := r.queue("acme/api", 1000)
+	must(t, r.eng.HandleJob(engine.JobEvent{Action: "queued", ID: id, AccountID: orgID, RepoID: 1, Repo: "acme/api", Labels: []string{"self-hosted", "ci-plane"}}))
+	r.pass(3)
+	r.world.Step() // online
+	r.world.Step() // takes the job; nobody tells the engine
+	r.advance(125)
+	r.pass(4)
+	r.advance(20)
+	r.pass(4)
+	j := r.job(id)
+	if j.State != model.JobRunning {
+		t.Fatalf("job: %s\n%s", j.State, r.timeline(id))
+	}
+	if x := r.runner(j.RunnerID); x.State != model.RunnerBusy || x.Failed {
+		t.Fatalf("runner: %+v", x)
+	}
+	if got := r.workerRow(w.ID).Failures; got != 0 {
+		t.Fatalf("worker blamed: %d", got)
+	}
+	if len(r.world.Containers(w.ID)) != 1 {
+		t.Fatal("the running container was removed")
+	}
+}
+
+func TestForeignRepositoryGetsNoRunner(t *testing.T) {
+	r := newRig(t)
+	r.worker("alpha", 1)
+	must(t, r.eng.HandleJob(engine.JobEvent{Action: "queued", ID: 77, AccountID: orgID, RepoID: 999, Repo: "stranger/code", Labels: []string{"self-hosted", "ci-plane"}}))
+	r.pass(2)
+	if a := r.active(); len(a) != 0 {
+		t.Fatalf("runner for a repository of another owner: %+v", a)
 	}
 }
 

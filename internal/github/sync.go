@@ -43,11 +43,12 @@ func (s *Service) sync(ctx context.Context, accountID int64) error {
 	if _, err := s.getJSON(ctx, call{method: http.MethodGet, path: "/app/installations?per_page=100", auth: authApp, account: accountID}, &insts); err != nil {
 		return err
 	}
-	// A private app can only be installed on its owner; prefer that one.
+	// Only the installation on the owner counts, even if the app was made
+	// public and installed elsewhere.
 	var inst *ghInstallation
 	suspended := false
 	for i := range insts {
-		if inst == nil || strings.EqualFold(insts[i].Account.Login, acc.Owner) {
+		if strings.EqualFold(insts[i].Account.Login, acc.Owner) {
 			inst = &insts[i].ghInstallation
 			suspended = insts[i].SuspendedAt != nil
 		}

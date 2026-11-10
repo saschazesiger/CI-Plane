@@ -162,7 +162,7 @@ func (e *Engine) sweepRunners(ctx context.Context, s *snapshot) {
 			continue
 		}
 		for _, fr := range list {
-			if !strings.HasPrefix(fr.Name, NamePrefix) || fr.Busy {
+			if !strings.HasPrefix(fr.Name, e.prefix) || fr.Busy {
 				continue
 			}
 			active := false

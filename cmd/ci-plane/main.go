@@ -4,6 +4,8 @@
 //	CI_PLANE_DATA            where the database and the secret key live (default /data)
 //	CI_PLANE_LISTEN          the web interface on the local network (default :8080)
 //	CI_PLANE_TUNNEL_LISTEN   what cloudflared reaches (default 127.0.0.1:8081)
+//	CI_PLANE_HOSTS           extra host names the web interface answers to, comma-separated
+//	                         (IP addresses and names like server, server.lan, server.local always work)
 //	CI_PLANE_ADMIN_PASSWORD  if set, becomes the admin password at start
 //	CI_PLANE_SECRET_KEY      the key that encrypts secrets (default: secret.key in the data directory)
 //	CI_PLANE_DEMO            1: run on simulated GitHub, Cloudflare and workers, nothing real is touched
@@ -148,14 +150,15 @@ func run(logger *log.Logger) error {
 
 	srv := api.New(api.Deps{
 		Store: st, Engine: eng, Workers: svc.Workers, GitHub: svc.GitHub, Cloudflare: svc.Cloudflare, Box: box,
+		Hosts:   strings.Split(env("CI_PLANE_HOSTS", ""), ","),
 		Version: version, Demo: cfg.demo && !cfg.demoFresh, ResetPassword: cfg.adminPassword, Extra: extra,
 		Logf: logger.Printf,
 	})
 	defer srv.Close()
 	runners = append(runners, srv.Run)
 
-	local := &http.Server{Addr: cfg.listen, Handler: srv.Local(), ReadHeaderTimeout: 10 * time.Second, ErrorLog: logger}
-	tunnel := &http.Server{Addr: cfg.tunnelListen, Handler: srv.Tunnel(webhook), ReadHeaderTimeout: 10 * time.Second, ErrorLog: logger}
+	local := &http.Server{Addr: cfg.listen, Handler: srv.Local(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: time.Minute, IdleTimeout: 2 * time.Minute, ErrorLog: logger}
+	tunnel := &http.Server{Addr: cfg.tunnelListen, Handler: srv.Tunnel(webhook), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: time.Minute, IdleTimeout: 2 * time.Minute, ErrorLog: logger}
 
 	lnLocal, err := net.Listen("tcp", cfg.listen)
 	if err != nil {

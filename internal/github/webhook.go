@@ -138,6 +138,24 @@ type ghInstallation struct {
 	} `json:"account"`
 }
 
+// foreign reports whether an installation belongs to someone other than
+// the owner of the app. That only happens if the app was made public on
+// GitHub; such installations must never count as ours.
+func (s *Service) foreign(id int64, login string) bool {
+	if login == "" {
+		return false
+	}
+	acc, err := s.account(id)
+	if err != nil {
+		return false
+	}
+	if !strings.EqualFold(acc.Owner, login) {
+		s.logf("github: ignored an installation of %s on %s; the app belongs to %s", acc.Slug, login, acc.Owner)
+		return true
+	}
+	return false
+}
+
 // handleEvent applies one verified event of the app id.
 func (s *Service) handleEvent(id int64, event string, payload []byte, onJob func(engine.JobEvent) error) error {
 	switch event {
@@ -180,6 +198,9 @@ func (s *Service) handleEvent(id int64, event string, payload []byte, onJob func
 		if err := json.Unmarshal(payload, &p); err != nil {
 			return badPayload{err}
 		}
+		if s.foreign(id, p.Installation.Account.Login) {
+			return nil
+		}
 		return s.applyInstallation(id, p.Action, p.Installation.ID, p.Repositories)
 
 	case "installation_repositories":
@@ -191,6 +212,9 @@ func (s *Service) handleEvent(id int64, event string, payload []byte, onJob func
 		}
 		if err := json.Unmarshal(payload, &p); err != nil {
 			return badPayload{err}
+		}
+		if s.foreign(id, p.Installation.Account.Login) {
+			return nil
 		}
 		return s.st.Tx(func(tx *store.Tx) error {
 			acc, err := tx.Account(id)

@@ -141,7 +141,7 @@ export default {
       const name = el.getAttribute('data-name');
       const ok = await DS.overlay.confirm({
         title: `Remove ${name}?`,
-        text: `Its jobs are ignored from now on. It comes back with the next sync while the GitHub App is installed on it; to keep it away for good, take it out of the app's repositories on GitHub. To pause it, the switch is enough.`,
+        text: `It comes back with its next job or the next sync while the GitHub App is installed on it; to keep it away for good, take it out of the app's repositories on GitHub. To pause it, the switch is enough.`,
         confirmLabel: `Remove ${name}`, destructive: true, opener: el,
         onConfirm: () => api.del(`/api/repos/${el.getAttribute('data-remove-repo')}`),
         errorText: `${name} could not be removed. Try again.`,

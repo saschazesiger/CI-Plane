@@ -23,7 +23,9 @@ import (
 	"github.com/saschazesiger/CI-Plane/internal/store"
 )
 
-// NamePrefix starts the name of every runner and container of CI-Plane.
+// NamePrefix starts the name of every runner and container of CI-Plane. It
+// is followed by the id of the installation, so two installations that share
+// a worker or an organisation leave each other's runners alone.
 const NamePrefix = "ci-plane-"
 
 // Errors a Forge returns for the engine to act on.
@@ -139,9 +141,10 @@ type Fleet interface {
 
 // Engine schedules and supervises runners.
 type Engine struct {
-	st    *store.Store
-	forge Forge
-	fleet Fleet
+	st     *store.Store
+	forge  Forge
+	fleet  Fleet
+	prefix string // NamePrefix + installation id + "-"
 
 	// OnChange, if set, is called after state changed (for live updates).
 	OnChange func()
@@ -163,8 +166,18 @@ type Engine struct {
 
 // New creates an engine.
 func New(st *store.Store, forge Forge, fleet Fleet) *Engine {
+	var id string
+	_ = st.Tx(func(tx *store.Tx) error {
+		if b, err := tx.Get("instance"); err == nil && len(b) > 0 {
+			id = string(b)
+			return nil
+		}
+		id = newID()[:6]
+		return tx.Set("instance", []byte(id))
+	})
 	return &Engine{
-		st: st, forge: forge, fleet: fleet,
+		prefix: NamePrefix + id + "-",
+		st:     st, forge: forge, fleet: fleet,
 		now:       store.Now,
 		kick:      make(chan struct{}, 1),
 		inflight:  map[string]bool{},
@@ -174,6 +187,9 @@ func New(st *store.Store, forge Forge, fleet Fleet) *Engine {
 		seen:      map[int64]int64{},
 	}
 }
+
+// Prefix starts the names of this installation's runners and containers.
+func (e *Engine) Prefix() string { return e.prefix }
 
 // SetClock replaces the clock, for tests.
 func (e *Engine) SetClock(now func() int64) { e.now = now }
@@ -250,6 +266,8 @@ func (e *Engine) forget(id string) {
 	delete(e.notBefore, id)
 	delete(e.fails, id)
 	delete(e.absent, id)
+	delete(e.fails, "retire:"+id)
+	delete(e.fails, "forge:"+id)
 	e.mu.Unlock()
 }
 

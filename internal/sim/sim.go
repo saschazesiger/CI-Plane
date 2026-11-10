@@ -48,6 +48,8 @@ type World struct {
 	DropWebhooks bool
 
 	// Failure injection. Counters count down with each failure.
+	FailDelete   int            // DeleteRunner calls that fail
+	FailList     int            // ListRunners calls that fail
 	FailCreate   int            // CreateRunner calls that fail
 	FailStart    map[int64]int  // Start calls that fail, by worker id
 	FailRemove   map[int64]int  // Remove calls that fail, by worker id
@@ -331,6 +333,10 @@ func (w *World) DeleteRunner(_ context.Context, _ engine.Target, id int64) error
 	if r.jobID != 0 {
 		return engine.ErrRunnerBusy
 	}
+	if w.FailDelete > 0 {
+		w.FailDelete--
+		return errors.New("simulated: GitHub answered 403")
+	}
 	delete(w.runners, id)
 	return nil
 }
@@ -339,6 +345,10 @@ func (w *World) DeleteRunner(_ context.Context, _ engine.Target, id int64) error
 func (w *World) ListRunners(_ context.Context, t engine.Target) ([]engine.ForgeRunner, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.FailList > 0 {
+		w.FailList--
+		return nil, errors.New("simulated: GitHub answered 503")
+	}
 	out := []engine.ForgeRunner{}
 	for _, r := range w.runners {
 		if r.target == t {

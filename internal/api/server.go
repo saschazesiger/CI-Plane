@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +36,8 @@ type Deps struct {
 	// ResetPassword, if set, becomes the admin password at start
 	// (CI_PLANE_ADMIN_PASSWORD) and signs everybody out.
 	ResetPassword string
+	// Hosts are extra names the local listener answers to (CI_PLANE_HOSTS).
+	Hosts []string
 	// Assets is the web interface; nil means the embedded one.
 	Assets fs.FS
 	// Extra is mounted under /demo/ on both listeners (the pages that stand
@@ -152,7 +155,44 @@ func (s *Server) Local() http.Handler {
 	})
 	mux.HandleFunc("POST /api/login", s.guard(s.login))
 	mux.HandleFunc("POST /api/setup/password", s.guard(s.firstPassword))
-	return s.headers(mux)
+	return s.localHost(s.headers(mux))
+}
+
+// localHost refuses requests whose Host header is a public-looking name.
+// That is what a DNS rebinding attack looks like: a website the admin has
+// open points its own name at this address to talk to CI-Plane as if it were
+// the same site. Addresses, single-label and private names are fine; other
+// names are listed in CI_PLANE_HOSTS.
+func (s *Server) localHost(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.d.Demo && !localName(r.Host, s.d.Hosts) {
+			http.Error(w, "CI-Plane does not know the name "+strconv.Quote(r.Host)+". Open it by its IP address, or add the name to the environment variable CI_PLANE_HOSTS.", http.StatusForbidden)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+func localName(hostport string, extra []string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	host = strings.ToLower(strings.TrimSuffix(strings.Trim(host, "[]"), "."))
+	if host == "" || net.ParseIP(host) != nil || !strings.Contains(host, ".") {
+		return host != ""
+	}
+	for _, suffix := range []string{".localhost", ".local", ".lan", ".internal", ".home.arpa", ".home", ".intranet", ".ts.net"} {
+		if strings.HasSuffix(host, suffix) {
+			return true
+		}
+	}
+	for _, e := range extra {
+		if strings.EqualFold(strings.TrimSpace(e), host) {
+			return true
+		}
+	}
+	return false
 }
 
 // Tunnel is the handler of the listener that only cloudflared reaches.
@@ -179,7 +219,7 @@ func (s *Server) Tunnel(webhook http.Handler) http.Handler {
 			err = errors.New("Cloudflare is not set up")
 		}
 		if err != nil || email == "" {
-			s.d.Logf("tunnel: refused %s %s: %v", r.Method, r.URL.Path, err)
+			s.d.Logf("tunnel: refused %s %q: %v", r.Method, r.URL.Path, err)
 			setSecurityHeaders(w)
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusForbidden)

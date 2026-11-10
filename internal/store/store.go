@@ -115,8 +115,9 @@ func (s *Store) Tx(fn func(tx *Tx) error) error {
 	if err != nil {
 		return err
 	}
+	// Also on a panic in fn: the one connection must come back.
+	defer t.Rollback() // no effect after Commit
 	if err := fn(&Tx{q: t, now: s.now}); err != nil {
-		t.Rollback()
 		return err
 	}
 	return t.Commit()

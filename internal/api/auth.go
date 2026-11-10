@@ -157,8 +157,14 @@ func (a *auth) verify(pw string) bool {
 		hashPassword(pw)
 		return false
 	}
+	// Argon2 takes memory on purpose; a few at a time is enough, and a
+	// flood of logins cannot exhaust the container.
+	hashing <- struct{}{}
+	defer func() { <-hashing }()
 	return h.matches(pw)
 }
+
+var hashing = make(chan struct{}, 4)
 
 // limited reports how long a client still has to wait before the next
 // attempt. Five failures are free, then the wait doubles from 30 seconds
@@ -166,19 +172,25 @@ func (a *auth) verify(pw string) bool {
 func (a *auth) limited(ip string) time.Duration {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	at := a.attempts[ip]
-	if at == nil {
-		return 0
+	if at := a.attempts[ip]; at != nil {
+		if d := at.until.Sub(a.now()); d > 0 {
+			return d
+		}
 	}
-	if d := at.until.Sub(a.now()); d > 0 {
-		return d
-	}
+	// Count the attempt before the password is checked, so guesses sent
+	// in parallel cannot all slip through; success forgets the count.
+	a.failedLocked(ip)
 	return 0
 }
 
+// failed is kept for callers that count a failure by itself.
 func (a *auth) failed(ip string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.failedLocked(ip)
+}
+
+func (a *auth) failedLocked(ip string) {
 	now := a.now()
 	at := a.attempts[ip]
 	if at == nil || now.Sub(at.last) > time.Hour {
@@ -335,7 +347,6 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.auth.verify(req.Password) {
-		s.auth.failed(ip)
 		s.d.Logf("login: wrong password from %s", ip)
 		writeError(w, http.StatusUnauthorized, "The password is wrong.")
 		return
@@ -386,7 +397,6 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !s.auth.verify(req.Current) {
-			s.auth.failed(ip)
 			msg := "The current password is wrong."
 			writeJSON(w, http.StatusBadRequest, apiError{Error: msg, Fields: map[string]string{"current": msg}})
 			return

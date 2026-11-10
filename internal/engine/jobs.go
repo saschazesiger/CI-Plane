@@ -65,6 +65,11 @@ func (e *Engine) admit(tx *store.Tx, ev JobEvent) (model.Job, error) {
 	if err != nil {
 		return model.Job{}, err
 	}
+	// An app serves the account that owns it and nobody else, even if it
+	// was made public on GitHub and installed elsewhere.
+	if owner, _, _ := strings.Cut(ev.Repo, "/"); !strings.EqualFold(owner, acc.Owner) {
+		return model.Job{}, nil
+	}
 	repo, err := tx.Repo(ev.RepoID)
 	if errors.Is(err, store.ErrNotFound) {
 		repo = model.Repo{ID: ev.RepoID, AccountID: acc.ID, FullName: ev.Repo, Private: ev.Private, Enabled: true}
