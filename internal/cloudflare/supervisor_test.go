@@ -49,7 +49,12 @@ func TestSupervisorRestartsWithBackoff(t *testing.T) {
 	if g4 < 300*time.Millisecond || g4 <= g1 {
 		t.Errorf("gaps between starts did not grow: first %v, fourth %v", g1, g4)
 	}
+	// The process may be up for a moment between two exits; wait for the
+	// state after an exit.
 	st := h.svc.Status()
+	for until := time.Now().Add(3 * time.Second); !strings.Contains(st.Error, "cloudflared stopped") && time.Now().Before(until); st = h.svc.Status() {
+		time.Sleep(10 * time.Millisecond)
+	}
 	if !st.Configured || st.Connected || !strings.Contains(st.Error, "cloudflared stopped") {
 		t.Errorf("status = %+v", st)
 	}
