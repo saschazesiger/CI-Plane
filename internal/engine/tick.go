@@ -198,6 +198,8 @@ func (e *Engine) superviseRunners(ctx context.Context, s *snapshot) bool {
 	e.mu.Lock()
 	pressure := e.pressure
 	e.mu.Unlock()
+	var starting []model.Runner
+	defer func() { e.watchOnline(ctx, s, starting) }()
 	for _, r := range s.runners {
 		r := r
 		switch r.State {
@@ -211,7 +213,7 @@ func (e *Engine) superviseRunners(ctx context.Context, s *snapshot) bool {
 			} else if r.JobID == 0 && (pressure || s.now-r.SpareAt > sec(s.set.SpareGraceSec)) {
 				e.retire(ctx, r, "no job is waiting for it")
 			} else {
-				e.spawn(ctx, r.ID, time.Minute, func(ctx context.Context) time.Duration { return e.checkOnline(ctx, r) })
+				starting = append(starting, r)
 			}
 
 		case model.RunnerIdle:
@@ -339,37 +341,49 @@ func (e *Engine) deleteByName(ctx context.Context, t Target, name string) error 
 	return nil
 }
 
-// checkOnline moves a starting runner to idle once GitHub sees it.
-func (e *Engine) checkOnline(ctx context.Context, r model.Runner) time.Duration {
-	var acc model.Account
-	if err := e.st.View(func(tx *store.Tx) error {
-		var err error
-		acc, err = tx.Account(r.AccountID)
-		return err
-	}); err != nil {
-		return 5 * time.Second
-	}
-	list, err := e.forge.ListRunners(ctx, targetOf(acc, r.Repo))
-	if err != nil {
-		return 5 * time.Second
-	}
-	for _, fr := range list {
-		if fr.ID != r.ForgeID || !fr.Online {
+// watchOnline moves starting runners to idle once GitHub sees them online.
+// One listing per place of registration serves all runners there.
+func (e *Engine) watchOnline(ctx context.Context, s *snapshot, starting []model.Runner) {
+	byTarget := map[Target][]model.Runner{}
+	for _, r := range starting {
+		acc, ok := s.accounts[r.AccountID]
+		if !ok {
 			continue
 		}
-		_ = e.st.Tx(func(tx *store.Tx) error {
-			cur, err := tx.Runner(r.ID)
-			if err != nil || cur.State != model.RunnerStarting {
-				return err
-			}
-			cur.State, cur.OnlineAt = model.RunnerIdle, e.now()
-			event(tx, model.LevelInfo, "runner.online", "Runner "+cur.Name+" is online and waits for the job", cur.JobID, cur.ID, cur.WorkerID)
-			return tx.SaveRunner(cur)
-		})
-		e.changed()
-		return 0
+		t := targetOf(acc, r.Repo)
+		byTarget[t] = append(byTarget[t], r)
 	}
-	return 3 * time.Second
+	for t, runners := range byTarget {
+		t, runners := t, runners
+		e.spawn(ctx, "online:"+t.Owner+"/"+t.Repo, time.Minute, func(ctx context.Context) time.Duration {
+			list, err := e.forge.ListRunners(ctx, t)
+			if err != nil {
+				return 5 * time.Second
+			}
+			online := map[int64]bool{}
+			for _, fr := range list {
+				if fr.Online {
+					online[fr.ID] = true
+				}
+			}
+			for _, r := range runners {
+				if !online[r.ForgeID] {
+					continue
+				}
+				_ = e.st.Tx(func(tx *store.Tx) error {
+					cur, err := tx.Runner(r.ID)
+					if err != nil || cur.State != model.RunnerStarting {
+						return err
+					}
+					cur.State, cur.OnlineAt = model.RunnerIdle, e.now()
+					event(tx, model.LevelInfo, "runner.online", "Runner "+cur.Name+" is online and waits for the job", cur.JobID, cur.ID, cur.WorkerID)
+					return tx.SaveRunner(cur)
+				})
+				e.changed()
+			}
+			return 3 * time.Second
+		})
+	}
 }
 
 // failStart gives up a runner that did not start and puts its job back in

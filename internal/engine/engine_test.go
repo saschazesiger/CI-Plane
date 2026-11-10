@@ -832,6 +832,37 @@ func TestLongWaitingJobIsNotOvertaken(t *testing.T) {
 	_ = w
 }
 
+func TestRemovedAccountLeavesNothingBehind(t *testing.T) {
+	r := newRig(t)
+	w := r.worker("alpha", 1)
+	running := r.queue("jo/site", 1000)
+	r.pass(2)
+	r.world.Step()
+	r.pass(2)
+	r.world.Step()
+	r.pass(2)
+	waiting := r.queue("jo/site", 1, "size-xl") // does not fit: stays queued
+	r.pass(2)
+	if a, b := r.job(running).State, r.job(waiting).State; a != model.JobRunning || b != model.JobQueued {
+		t.Fatalf("before: %s %s", a, b)
+	}
+	must(t, r.st.Tx(func(tx *store.Tx) error { return tx.DeleteAccount(userID) }))
+	r.pass(3)
+	r.advance(31)
+	r.pass(4)
+	for _, id := range []int64{running, waiting} {
+		if j := r.job(id); j.State != model.JobCompleted || j.Conclusion != "account removed" {
+			t.Errorf("job %d: %s %q", id, j.State, j.Conclusion)
+		}
+	}
+	if a := r.active(); len(a) != 0 {
+		t.Errorf("active runners left: %+v", a)
+	}
+	if c := r.world.Containers(w.ID); len(c) != 0 {
+		t.Errorf("containers left: %v", c)
+	}
+}
+
 func TestJobTimeLimit(t *testing.T) {
 	r := newRig(t)
 	w := r.worker("alpha", 1)

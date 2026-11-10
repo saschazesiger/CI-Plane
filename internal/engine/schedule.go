@@ -148,11 +148,14 @@ func (e *Engine) schedule(s *snapshot) bool {
 	}()
 
 	for _, j := range s.jobs {
-		if j.State != model.JobQueued {
-			continue
-		}
 		acc, ok := s.accounts[j.AccountID]
 		if !ok {
+			// Its GitHub account was removed from CI-Plane: nothing can
+			// start a runner for it or learn how it ended.
+			_ = e.HandleJob(JobEvent{Action: "completed", ID: j.ID, Conclusion: "account removed"})
+			continue
+		}
+		if j.State != model.JobQueued {
 			continue
 		}
 		if j.NextTryAt > s.now {
