@@ -35,6 +35,10 @@ file. Read [docs/how-it-works.md](docs/how-it-works.md) for the design before ch
 - **Few dependencies.** Standard library, `golang.org/x/crypto`, `modernc.org/sqlite`. Anything else needs a reason.
 - **Secrets** go through `internal/secret` and never into logs, events or command lines.
 - Text and documentation are English. Comments say why, not what.
+- **Test, then push to `main` yourself.** After a change, run the checks below that cover it (and try the change in
+  the running app or on the real system where that is possible). Once you are sure it works, rebase onto
+  `origin/main`, run the tests again and push to `main` without asking; no pull request needed. If you are not
+  sure it works, do not push to `main`: say what is untested and why.
 
 ## Commands
 

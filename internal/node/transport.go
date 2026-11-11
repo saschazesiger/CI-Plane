@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -205,6 +206,10 @@ func explainDial(addr string, err error) error {
 	case strings.Contains(msg, "no common algorithm for host key"):
 		return fmt.Errorf("The server at %s no longer offers the host key stored when the worker was added. "+
 			"If the server was reinstalled, remove the worker and add it again.", addr)
+	case (errors.Is(err, context.DeadlineExceeded) || isTimeout(err)) && isCGNAT(addr):
+		return fmt.Errorf("%s did not answer within %d seconds. This is a Tailscale (or other CGNAT) address: "+
+			"the machine running CI-Plane must be in the same tailnet as the server, and the tailnet's access rules must allow SSH between them.",
+			addr, int(dialTimeout.Seconds()))
 	case errors.Is(err, context.DeadlineExceeded) || isTimeout(err):
 		return fmt.Errorf("%s did not answer within %d seconds. Check the address, the port and any firewall between CI-Plane and the server.", addr, int(dialTimeout.Seconds()))
 	case strings.Contains(msg, "connection refused"):
@@ -215,6 +220,19 @@ func explainDial(addr string, err error) error {
 		return fmt.Errorf("The SSH handshake with %s failed (%v). Check that the port belongs to an SSH server.", addr, err)
 	}
 	return fmt.Errorf("Could not connect to %s: %v", addr, err)
+}
+
+// cgnat is 100.64.0.0/10, where Tailscale hands out its addresses; such an
+// address only answers from inside the same tailnet.
+var cgnat = netip.MustParsePrefix("100.64.0.0/10")
+
+func isCGNAT(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && cgnat.Contains(ip)
 }
 
 func isTimeout(err error) bool {

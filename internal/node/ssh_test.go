@@ -5,6 +5,8 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"io"
+	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -249,5 +251,15 @@ func TestParseFacts(t *testing.T) {
 	err := parseFacts("cpus 8\nmem 15900\nos Ubuntu 24.04\narch x86_64\ndocker 29.5.1\ndisk 100000 60000\n", "ci-plane", &f)
 	if err != nil || f.CPUs != 8 || f.MemMB != 15900 || f.OS != "Ubuntu 24.04" || f.Docker != "29.5.1" || f.DiskMB != 100000 || f.DiskFreeMB != 60000 {
 		t.Fatalf("%+v %v", f, err)
+	}
+}
+
+func TestExplainDialTimeoutOnTailscaleAddress(t *testing.T) {
+	timeout := &net.OpError{Op: "dial", Net: "tcp", Err: os.ErrDeadlineExceeded}
+	if msg := explainDial("100.77.229.49:22", timeout).Error(); !strings.Contains(msg, "same tailnet") {
+		t.Fatalf("Tailscale address: %q", msg)
+	}
+	if msg := explainDial("203.0.113.5:22", timeout).Error(); strings.Contains(msg, "tailnet") {
+		t.Fatalf("public address: %q", msg)
 	}
 }
