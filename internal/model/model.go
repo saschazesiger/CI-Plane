@@ -64,6 +64,19 @@ func CPUShares(priority string) int {
 	return 0
 }
 
+// What happens to a job whose runner was lost while it ran (Job.Rerun).
+const (
+	RerunLost   = "lost"   // its runner disappeared; GitHub has not said yet how the job ended
+	RerunCheck  = "check"  // GitHub failed it while its worker was unreachable: lost, or failed by itself?
+	RerunWanted = "wanted" // GitHub failed it because of that: ask GitHub to run it again
+	RerunDone   = "done"   // GitHub runs it again, as a new job
+	RerunFailed = "failed" // GitHub could not be made to run it again
+)
+
+// MaxRunAttempts is how often a job is run at most when its worker is lost
+// again and again: the first run and two more.
+const MaxRunAttempts = 3
+
 // Event levels.
 const (
 	LevelInfo  = "info"
@@ -96,6 +109,14 @@ type Repo struct {
 	Enabled     bool   `json:"enabled"`
 	MaxParallel int    `json:"maxParallel"` // 0 = unlimited
 	LastJobAt   int64  `json:"lastJobAt"`
+}
+
+// NewRepo is a repository seen for the first time. A private one takes jobs
+// at once. A public one is off until it is switched on: anyone can open a
+// pull request against it, and its workflows would then run that person's
+// code on the workers.
+func NewRepo(id, accountID int64, fullName string, private bool) Repo {
+	return Repo{ID: id, AccountID: accountID, FullName: fullName, Private: private, Enabled: private}
 }
 
 // Worker is a host that runs runners.
@@ -147,6 +168,8 @@ type Job struct {
 	CompletedAt  int64    `json:"completedAt"`
 	UpdatedAt    int64    `json:"updatedAt"`
 	WaitingSince int64    `json:"waitingSince"` // when it last became queued in CI-Plane
+	RunAttempt   int      `json:"runAttempt"`   // attempt of its run on GitHub; 0 = not known
+	Rerun        string   `json:"rerun"`        // one of the Rerun constants, or empty
 }
 
 // Runner is one ephemeral runner on a worker.

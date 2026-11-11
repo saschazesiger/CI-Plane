@@ -20,11 +20,17 @@ because GitHub only sends webhooks to an https address.
 
 | | Organisation | Personal account |
 |---|---|---|
-| Actions | read | read |
+| Actions | **write** | **write** |
 | Metadata | read | read |
 | Self-hosted runners (organisation) | **write** | |
 | Administration (repository) | | **write** |
 | Runners are registered on | the organisation | each repository |
+
+*Actions: write* is what lets CI-Plane have GitHub run a job again whose worker was lost
+([Reliability](reliability.md#-a-job-whose-worker-is-lost)). An app that was created by an earlier version of
+CI-Plane only has *read*. To change it once: open the app on GitHub (*Settings → Developer settings → GitHub Apps →
+Edit*), set **Actions** to *Read and write* under *Permissions & events*, save, and accept the new permission where
+GitHub asks for it (the installation's page). Everything else works without it.
 
 On an organisation, runners are registered on the organisation and join its **Default** runner group. Personal
 accounts have no organisation-level runners, so CI-Plane registers them on each repository, which GitHub only allows
@@ -118,6 +124,9 @@ Build it, push it to a registry the workers can reach, and enter it under **Sett
 On the **Repositories** page:
 
 - **On/off** per repository and per account. Jobs of a switched-off repository or account are *ignored*.
+- **Public repositories are off** until you switch them on, and a repository that turns from private to public is
+  switched off. Anyone can open a pull request against a public repository, and its workflows would run that
+  person's code on your workers; see [Security](security.md).
 - **Parallel jobs** per repository and per account (0 means no limit). Jobs over the limit wait with
   *"Waiting: acme-labs/web is limited to 2 parallel jobs"*.
 

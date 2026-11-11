@@ -64,25 +64,27 @@ type fakeGH struct {
 	srv *httptest.Server
 	pub *rsa.PublicKey
 
-	mu            sync.Mutex
-	calls         map[string]int // "METHOD path" without query
-	notModified   atomic.Int64   // 304 answers; not under mu, handlers hold mu while answering
-	tokens        int            // installation tokens issued
-	tokenTTL      time.Duration
-	tokenDelay    time.Duration
-	now           func() time.Time
-	installations map[int64]int64 // app id -> installation id; 0 = not installed
-	instOwner     map[int64]string
-	repos         []ghRepo // of the installation
-	runners       map[string][]*fakeRunner
-	nextRunner    int64
-	runs          map[string][]*fakeRun // by owner/repo
-	deliveries    []delivery            // newest first
-	attempts      []int64               // redelivery requests
-	hookConfig    map[int64]map[string]any
-	conversions   map[string]map[string]any
-	fail          map[string][]int // "METHOD path" -> status codes to answer first
-	lastJIT       map[string]any
+	mu              sync.Mutex
+	calls           map[string]int // "METHOD path" without query
+	notModified     atomic.Int64   // 304 answers; not under mu, handlers hold mu while answering
+	tokens          int            // installation tokens issued
+	tokenTTL        time.Duration
+	tokenDelay      time.Duration
+	now             func() time.Time
+	installations   map[int64]int64 // app id -> installation id; 0 = not installed
+	readOnlyActions bool            // the app may only read Actions, as apps created by older versions
+	reruns          []int64         // jobs that were run again
+	instOwner       map[int64]string
+	repos           []ghRepo // of the installation
+	runners         map[string][]*fakeRunner
+	nextRunner      int64
+	runs            map[string][]*fakeRun // by owner/repo
+	deliveries      []delivery            // newest first
+	attempts        []int64               // redelivery requests
+	hookConfig      map[int64]map[string]any
+	conversions     map[string]map[string]any
+	fail            map[string][]int // "METHOD path" -> status codes to answer first
+	lastJIT         map[string]any
 }
 
 func newFake(t *testing.T) *fakeGH {
@@ -109,6 +111,8 @@ func newFake(t *testing.T) *fakeGH {
 	mux.HandleFunc("GET /repos/{owner}/{repo}/actions/runs", f.listRuns)
 	mux.HandleFunc("GET /repos/{owner}/{repo}/actions/runs/{id}/jobs", f.listJobs)
 	mux.HandleFunc("GET /repos/{owner}/{repo}/actions/jobs/{id}", f.getJob)
+	mux.HandleFunc("POST /repos/{owner}/{repo}/actions/jobs/{id}/rerun", f.rerunJob)
+	mux.HandleFunc("GET /repos/{owner}/{repo}/actions/runs/{id}", f.getRun)
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Method + " " + r.URL.Path
 		f.mu.Lock()
@@ -445,6 +449,55 @@ func (f *fakeGH) getJob(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, r, f, 200, j)
 				return
 			}
+		}
+	}
+	apiErr(w, 404, "Not Found")
+}
+
+func (f *fakeGH) getRun(w http.ResponseWriter, r *http.Request) {
+	if !f.installed(w, r) {
+		return
+	}
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, run := range f.runs[r.PathValue("owner")+"/"+r.PathValue("repo")] {
+		if run.ID == id {
+			writeJSON(w, r, f, 200, run.ghRun)
+			return
+		}
+	}
+	apiErr(w, 404, "Not Found")
+}
+
+// rerunJob answers like GitHub: only a completed job of a finished run is
+// run again, and only by an app that may write Actions.
+func (f *fakeGH) rerunJob(w http.ResponseWriter, r *http.Request) {
+	if !f.installed(w, r) {
+		return
+	}
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.readOnlyActions {
+		apiErr(w, 403, "Resource not accessible by integration")
+		return
+	}
+	for _, run := range f.runs[r.PathValue("owner")+"/"+r.PathValue("repo")] {
+		for _, j := range run.jobs {
+			if j.ID != id {
+				continue
+			}
+			if run.Status != "completed" {
+				apiErr(w, 403, "The workflow run containing this job is already running")
+				return
+			}
+			f.reruns = append(f.reruns, id)
+			run.RunAttempt++
+			run.Status = "queued"
+			w.WriteHeader(201)
+			io.WriteString(w, "{}")
+			return
 		}
 	}
 	apiErr(w, 404, "Not Found")

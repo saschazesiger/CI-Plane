@@ -297,7 +297,7 @@ func upsertRepos(tx *store.Tx, accountID int64, repos []ghRepo) error {
 		if r.ID == 0 || r.FullName == "" {
 			continue
 		}
-		if err := tx.UpsertRepo(model.Repo{ID: r.ID, AccountID: accountID, FullName: r.FullName, Private: r.Private, Enabled: true}); err != nil {
+		if err := tx.UpsertRepo(model.NewRepo(r.ID, accountID, r.FullName, r.Private)); err != nil {
 			return fmt.Errorf("store repository %s: %w", r.FullName, err)
 		}
 	}

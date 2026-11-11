@@ -72,7 +72,7 @@ func (e *Engine) admit(tx *store.Tx, ev JobEvent) (model.Job, error) {
 	}
 	repo, err := tx.Repo(ev.RepoID)
 	if errors.Is(err, store.ErrNotFound) {
-		repo = model.Repo{ID: ev.RepoID, AccountID: acc.ID, FullName: ev.Repo, Private: ev.Private, Enabled: true}
+		repo = model.NewRepo(ev.RepoID, acc.ID, ev.Repo, ev.Private)
 		err = tx.UpsertRepo(repo)
 	}
 	if err != nil {
@@ -86,12 +86,14 @@ func (e *Engine) admit(tx *store.Tx, ev JobEvent) (model.Job, error) {
 	job := model.Job{
 		ID: ev.ID, RunID: ev.RunID, AccountID: acc.ID, RepoID: ev.RepoID, Repo: ev.Repo, Name: ev.Name,
 		Workflow: ev.Workflow, Branch: ev.Branch, HTMLURL: ev.HTMLURL, Labels: ev.Labels,
-		State: model.JobQueued, QueuedAt: ev.At, WaitingSince: e.now(),
+		State: model.JobQueued, QueuedAt: ev.At, WaitingSince: e.now(), RunAttempt: ev.RunAttempt,
 	}
 	size, reason := set.Match(ev.Labels)
 	switch {
 	case !acc.Enabled:
 		reason = "the account " + acc.Owner + " is switched off"
+	case !repo.Enabled && !repo.Private:
+		reason = "the repository is public and switched off; public repositories take jobs only after you switch them on under Repositories"
 	case !repo.Enabled:
 		reason = "the repository is switched off"
 	}
@@ -259,6 +261,16 @@ func (e *Engine) completed(tx *store.Tx, job model.Job, ev JobEvent) error {
 			}
 			job.RunnerID = ""
 		}
+	}
+	if job.RunAttempt == 0 {
+		job.RunAttempt = ev.RunAttempt
+	}
+	// A job that fails while it runs on a runner that is gone did not fail
+	// by itself: it is run again.
+	if job.State == model.JobRunning && job.RunnerID != "" && ev.Conclusion == "failure" {
+		e.failedOnRunner(tx, &job)
+	} else if job.Rerun == model.RerunLost {
+		job.Rerun = "" // it ended some other way
 	}
 	job.State, job.Conclusion, job.CompletedAt, job.Reason = model.JobCompleted, ev.Conclusion, ev.At, ""
 	level := model.LevelInfo

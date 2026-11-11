@@ -118,9 +118,10 @@ func (s *Service) Manifest(org, publicURL, returnURL string) (api.ManifestForm, 
 
 // permissions are as narrow as GitHub allows. On an organisation runners
 // are registered on the organisation; on a personal account only on a
-// repository, which needs "Administration".
+// repository, which needs "Administration". Writing "Actions" is what
+// lets CI-Plane run a job again whose worker was lost.
 func permissions(org bool) map[string]string {
-	p := map[string]string{"actions": "read", "metadata": "read"}
+	p := map[string]string{"actions": "write", "metadata": "read"}
 	if org {
 		p["organization_self_hosted_runners"] = "write"
 	} else {

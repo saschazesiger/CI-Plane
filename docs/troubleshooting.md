@@ -80,6 +80,10 @@ The reason a job waits is shown in the job list and its timeline.
 | *No worker is available: all are switched off, draining or offline* | Switch one on, stop draining, or bring one back. |
 | *No worker is large enough for size-xl (16 free CPUs, 32 GB)* | Use a smaller size, or add a larger worker (a worker offers its CPUs and memory minus 10 % and 1 GB). |
 | *No worker has 4 free CPUs and 8 GB right now; the job starts when one does* | Normal under load: the workers are busy, with jobs or with other work, or their memory is reserved. The side sheet of a worker shows what takes its CPUs. Add workers, or use smaller sizes. |
+| *Waiting: GitHub does not register runners for … right now (…)* | GitHub refused the last runner; the text in brackets says why (suspended app, outage, rate limit). CI-Plane tries again by itself, at the latest after five minutes. |
+| *Waiting: the GitHub App of … is not installed on the account any more* | Install the app again from the **Repositories** page. |
+| *Ignored: the repository is public and switched off* | Public repositories take jobs only after you switch them on under **Repositories**. Re-run the job afterwards. |
+| *GitHub does not run the job again yet: the GitHub App may not re-run jobs* | Give the app *Actions: Read and write*, see [GitHub](github.md#-the-github-app). CI-Plane keeps asking for six hours. |
 | *Could not give the runners the CPU priority … on this worker* | The worker's CPU priority needs systemd and the right to start privileged containers. Check `systemctl --version` and `docker info` on the server, or set the worker's CPU priority to *normal*. |
 | *Waiting: … is limited to N parallel jobs* | Raise the limit on **Repositories** (0 means none). |
 | *Waiting to try again after a failed start* | The timeline shows the failed attempt and its cause; it is retried with growing waits. |

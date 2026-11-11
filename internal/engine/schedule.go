@@ -195,6 +195,16 @@ func (e *Engine) schedule(s *snapshot) bool {
 		if j.State != model.JobQueued {
 			continue
 		}
+		if acc.InstallationID == 0 {
+			// Nothing can register a runner. The job stays; it starts when
+			// the app is installed again, or expires with GitHub's own limit.
+			e.setReason(j, "Waiting: the GitHub App of "+acc.Owner+" is not installed on the account any more; install it again under Repositories")
+			continue
+		}
+		if why := e.forgeBlocked(acc.ID); why != "" {
+			e.setReason(j, "Waiting: GitHub does not register runners for "+acc.Owner+" right now ("+why+"); trying again shortly")
+			continue
+		}
 		if j.NextTryAt > s.now {
 			e.setReason(j, "Waiting to try again after a failed start")
 			continue

@@ -52,7 +52,7 @@ func TestManifestRoundTripAcrossRestart(t *testing.T) {
 		t.Fatalf("events %v", ev)
 	}
 	perms := m["default_permissions"].(map[string]any)
-	want := map[string]any{"organization_self_hosted_runners": "write", "actions": "read", "metadata": "read"}
+	want := map[string]any{"organization_self_hosted_runners": "write", "actions": "write", "metadata": "read"}
 	if fmt.Sprint(perms) != fmt.Sprint(want) {
 		t.Fatalf("permissions %v", perms)
 	}
@@ -319,6 +319,50 @@ func TestQueuedJobs(t *testing.T) {
 	}
 	if e.gh.notModified.Load() != int64(len(openRunStates)+2) {
 		t.Fatalf("%d 304s", e.gh.notModified.Load())
+	}
+}
+
+func TestRerunJob(t *testing.T) {
+	e := newEnv(t)
+	e.addApp(1, "acme", "Organization", 77, "s")
+	j := job(21, 5, "completed", "ci-plane")
+	j.Conclusion, j.RunAttempt = "failure", 2
+	run := &fakeRun{ghRun: ghRun{ID: 5, Status: "in_progress", RunAttempt: 2}, jobs: []ghJob{j}}
+	e.gh.runs["acme/app"] = []*fakeRun{run}
+	rerun := func(job int64) error { return e.s.RerunJob(ctx, 1, "acme/app", 5, job, 2) }
+
+	if ev, err := e.s.Job(ctx, 1, "acme/app", 21); err != nil || ev.RunAttempt != 2 {
+		t.Fatalf("run attempt: %+v %v", ev, err)
+	}
+	// While other jobs of the run are going on, GitHub refuses; the engine
+	// asks again. The text is GitHub's reason, not a guess about permissions.
+	if err := rerun(21); err == nil || !strings.Contains(err.Error(), "already running") || strings.Contains(err.Error(), "permission") {
+		t.Fatalf("run still going on: %v", err)
+	}
+	e.gh.mu.Lock()
+	run.Status = "completed"
+	e.gh.mu.Unlock()
+	if err := rerun(21); err != nil {
+		t.Fatal(err)
+	}
+	// Asked again, as after a lost answer: the run is in its next attempt,
+	// so nothing is started a second time.
+	if err := rerun(21); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.gh.reruns) != 1 || e.gh.reruns[0] != 21 {
+		t.Fatalf("reruns: %v", e.gh.reruns)
+	}
+	if err := e.s.RerunJob(ctx, 1, "acme/app", 0, 99, 0); !errors.Is(err, engine.ErrGone) {
+		t.Fatalf("deleted job: %v", err)
+	}
+	// An app from before this feature says what to change.
+	e.gh.mu.Lock()
+	e.gh.readOnlyActions = true
+	run.RunAttempt = 2
+	e.gh.mu.Unlock()
+	if err := rerun(21); err == nil || !strings.Contains(err.Error(), "Read and write") {
+		t.Fatalf("read-only app: %v", err)
 	}
 }
 

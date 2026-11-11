@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -69,34 +70,52 @@ func (e *Engine) findQueued(ctx context.Context, s *snapshot) {
 }
 
 // refreshOpen asks GitHub about open jobs that were not heard of for a
-// while: a missed "in_progress" or "completed".
+// while: a missed "in_progress" or "completed". At most 30 jobs are asked
+// per pass, to stay inside GitHub's rate limit; a job that was asked waits
+// its turn again, so with more than 30 the others come next.
 func (e *Engine) refreshOpen(ctx context.Context, s *snapshot) {
-	checked := 0
+	type item struct {
+		job   model.Job
+		key   string
+		every int64
+		last  int64
+	}
+	var due []item
+	open := map[string]bool{}
+	now := e.now()
+	e.mu.Lock()
 	for _, j := range s.jobs {
 		every := int64(60_000)
 		if j.State == model.JobRunning {
 			every = 180_000
 		}
-		key := "job:" + j.Repo + ":" + itoa(j.ID)
-		e.mu.Lock()
-		due := s.now-j.UpdatedAt > every && e.notBefore[key] <= s.now
-		if due {
-			e.notBefore[key] = s.now + every
+		key := "job:" + itoa(j.ID)
+		open[key] = true
+		if last := e.notBefore[key]; now-j.UpdatedAt > every && last <= now {
+			due = append(due, item{j, key, every, last})
 		}
-		e.mu.Unlock()
-		if !due {
-			continue
+	}
+	for key := range e.notBefore {
+		if strings.HasPrefix(key, "job:") && !open[key] {
+			delete(e.notBefore, key)
 		}
-		if checked++; checked > 30 {
+	}
+	for id := range e.silent {
+		if !open["job:"+itoa(id)] {
+			delete(e.silent, id)
+		}
+	}
+	e.mu.Unlock()
+	// The job that was asked longest ago goes first.
+	sort.SliceStable(due, func(a, b int) bool { return due[a].last < due[b].last })
+	for i, d := range due {
+		if i >= 30 || ctx.Err() != nil {
 			return
 		}
-		e.refreshJob(ctx, j)
-		if ctx.Err() != nil {
-			return
-		}
 		e.mu.Lock()
-		delete(e.notBefore, key)
+		e.notBefore[d.key] = e.now() + d.every
 		e.mu.Unlock()
+		e.refreshJob(ctx, d.job)
 	}
 }
 
@@ -108,8 +127,12 @@ func (e *Engine) refreshJob(ctx context.Context, j model.Job) {
 		ev = JobEvent{Action: "completed", Conclusion: "deleted"}
 	case err != nil:
 		e.logf("reconcile: job %d of %s: %v", j.ID, j.Repo, err)
+		e.expire(j, err)
 		return
 	}
+	e.mu.Lock()
+	delete(e.silent, j.ID)
+	e.mu.Unlock()
 	if ev.Action != "in_progress" && ev.Action != "completed" {
 		return
 	}
@@ -119,8 +142,61 @@ func (e *Engine) refreshJob(ctx context.Context, j model.Job) {
 	}
 }
 
-// refreshAccount asks GitHub about every open job of an account (at most
-// 30), used when a runner ended and the store does not know why.
+// expire closes a job GitHub cannot be asked about any more, typically
+// because the app was uninstalled or suspended: a job that waits longer
+// than GitHub lets any job wait, or a "running" job whose runner has been
+// gone for a while. Otherwise such jobs would stay open for ever, count
+// against the limits of parallel jobs and be asked about every minute.
+func (e *Engine) expire(j model.Job, cause error) {
+	now := e.now()
+	// One failed request says nothing: GitHub must have been silent about
+	// this job for an hour, as far as this process remembers.
+	e.mu.Lock()
+	since, ok := e.silent[j.ID]
+	if !ok {
+		since = now
+		e.silent[j.ID] = now
+	}
+	e.mu.Unlock()
+	if now-since < silentLimit.Milliseconds() {
+		return
+	}
+	conclusion := ""
+	switch j.State {
+	case model.JobQueued, model.JobAssigned:
+		if now-j.QueuedAt > queuedLimit.Milliseconds() {
+			conclusion = "expired"
+		}
+	case model.JobRunning:
+		gone := true
+		_ = e.st.View(func(tx *store.Tx) error {
+			if r, err := tx.Runner(j.RunnerID); err == nil && r.Active() {
+				gone = false
+			}
+			return nil
+		})
+		if gone {
+			conclusion = "unknown"
+		}
+	}
+	if conclusion == "" {
+		return
+	}
+	_ = e.st.Tx(func(tx *store.Tx) error {
+		event(tx, model.LevelWarn, "job.expired", "GitHub cannot be asked about this job any more ("+cause.Error()+"); it is closed here", j.ID, "", 0)
+		return nil
+	})
+	if err := e.HandleJob(JobEvent{Action: "completed", ID: j.ID, Conclusion: conclusion}); err != nil {
+		e.logf("reconcile: expire job %d: %v", j.ID, err)
+	}
+	e.mu.Lock()
+	delete(e.silent, j.ID)
+	e.mu.Unlock()
+}
+
+// refreshAccount asks GitHub about the open jobs of an account (at most
+// 30), used when a runner ended and the store does not know why. Jobs that
+// run or wait for a runner come first: one of them is the one that ended.
 func (e *Engine) refreshAccount(ctx context.Context, accountID int64) {
 	var jobs []model.Job
 	if err := e.st.View(func(tx *store.Tx) error {
@@ -131,14 +207,16 @@ func (e *Engine) refreshAccount(ctx context.Context, accountID int64) {
 		return
 	}
 	n := 0
-	for _, j := range jobs {
-		if j.AccountID != accountID || ctx.Err() != nil {
-			continue
+	for _, state := range []string{model.JobRunning, model.JobAssigned, model.JobQueued} {
+		for _, j := range jobs {
+			if j.AccountID != accountID || j.State != state {
+				continue
+			}
+			if n++; n > 30 || ctx.Err() != nil {
+				return
+			}
+			e.refreshJob(ctx, j)
 		}
-		if n++; n > 30 {
-			return
-		}
-		e.refreshJob(ctx, j)
 	}
 }
 

@@ -28,6 +28,7 @@ type ghJob struct {
 	HTMLURL      string   `json:"html_url"`
 	Labels       []string `json:"labels"`
 	RunnerName   string   `json:"runner_name"`
+	RunAttempt   int      `json:"run_attempt"`
 }
 
 type ghRepo struct {
@@ -66,7 +67,7 @@ func toEvent(j ghJob, repo ghRepo) engine.JobEvent {
 	ev := engine.JobEvent{
 		ID: j.ID, RunID: j.RunID, RepoID: repo.ID, Repo: repo.FullName, Private: repo.Private,
 		Name: j.Name, Workflow: j.WorkflowName, Branch: j.HeadBranch, HTMLURL: j.HTMLURL,
-		Labels: j.Labels, RunnerName: j.RunnerName, Conclusion: j.Conclusion,
+		Labels: j.Labels, RunnerName: j.RunnerName, Conclusion: j.Conclusion, RunAttempt: j.RunAttempt,
 	}
 	if ev.Labels == nil {
 		ev.Labels = []string{}
@@ -268,6 +269,48 @@ func (s *Service) Job(ctx context.Context, accountID int64, repo string, jobID i
 		s.dropCond(accountID, path) // it will not be asked about again
 	}
 	return ev, nil
+}
+
+// RerunJob implements engine.Forge. GitHub starts a new attempt of the run
+// with this job (and the jobs that depend on it); it arrives as a new job.
+func (s *Service) RerunJob(ctx context.Context, accountID int64, repo string, runID, jobID int64, attempt int) error {
+	base, err := repoPath(repo)
+	if err != nil {
+		return err
+	}
+	// Asking twice would start two attempts. If the run is past the attempt
+	// of the job, an earlier call got through although its answer was lost.
+	if runID != 0 && attempt > 0 {
+		var run ghRun
+		_, err := s.getJSON(ctx, call{method: http.MethodGet, path: base + "/actions/runs/" + strconv.FormatInt(runID, 10), auth: authInstallation, account: accountID}, &run)
+		switch {
+		case statusOf(err) == http.StatusNotFound:
+			return engine.ErrGone
+		case err != nil:
+			return err
+		case run.RunAttempt > attempt:
+			return nil
+		}
+	}
+	_, err = s.do(ctx, call{
+		method: http.MethodPost, path: base + "/actions/jobs/" + strconv.FormatInt(jobID, 10) + "/rerun",
+		auth: authInstallation, account: accountID, body: map[string]any{},
+	})
+	var ae *apiError
+	switch {
+	case err == nil:
+		return nil
+	case statusOf(err) == http.StatusNotFound:
+		return engine.ErrGone
+	case errors.As(err, &ae) && ae.Status == http.StatusForbidden && strings.Contains(strings.ToLower(ae.Message), "not accessible"):
+		// Apps created before CI-Plane re-ran jobs may only read Actions.
+		return errors.New("the GitHub App may not re-run jobs. Open the app on GitHub (Settings, Developer settings, GitHub Apps), " +
+			"set the permission Actions to \"Read and write\" under Permissions & events, and accept the new permission on its installation")
+	case errors.As(err, &ae) && (ae.Status == http.StatusForbidden || ae.Status == http.StatusConflict || ae.Status == http.StatusUnprocessableEntity):
+		// Usually: other jobs of the run are still going on.
+		return errors.New("GitHub does not accept it now (" + ae.Message + ")")
+	}
+	return err
 }
 
 func (s *Service) dropCond(accountID int64, path string) {

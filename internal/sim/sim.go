@@ -27,6 +27,7 @@ type runner struct {
 type job struct {
 	ev    engine.JobEvent // Action is the state on "GitHub"
 	steps int             // steps left once it runs
+	total int             // steps it runs in all
 }
 
 type container struct {
@@ -55,6 +56,10 @@ type World struct {
 	FailRemove   map[int64]int  // Remove calls that fail, by worker id
 	NeverConnect map[int64]bool // runners on these workers start but never come online
 	FailProbe    map[int64]bool
+	FailRerun    int                          // RerunJob calls that fail, as while the run is still going on
+	Reruns       map[int64]int64              // the job that replaced a job that was run again
+	FailJobs     bool                         // Job calls fail, as for an app that was uninstalled
+	JobCalls     map[int64]int                // Job calls, by job id
 	Starts       map[int64]int                // successful starts, by worker id
 	Specs        map[string]engine.RunnerSpec // what each runner was started with, by name
 }
@@ -65,7 +70,7 @@ func New() *World {
 		nextID: 1000, runners: map[int64]*runner{}, jobs: map[int64]*job{},
 		containers: map[int64]map[string]*container{}, status: map[int64]engine.WorkerStatus{},
 		FailStart: map[int64]int{}, FailRemove: map[int64]int{}, NeverConnect: map[int64]bool{},
-		FailProbe: map[int64]bool{}, Starts: map[int64]int{}, Specs: map[string]engine.RunnerSpec{},
+		FailProbe: map[int64]bool{}, Starts: map[int64]int{}, Specs: map[string]engine.RunnerSpec{}, Reruns: map[int64]int64{}, JobCalls: map[int64]int{},
 	}
 }
 
@@ -106,7 +111,10 @@ func (w *World) Queue(ev engine.JobEvent, steps int) {
 	}
 	ev.Action = "queued"
 	w.mu.Lock()
-	w.jobs[ev.ID] = &job{ev: ev, steps: steps}
+	if ev.RunAttempt == 0 {
+		ev.RunAttempt = 1
+	}
+	w.jobs[ev.ID] = &job{ev: ev, steps: steps, total: steps}
 	w.mu.Unlock()
 	w.deliver(ev)
 }
@@ -260,6 +268,28 @@ func (w *World) Kill(runnerName string, code int) {
 	w.mu.Unlock()
 }
 
+// Lose is what GitHub does some minutes after it last heard of a runner
+// that ran a job: it fails the job and drops the runner. The containers
+// stay as they are; whether they still exist is the worker's business.
+func (w *World) Lose(runnerName string) {
+	w.mu.Lock()
+	var ev engine.JobEvent
+	for rid, r := range w.runners {
+		if r.name != runnerName {
+			continue
+		}
+		if j, ok := w.jobs[r.jobID]; ok && j.ev.Action == "in_progress" {
+			j.ev.Action, j.ev.Conclusion = "completed", "failure"
+			ev = j.ev
+		}
+		delete(w.runners, rid)
+	}
+	w.mu.Unlock()
+	if ev.ID != 0 {
+		w.deliver(ev)
+	}
+}
+
 // AddContainer puts a container on a worker that nobody asked for.
 func (w *World) AddContainer(workerID int64, name string) {
 	w.mu.Lock()
@@ -387,11 +417,48 @@ func (w *World) QueuedJobs(_ context.Context, accountID int64, repo string) ([]e
 func (w *World) Job(_ context.Context, _ int64, _ string, jobID int64) (engine.JobEvent, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.JobCalls[jobID]++
+	if w.FailJobs {
+		return engine.JobEvent{}, errors.New("simulated: GitHub answered 401: the app is not installed")
+	}
 	j, ok := w.jobs[jobID]
 	if !ok {
 		return engine.JobEvent{}, engine.ErrGone
 	}
 	return j.ev, nil
+}
+
+// RerunJob implements engine.Forge: the job comes back as a new job of the
+// next attempt of its run.
+func (w *World) RerunJob(_ context.Context, _ int64, _ string, _, jobID int64, _ int) error {
+	w.mu.Lock()
+	if w.FailRerun > 0 {
+		w.FailRerun--
+		w.mu.Unlock()
+		return errors.New("simulated: GitHub answered 403: the workflow run containing this job is already running")
+	}
+	j, ok := w.jobs[jobID]
+	if !ok {
+		w.mu.Unlock()
+		return engine.ErrGone
+	}
+	if j.ev.Action != "completed" {
+		w.mu.Unlock()
+		return errors.New("simulated: GitHub answered 403: the job is not completed")
+	}
+	if _, again := w.Reruns[jobID]; again {
+		w.mu.Unlock()
+		return nil
+	}
+	ev := j.ev
+	ev.ID = jobID + 1_000_000
+	ev.Action, ev.RunnerName, ev.Conclusion, ev.At = "queued", "", "", 0
+	ev.RunAttempt = j.ev.RunAttempt + 1
+	w.jobs[ev.ID] = &job{ev: ev, steps: j.total, total: j.total}
+	w.Reruns[jobID] = ev.ID
+	w.mu.Unlock()
+	w.deliver(ev)
+	return nil
 }
 
 // --- engine.Fleet ----------------------------------------------------------

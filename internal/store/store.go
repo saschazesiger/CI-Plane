@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   state TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', conclusion TEXT NOT NULL DEFAULT '',
   runner_id TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0, next_try_at INTEGER NOT NULL DEFAULT 0,
   avoid_worker INTEGER NOT NULL DEFAULT 0, queued_at INTEGER NOT NULL DEFAULT 0, started_at INTEGER NOT NULL DEFAULT 0,
-  completed_at INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0, waiting_since INTEGER NOT NULL DEFAULT 0
+  completed_at INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0, waiting_since INTEGER NOT NULL DEFAULT 0,
+  run_attempt INTEGER NOT NULL DEFAULT 0, rerun TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS jobs_state ON jobs(state);
 CREATE INDEX IF NOT EXISTS jobs_updated ON jobs(updated_at);
@@ -101,11 +102,18 @@ func Open(dir string) (*Store, error) {
 	// leaves an existing table as it is.
 	for _, c := range []struct{ table, column, def string }{
 		{"workers", "cpu_priority", "TEXT NOT NULL DEFAULT 'normal'"},
+		{"jobs", "run_attempt", "INTEGER NOT NULL DEFAULT 0"},
+		{"jobs", "rerun", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		if err := addColumn(db, c.table, c.column, c.def); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("upgrade the database: %w", err)
 		}
+	}
+	// Asked on every pass of the engine; nearly always empty.
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS jobs_rerun ON jobs(rerun) WHERE rerun IN ('wanted','check')`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("upgrade the database: %w", err)
 	}
 	return &Store{db: db, now: Now}, nil
 }
@@ -318,10 +326,13 @@ func scanRepo(r interface{ Scan(...any) error }) (model.Repo, error) {
 }
 
 // UpsertRepo adds a repository or refreshes its name and visibility; the
-// user's choices (enabled, limit) are kept.
+// user's choices (enabled, limit) are kept, with one exception: a
+// repository that was private and is public now is switched off, like any
+// public repository that is new (see model.Repo.Enabled).
 func (t *Tx) UpsertRepo(p model.Repo) error {
 	_, err := t.q.Exec(`INSERT INTO repos(`+repoCols+`) VALUES(?,?,?,?,?,?,?)
-	  ON CONFLICT(id) DO UPDATE SET account_id=excluded.account_id, full_name=excluded.full_name, private=excluded.private`,
+	  ON CONFLICT(id) DO UPDATE SET account_id=excluded.account_id, full_name=excluded.full_name,
+	    enabled=CASE WHEN repos.private=1 AND excluded.private=0 THEN 0 ELSE repos.enabled END, private=excluded.private`,
 		p.ID, p.AccountID, p.FullName, b2i(p.Private), b2i(p.Enabled), p.MaxParallel, p.LastJobAt)
 	return err
 }
@@ -444,14 +455,15 @@ func (t *Tx) DeleteWorker(id int64) error {
 // --- jobs ------------------------------------------------------------------
 
 const jobCols = `id, run_id, account_id, repo_id, repo, name, workflow, branch, html_url, labels, size, state, reason, conclusion,
- runner_id, attempts, next_try_at, avoid_worker, queued_at, started_at, completed_at, updated_at, waiting_since`
+ runner_id, attempts, next_try_at, avoid_worker, queued_at, started_at, completed_at, updated_at, waiting_since,
+ run_attempt, rerun`
 
 func scanJob(r interface{ Scan(...any) error }) (model.Job, error) {
 	var j model.Job
 	var labels string
 	err := r.Scan(&j.ID, &j.RunID, &j.AccountID, &j.RepoID, &j.Repo, &j.Name, &j.Workflow, &j.Branch, &j.HTMLURL, &labels, &j.Size,
 		&j.State, &j.Reason, &j.Conclusion, &j.RunnerID, &j.Attempts, &j.NextTryAt, &j.AvoidWorker, &j.QueuedAt, &j.StartedAt,
-		&j.CompletedAt, &j.UpdatedAt, &j.WaitingSince)
+		&j.CompletedAt, &j.UpdatedAt, &j.WaitingSince, &j.RunAttempt, &j.Rerun)
 	j.Labels = parseLabels(labels)
 	return j, err
 }
@@ -459,10 +471,10 @@ func scanJob(r interface{ Scan(...any) error }) (model.Job, error) {
 // SaveJob inserts or replaces a job.
 func (t *Tx) SaveJob(j model.Job) error {
 	j.UpdatedAt = t.now()
-	_, err := t.q.Exec(`INSERT OR REPLACE INTO jobs(`+jobCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := t.q.Exec(`INSERT OR REPLACE INTO jobs(`+jobCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		j.ID, j.RunID, j.AccountID, j.RepoID, j.Repo, j.Name, j.Workflow, j.Branch, j.HTMLURL, labelsJSON(j.Labels), j.Size,
 		j.State, j.Reason, j.Conclusion, j.RunnerID, j.Attempts, j.NextTryAt, j.AvoidWorker, j.QueuedAt, j.StartedAt,
-		j.CompletedAt, j.UpdatedAt, j.WaitingSince)
+		j.CompletedAt, j.UpdatedAt, j.WaitingSince, j.RunAttempt, j.Rerun)
 	return err
 }
 
@@ -489,7 +501,14 @@ func (t *Tx) jobs(where string, args ...any) ([]model.Job, error) {
 	return out, rows.Err()
 }
 
+// JobsToRerun returns the jobs GitHub is to run again and the jobs for
+// which that is still to be decided.
+func (t *Tx) JobsToRerun() ([]model.Job, error) {
+	return t.jobs(`WHERE rerun IN ('wanted','check') ORDER BY completed_at, id`)
+}
+
 // OpenJobs lists jobs that are queued, assigned or running, oldest first.
+
 func (t *Tx) OpenJobs() ([]model.Job, error) {
 	return t.jobs(`WHERE state IN ('queued','assigned','running') ORDER BY queued_at, id`)
 }

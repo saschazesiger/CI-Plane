@@ -33,6 +33,30 @@ var (
 	ErrRunnerBusy   = errors.New("runner is running a job")
 	ErrRunnerExists = errors.New("a runner with that name exists")
 	ErrGone         = errors.New("does not exist on GitHub")
+	// ErrThisRunner marks a refusal that concerns one runner or repository
+	// (an archived repository, a bad label), not the account as a whole.
+	ErrThisRunner = errors.New("GitHub refused this runner")
+)
+
+// How long things may take before the engine stops waiting for them.
+const (
+	// downGrace is how long a worker must be unreachable before what was
+	// starting on it is given up, and before a job that failed on it counts
+	// as lost with it. Shorter interruptions are a network that blinks.
+	downGrace = 30 * time.Second
+	// verdictAfter is how long a worker may stay away before a job that
+	// GitHub failed meanwhile counts as lost with it. A worker that returns
+	// earlier can say whether the runner had finished normally.
+	verdictAfter = 5 * time.Minute
+	// rerunWindow is how long GitHub is asked to run a lost job again. It
+	// refuses while other jobs of the same run are still running.
+	rerunWindow = 6 * time.Hour
+	// queuedLimit is how long a job may wait on GitHub; GitHub itself gives
+	// up a job no self-hosted runner took within a day.
+	queuedLimit = 25 * time.Hour
+	// silentLimit is how long a job that has no runner any more may stay
+	// "running" while GitHub cannot be asked how it ended.
+	silentLimit = time.Hour
 )
 
 // Target says where a runner is registered: on the organisation of an
@@ -74,6 +98,7 @@ type JobEvent struct {
 	RunnerName string // set from in_progress on
 	Conclusion string // set on completed
 	At         int64  // time of the state on GitHub, Unix ms; 0 = now
+	RunAttempt int    // attempt of the run: 1, then 2 after a re-run; 0 = not known
 }
 
 // Forge is GitHub as the engine needs it. Implementations retry transient
@@ -91,6 +116,13 @@ type Forge interface {
 	QueuedJobs(ctx context.Context, accountID int64, repo string) ([]JobEvent, error)
 	// Job returns the current state of one job. ErrGone if it was deleted.
 	Job(ctx context.Context, accountID int64, repo string, jobID int64) (JobEvent, error)
+	// RerunJob asks GitHub to run a completed job of a run again; it then
+	// appears as a new job. attempt is the attempt of the run the job
+	// belongs to (0 = not known): if the run is past it, the job was run
+	// again already and nil is returned, so the call can be repeated.
+	// GitHub refuses while the run is still going on. ErrGone if the job
+	// was deleted.
+	RerunJob(ctx context.Context, accountID int64, repo string, runID, jobID int64, attempt int) error
 }
 
 // RunnerSpec is what a worker needs to start a runner.
@@ -175,6 +207,9 @@ type Engine struct {
 	fails     map[string]int   // consecutive failed steps, by runner id
 	absent    map[string]int   // consecutive listings without its container, by runner id
 	seen      map[int64]int64  // last time a worker's LastSeenAt was stored
+	downSince map[int64]int64  // since when a worker is unreachable, by worker id
+	silent    map[int64]int64  // since when GitHub cannot be asked about a job, by job id
+	forgeErr  map[int64]string // why GitHub registers no runner for an account right now
 	pressure  bool             // the last pass left a job waiting for room
 }
 
@@ -199,6 +234,9 @@ func New(st *store.Store, forge Forge, fleet Fleet) *Engine {
 		fails:     map[string]int{},
 		absent:    map[string]int{},
 		seen:      map[int64]int64{},
+		downSince: map[int64]int64{},
+		silent:    map[int64]int64{},
+		forgeErr:  map[int64]string{},
 	}
 }
 
@@ -274,6 +312,47 @@ func (e *Engine) end(key string, delay time.Duration) {
 	e.Kick()
 }
 
+// down reports whether a worker has been unreachable for longer than grace.
+func (e *Engine) down(workerID int64, grace time.Duration) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	since, ok := e.downSince[workerID]
+	return ok && e.now()-since >= grace.Milliseconds()
+}
+
+func accountKey(id int64) string { return "account:" + itoa(id) }
+
+// forgeFailed notes that GitHub did not register a runner for an account
+// (app suspended or uninstalled, an outage, the rate limit). Until the wait
+// is over no runner is started for it: each would only fail the same way.
+func (e *Engine) forgeFailed(accountID int64, err error) {
+	key := accountKey(accountID)
+	e.mu.Lock()
+	e.fails[key]++
+	e.notBefore[key] = e.now() + backoff(e.fails[key]).Milliseconds()
+	e.forgeErr[accountID] = err.Error()
+	e.mu.Unlock()
+}
+
+func (e *Engine) forgeWorks(accountID int64) {
+	key := accountKey(accountID)
+	e.mu.Lock()
+	delete(e.fails, key)
+	delete(e.notBefore, key)
+	delete(e.forgeErr, accountID)
+	e.mu.Unlock()
+}
+
+// forgeBlocked says why no runner is started for an account right now, or "".
+func (e *Engine) forgeBlocked(accountID int64) string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.notBefore[accountKey(accountID)] > e.now() {
+		return e.forgeErr[accountID]
+	}
+	return ""
+}
+
 // forget drops the bookkeeping of a runner that is gone.
 func (e *Engine) forget(id string) {
 	e.mu.Lock()
@@ -281,6 +360,8 @@ func (e *Engine) forget(id string) {
 	delete(e.fails, id)
 	delete(e.absent, id)
 	delete(e.fails, "retire:"+id)
+	delete(e.fails, "adopt:"+id)
+	delete(e.notBefore, "giveup:"+id)
 	delete(e.fails, "forge:"+id)
 	e.mu.Unlock()
 }

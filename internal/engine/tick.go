@@ -91,6 +91,7 @@ func (e *Engine) Tick(ctx context.Context) {
 		}
 	}
 	dirty = e.schedule(s) || dirty
+	e.rerunLost(ctx)
 	e.reconcileForge(ctx, s)
 	e.housekeeping(s)
 	if dirty {
@@ -106,6 +107,13 @@ func (e *Engine) workerStates(ctx context.Context, s *snapshot) bool {
 	dirty := false
 	for i, w := range s.workers {
 		st := s.status[w.ID]
+		e.mu.Lock()
+		if st.Connected {
+			delete(e.downSince, w.ID)
+		} else if _, ok := e.downSince[w.ID]; !ok {
+			e.downSince[w.ID] = s.now
+		}
+		e.mu.Unlock()
 		state, reason := w.State, w.StateReason
 		switch {
 		case !st.Connected && w.LastSeenAt == 0:
@@ -203,13 +211,25 @@ func (e *Engine) superviseRunners(ctx context.Context, s *snapshot) bool {
 	defer func() { e.watchOnline(ctx, s, starting) }()
 	for _, r := range s.runners {
 		r := r
+		// A runner that was still starting on a worker that went away does
+		// not wait for its start timeout: its job moves to another worker
+		// now, and the worker is not blamed for a start it never saw. What
+		// is left of the runner is removed when the worker is back.
+		if (r.State == model.RunnerProvisioning || r.State == model.RunnerStarting) && e.down(r.WorkerID, downGrace) {
+			if _, ok := s.worker[r.WorkerID]; ok {
+				// Through GitHub, like a start that timed out: the runner
+				// may have come online and taken a job in the meantime.
+				e.giveUpStart(ctx, r, "its worker went offline before the runner was online", s.set.StartTimeoutSec, false)
+				continue
+			}
+		}
 		switch r.State {
 		case model.RunnerProvisioning:
 			e.spawn(ctx, r.ID, 10*time.Minute, func(ctx context.Context) time.Duration { return e.provision(ctx, r) })
 
 		case model.RunnerStarting:
 			if s.now-r.StartedAt > sec(s.set.StartTimeoutSec) {
-				e.startTimedOut(ctx, r, s.set.StartTimeoutSec)
+				e.giveUpStart(ctx, r, fmt.Sprintf("the runner did not connect to GitHub within %d seconds", s.set.StartTimeoutSec), s.set.StartTimeoutSec, true)
 			} else if r.JobID == 0 && (pressure || s.now-r.SpareAt > sec(s.set.SpareGraceSec)) {
 				e.retire(ctx, r, "no job is waiting for it")
 			} else {
@@ -286,18 +306,53 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 	}
 	target := targetOf(acc, r.Repo)
 
+	// A registration is stored before the containers are started. If one is
+	// there, an earlier start was interrupted, perhaps by a restart of
+	// CI-Plane right after the containers came up. Then the runner may be
+	// online and even run a job by now: it is taken over as it is, because
+	// starting it again would remove its containers in the middle of a job.
+	if r.ForgeID != 0 {
+		list, err := e.fleet.List(ctx, w)
+		if err != nil {
+			// Docker on the worker does not answer. A few tries, then the
+			// start fails like any other, so the job is not stuck here.
+			e.mu.Lock()
+			e.fails["adopt:"+r.ID]++
+			n := e.fails["adopt:"+r.ID]
+			e.mu.Unlock()
+			if n < 6 {
+				return 5 * time.Second
+			}
+			e.failStart(r.ID, "the worker could not say whether the runner is running: "+err.Error(), e.fleet.Status(w.ID).Connected)
+			return 0
+		}
+		for _, c := range list {
+			if c.Runner == r.Name && c.Running {
+				e.adopt(r, w)
+				return 0
+			}
+		}
+	}
+
 	reg, err := e.forge.CreateRunner(ctx, target, r.Name, r.Labels)
 	if errors.Is(err, ErrRunnerExists) {
 		// Left over from a start that was interrupted: its configuration is
 		// lost, so register again.
 		if err = e.deleteByName(ctx, target, r.Name); err == nil {
 			reg, err = e.forge.CreateRunner(ctx, target, r.Name, r.Labels)
+		} else if errors.Is(err, ErrRunnerBusy) {
+			e.adopt(r, w) // it runs a job: see above
+			return 0
 		}
 	}
 	if err != nil {
+		if !errors.Is(err, ErrThisRunner) {
+			e.forgeFailed(acc.ID, err)
+		}
 		e.failStart(r.ID, "GitHub did not register the runner: "+err.Error(), false)
 		return 0
 	}
+	e.forgeWorks(acc.ID)
 	if err := e.st.Tx(func(tx *store.Tx) error {
 		cur, err := tx.Runner(r.ID)
 		if err != nil {
@@ -312,7 +367,8 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 
 	spec := RunnerSpec{Name: r.Name, JITConfig: reg.JITConfig, Image: set.RunnerImage, DindImage: set.DindImage, MemMB: r.MemMB, CPUPriority: w.CPUPriority}
 	if err := e.fleet.Start(ctx, w, spec); err != nil {
-		e.failStart(r.ID, "the worker could not start the runner: "+err.Error(), true)
+		// A worker that is not reachable did not fail to start anything.
+		e.failStart(r.ID, "the worker could not start the runner: "+err.Error(), e.fleet.Status(w.ID).Connected)
 		return 0
 	}
 	_ = e.st.Tx(func(tx *store.Tx) error {
@@ -326,6 +382,21 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 	})
 	e.changed()
 	return 0
+}
+
+// adopt takes over a runner whose containers run although the store still
+// says it is being started.
+func (e *Engine) adopt(r model.Runner, w model.Worker) {
+	_ = e.st.Tx(func(tx *store.Tx) error {
+		cur, err := tx.Runner(r.ID)
+		if err != nil || cur.State != model.RunnerProvisioning {
+			return err
+		}
+		cur.State, cur.StartedAt = model.RunnerStarting, e.now()
+		event(tx, model.LevelInfo, "runner.started", "Runner "+cur.Name+" was already running on "+w.Name+" after an interrupted start; it is kept", cur.JobID, cur.ID, cur.WorkerID)
+		return tx.SaveRunner(cur)
+	})
+	e.changed()
 }
 
 func (e *Engine) deleteByName(ctx context.Context, t Target, name string) error {
@@ -381,24 +452,28 @@ func (e *Engine) watchOnline(ctx context.Context, s *snapshot, starting []model.
 				})
 				e.changed()
 			}
-			return 3 * time.Second
+			// Nothing waits for this: GitHub hands a job to the runner
+			// the moment it is online, and "in_progress" marks it busy.
+			// The listing is conditional, so asking while nothing changed
+			// does not use up the rate limit.
+			return 5 * time.Second
 		})
 	}
 }
 
-// startTimedOut gives up a runner that did not come online in time, but
-// asks GitHub first: if the listing of runners failed or the webhook was
-// lost, the runner may be online and even running a job.
-func (e *Engine) startTimedOut(ctx context.Context, r model.Runner, limitSec int) {
-	e.spawn(ctx, r.ID, time.Minute, func(ctx context.Context) time.Duration {
-		reason := fmt.Sprintf("the runner did not connect to GitHub within %d seconds", limitSec)
+// giveUpStart gives up a runner that did not come online, but asks GitHub
+// first by deleting its registration: if the listing of runners failed or
+// the webhook was lost, the runner may be online and even running a job,
+// and then it stays. Once the registration is deleted it cannot take one.
+func (e *Engine) giveUpStart(ctx context.Context, r model.Runner, reason string, limitSec int, blame bool) {
+	e.spawn(ctx, "giveup:"+r.ID, time.Minute, func(ctx context.Context) time.Duration {
 		var acc model.Account
 		if err := e.st.View(func(tx *store.Tx) error {
 			var err error
 			acc, err = tx.Account(r.AccountID)
 			return err
 		}); err != nil || r.ForgeID == 0 {
-			e.failStart(r.ID, reason, true)
+			e.failStart(r.ID, reason, blame)
 			return 0
 		}
 		err := e.forge.DeleteRunner(ctx, targetOf(acc, r.Repo), r.ForgeID)
@@ -407,12 +482,12 @@ func (e *Engine) startTimedOut(ctx context.Context, r model.Runner, limitSec int
 			// It runs a job we did not hear of: learn which one.
 			e.refreshAccount(ctx, r.AccountID)
 			return 15 * time.Second
-		case err != nil && e.now()-r.StartedAt < int64(limitSec)*5000:
+		case err != nil && e.now()-max(r.StartedAt, r.CreatedAt) < int64(limitSec)*5000:
 			return 10 * time.Second // GitHub does not answer: do not judge yet
 		case err != nil:
 			e.failStart(r.ID, reason+", and GitHub could not be asked: "+err.Error(), false)
 		default:
-			e.failStart(r.ID, reason, true)
+			e.failStart(r.ID, reason, blame)
 		}
 		return 0
 	})
@@ -421,12 +496,20 @@ func (e *Engine) startTimedOut(ctx context.Context, r model.Runner, limitSec int
 // failStart gives up a runner that did not start and puts its job back in
 // the queue. blame counts the failure against the worker.
 func (e *Engine) failStart(runnerID, reason string, blame bool) {
+	e.fail(runnerID, reason, blame, false)
+}
+
+// fail gives up a runner that is of no use to its job: it did not start,
+// or (idle) it stopped before it took a job. The job goes back to the queue
+// and waits longer after every attempt, so a runner that cannot work does
+// not start in a tight loop.
+func (e *Engine) fail(runnerID, reason string, blame, idle bool) {
 	err := e.st.Tx(func(tx *store.Tx) error {
 		r, err := tx.Runner(runnerID)
 		if err != nil {
 			return err
 		}
-		if r.State != model.RunnerProvisioning && r.State != model.RunnerStarting {
+		if r.State != model.RunnerProvisioning && r.State != model.RunnerStarting && !(idle && r.State == model.RunnerIdle) {
 			return nil
 		}
 		r.State, r.Failed, r.Error, r.EndedAt = model.RunnerCleaning, true, reason, e.now()
@@ -443,7 +526,7 @@ func (e *Engine) failStart(runnerID, reason string, blame bool) {
 		}
 		job, err := tx.Job(r.JobID)
 		if err != nil || job.State != model.JobAssigned || job.RunnerID != r.ID {
-			event(tx, model.LevelError, "runner.failed", "Start failed: "+reason, 0, r.ID, r.WorkerID)
+			event(tx, model.LevelError, "runner.failed", "Runner failed: "+reason, 0, r.ID, r.WorkerID)
 			return nil
 		}
 		job.State, job.RunnerID = model.JobQueued, ""
@@ -543,6 +626,11 @@ func (e *Engine) clean(ctx context.Context, r model.Runner) time.Duration {
 		}
 		return nil
 	})
+	// Whether its job was lost with the worker is still to be decided, and
+	// the exit code of the container is the evidence.
+	if e.awaitsVerdict(r.JobID) {
+		return 5 * time.Second
+	}
 	retry := func(what string, err error) time.Duration {
 		e.mu.Lock()
 		e.fails[r.ID]++
@@ -560,27 +648,40 @@ func (e *Engine) clean(ctx context.Context, r model.Runner) time.Duration {
 		}
 		return d
 	}
+	// The registration goes first and does not wait for the worker: a
+	// worker that is gone for good must not leave a runner on GitHub.
+	// Busy: GitHub has not noticed yet that the runner is gone. It drops
+	// the registration itself; the sweep in reconcile is the backstop.
+	var forgeErr error
+	forgeKey := "forge:" + r.ID
+	e.mu.Lock()
+	gone := e.fails[forgeKey] < 0
+	e.mu.Unlock()
+	if haveAcc && r.ForgeID != 0 && !gone {
+		forgeErr = e.forge.DeleteRunner(ctx, targetOf(acc, r.Repo), r.ForgeID)
+		e.mu.Lock()
+		switch {
+		case forgeErr == nil:
+			e.fails[forgeKey] = -1 // deleted: not asked again
+		case errors.Is(forgeErr, ErrRunnerBusy):
+			forgeErr = nil
+		default:
+			e.fails[forgeKey]++
+			// Do not hold the worker's capacity for a registration
+			// GitHub will not let us delete (app uninstalled, outage).
+			if e.fails[forgeKey] >= 6 {
+				forgeErr = nil
+			}
+		}
+		e.mu.Unlock()
+	}
 	if haveWorker {
 		if err := e.fleet.Remove(ctx, w, r.Name); err != nil {
 			return retry("worker", err)
 		}
 	}
-	if haveAcc && r.ForgeID != 0 {
-		err := e.forge.DeleteRunner(ctx, targetOf(acc, r.Repo), r.ForgeID)
-		// Busy: GitHub has not noticed yet that the runner is gone. It drops
-		// the registration itself; the sweep in reconcile is the backstop.
-		if err != nil && !errors.Is(err, ErrRunnerBusy) {
-			e.mu.Lock()
-			e.fails["forge:"+r.ID]++
-			n := e.fails["forge:"+r.ID]
-			e.mu.Unlock()
-			// The containers are gone; do not hold the worker's capacity
-			// for a registration GitHub will not let us delete (app
-			// uninstalled, outage). The sweep in reconcile is the backstop.
-			if n < 6 {
-				return retry("GitHub", err)
-			}
-		}
+	if forgeErr != nil {
+		return retry("GitHub", forgeErr)
 	}
 	err := e.st.Tx(func(tx *store.Tx) error {
 		cur, err := tx.Runner(r.ID)
@@ -674,13 +775,25 @@ func (e *Engine) compareContainers(ctx context.Context, w model.Worker, list []C
 			}
 			return nil
 		})
+		// A runner that ends by itself exits with 0. Anything else was a
+		// crash, a kill or a reboot of the worker.
+		crashed := !ok || c.ExitCode != 0
 		switch r.State {
 		case model.RunnerStarting:
 			e.failStart(r.ID, "the runner stopped before it was online: "+what, true)
 		case model.RunnerIdle:
-			e.toCleaning(r.ID, "the runner stopped without a job: "+what, "Runner stopped without taking a job")
+			// Its job needs another runner, but not at once and not here:
+			// an image that connects and exits would otherwise start over
+			// and over. A clean exit is not held against the worker; the
+			// runner may have served a job CI-Plane does not know.
+			e.fail(r.ID, "the runner stopped without taking a job: "+what, crashed, true)
 		case model.RunnerBusy:
-			e.toCleaning(r.ID, "", "The runner finished its job and exited")
+			if crashed {
+				e.lost(r, what)
+				e.toCleaning(r.ID, "the runner stopped while its job ran: "+what, "The runner stopped while its job ran; removing what is left of it")
+			} else {
+				e.toCleaning(r.ID, "", "The runner finished its job and exited")
+			}
 		}
 	}
 	// Containers nobody knows: left over from a lost database or a bug.

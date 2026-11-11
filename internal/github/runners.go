@@ -57,6 +57,11 @@ func (s *Service) CreateRunner(ctx context.Context, t engine.Target, name string
 			return engine.Registration{}, engine.ErrRunnerExists
 		}
 		s.noteAPI(t.AccountID, err)
+		// A repository that is gone or archived, or a label GitHub does not
+		// take: that says nothing about the other runners of the account.
+		if errors.As(err, &ae) && (ae.Status == http.StatusNotFound || ae.Status == http.StatusUnprocessableEntity) {
+			return engine.Registration{}, fmt.Errorf("%w: %w", engine.ErrThisRunner, err)
+		}
 		return engine.Registration{}, err
 	}
 	s.noteAPI(t.AccountID, nil)
@@ -105,7 +110,9 @@ func (s *Service) ListRunners(ctx context.Context, t engine.Target) ([]engine.Fo
 		}
 		_, err := s.getJSON(ctx, call{
 			method: http.MethodGet, path: fmt.Sprintf("%s?per_page=100&page=%d", base, page),
-			auth: authInstallation, account: t.AccountID,
+			// Asked every few seconds while a runner starts: an unchanged
+			// answer (304) does not count against the rate limit.
+			auth: authInstallation, account: t.AccountID, conditional: true,
 		}, &res)
 		s.noteAPI(t.AccountID, err)
 		if err != nil {

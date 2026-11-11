@@ -347,8 +347,11 @@ func (m *Manager) Prepare(ctx context.Context, w model.Worker, progress func(ste
 	return m.probe(ctx, w, set.DindImage)
 }
 
-// pull pulls an image and returns its id before and after; both are
-// remembered as ours, so the janitor may remove them once superseded.
+// pull pulls an image and returns its id before and after. What the pull
+// brought is remembered as ours, so the janitor may remove it once it is
+// superseded. The image that was there before is only ours if an earlier
+// pull of ours brought it: a server may have docker:dind or registry:2 for
+// its own use, and those are not CI-Plane's to remove.
 func (m *Manager) pull(ctx context.Context, w model.Worker, image string) ([2]string, error) {
 	out, err := m.sh(ctx, w, `set -e
 i=`+q(image)+`
@@ -363,6 +366,6 @@ docker image inspect -f '{{.Id}}' "$i"`, "")
 		return [2]string{}, fmt.Errorf("unexpected answer from docker: %q", out)
 	}
 	ids := [2]string{f[0], f[1]}
-	m.rememberImages(w.ID, ids[:]...)
+	m.rememberImages(w.ID, ids[1])
 	return ids, nil
 }

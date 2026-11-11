@@ -15,6 +15,17 @@ All notable changes to CI-Plane. Versions follow [Semantic Versioning](https://s
   files the page loads. The nightly update workflow is now *Update Z-Dash* and runs the project check.
 - New setting *A new runner holds its CPUs for* (120 seconds): over how long a runner whose job just began lets go
   of the CPUs of its size, until only its real load counts.
+- **A job whose worker is lost runs again on another worker.** When GitHub fails a job because its worker went
+  offline or its runner was killed, CI-Plane has GitHub re-run that job, up to twice. New apps ask for *Actions:
+  write* for this; existing apps need that permission changed once on GitHub.
+- **Public repositories are off by default**, and a repository that becomes public is switched off.
+- More self-healing: a runner whose containers came up just before a restart of CI-Plane is kept instead of
+  started again; runners that were starting on a worker that goes offline move after 30 seconds without counting
+  against it; a runner that exits without a job backs off; no runners are started for an account while GitHub
+  refuses them; jobs of an uninstalled app wait and expire instead of being retried for ever; every open job is
+  asked about in turn, however many there are; registrations are deleted even while a worker is unreachable.
+- The janitor no longer removes an image that was on a server before CI-Plane pulled the same tag.
+- Fewer GitHub API requests: the list of runners is asked for with ETags.
 - Existing databases are upgraded when CI-Plane starts. Existing workers keep the priority *normal*.
 
 ## 0.1.0

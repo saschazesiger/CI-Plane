@@ -226,3 +226,50 @@ func TestOpenUpgradesAnOlderDatabase(t *testing.T) {
 		st.Close()
 	}
 }
+
+// A repository that becomes public stops taking jobs until it is switched
+// on again; every other choice of the user survives a refresh.
+func TestRepoThatBecomesPublicIsSwitchedOff(t *testing.T) {
+	st, err := Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	get := func() model.Repo {
+		var p model.Repo
+		if err := st.View(func(tx *Tx) error {
+			var err error
+			p, err = tx.Repo(1)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	up := func(private bool) {
+		if err := st.Tx(func(tx *Tx) error { return tx.UpsertRepo(model.NewRepo(1, 1, "a/b", private)) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	up(true)
+	if !get().Enabled {
+		t.Fatal("a new private repository is off")
+	}
+	up(false)
+	if p := get(); p.Enabled || p.Private {
+		t.Fatalf("after it became public: %+v", p)
+	}
+	// Switched on by the user: stays on, public or not.
+	if err := st.Tx(func(tx *Tx) error { p := get2(tx); p.Enabled = true; return tx.SaveRepo(p) }); err != nil {
+		t.Fatal(err)
+	}
+	up(false)
+	if !get().Enabled {
+		t.Fatal("the user's choice for a public repository was undone")
+	}
+	if p := model.NewRepo(2, 1, "a/c", false); p.Enabled {
+		t.Fatal("a new public repository is on")
+	}
+}
+
+func get2(tx *Tx) model.Repo { p, _ := tx.Repo(1); return p }
