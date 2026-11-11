@@ -28,6 +28,7 @@ type Deps struct {
 	Workers    Workers
 	GitHub     GitHub
 	Cloudflare Cloudflare
+	Relay      Relay       // the failover to GitHub-hosted runners; may be nil
 	Box        *secret.Box // reserved for secrets the API itself may store later; may be nil
 	Version    string
 
@@ -211,6 +212,17 @@ func (s *Server) Tunnel(webhook http.Handler) http.Handler {
 			webhook.ServeHTTP(w, r)
 			return
 		}
+		// Runs of the relay workflow collect their runner here. It lives
+		// below /webhook because Cloudflare Access lets that path through
+		// without a login; the run's OIDC token is its proof.
+		if r.URL.Path == "/webhook/relay" {
+			if s.d.Relay == nil {
+				http.Error(w, "the failover to GitHub-hosted runners is not available", http.StatusServiceUnavailable)
+				return
+			}
+			s.d.Relay.ServeHTTP(w, r)
+			return
+		}
 		var email string
 		var err error
 		if s.d.Cloudflare != nil {
@@ -248,6 +260,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/setup/finish", s.private(s.setupFinish))
 
 	mux.HandleFunc("GET /api/overview", s.private(s.overview))
+	mux.HandleFunc("GET /api/relay", s.private(s.relayState))
+	mux.HandleFunc("POST /api/relay/check", s.private(s.relayCheck))
 	mux.HandleFunc("GET /api/jobs", s.private(s.listJobs))
 	mux.HandleFunc("GET /api/jobs/{id}", s.private(s.getJob))
 

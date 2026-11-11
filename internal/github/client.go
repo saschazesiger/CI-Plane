@@ -33,6 +33,9 @@ type call struct {
 	// conditional sends the ETag of the last answer and serves the cached
 	// body on 304, which GitHub does not count against the rate limit.
 	conditional bool
+	// once sends the request a single time: for requests that must not
+	// happen twice, like starting a workflow.
+	once bool
 }
 
 type response struct {
@@ -106,6 +109,9 @@ func (s *Service) do(ctx context.Context, c call) (*response, error) {
 	renewed := false
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 && c.once {
+			break // a refused token is renewed without counting as an attempt
+		}
 		if attempt > 0 {
 			wait := s.retryBase << (attempt - 1)
 			wait += time.Duration(rand.Int64N(int64(wait)/2 + 1))

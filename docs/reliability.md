@@ -36,6 +36,7 @@ middle of a step. None of that should need you.
 | 👻 A runner is registered on GitHub but no runner belongs to it | Every five minutes, idle registrations named with this installation's prefix that no runner belongs to are deleted. |
 | 📦 Containers exist that no runner belongs to | Containers with this installation's prefix that the database does not know are removed. |
 | 🚇 `cloudflared` exits | It is restarted with waits from 1 second to 1 minute. Every ten minutes CI-Plane checks from outside that the address still asks for a login and `/webhook` answers. The overview shows a problem as an alert. |
+| 🛫 The failover to GitHub fails (minutes used up, workflow missing) | A failed start on GitHub puts the job back in the queue like any other. After as many failed starts in a row as *A worker pauses after*, the failover switches itself off and says why; jobs wait for the workers. See [Failover to GitHub](failover.md#-when-it-switches-itself-off). |
 | 🧱 GitHub's API fails or limits requests | Calls are retried with growing waits and respect the rate limit. A failed registration is not counted against the worker. Lists that are read often (runners, waiting jobs) are asked for with ETags, so an unchanged answer does not use up the limit. At most 30 open jobs are asked about per minute, in turn. |
 
 ### ⚰️ A job whose worker is lost

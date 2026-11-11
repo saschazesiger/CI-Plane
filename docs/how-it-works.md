@@ -142,6 +142,9 @@ worker first.
 the CPU when a server is busy, and makes it safe to add a server that mainly does other work.
 [Workers](workers.md#-cpu-priority) has the details.
 
+**Failover.** If you switched it on, a job that found no room for a few minutes goes to a runner on a GitHub-hosted
+machine instead ([Failover to GitHub](failover.md)).
+
 **Queue.** If no worker has the CPUs and memory free, the job waits, oldest first, within the limits of parallel jobs per repository and per
 account. A small job may overtake a large one that does not fit yet. After five minutes of waiting, nothing overtakes
 a job on a worker that could hold it once the runners there are done. A worker that is busy with other work only is

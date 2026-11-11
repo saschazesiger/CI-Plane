@@ -196,6 +196,9 @@ type Engine struct {
 	OnChange func()
 	// Logf, if set, receives diagnostics.
 	Logf func(format string, args ...any)
+	// Relay, if set, runs runners on GitHub-hosted machines: the worker
+	// model.RelayWorkerID. Set it before Run.
+	Relay Hosts
 
 	now  func() int64
 	kick chan struct{}

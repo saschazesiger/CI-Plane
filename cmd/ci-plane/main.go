@@ -111,6 +111,7 @@ func run(logger *log.Logger) error {
 		st      *store.Store
 		eng     *engine.Engine
 		svc     Services
+		relay   api.Relay
 		runners []func(context.Context) // what runs until shutdown
 		extra   http.Handler
 		webhook http.Handler
@@ -124,6 +125,7 @@ func run(logger *log.Logger) error {
 		defer d.Close()
 		st, eng = d.Store, d.Engine
 		svc = Services{Workers: d.Workers, GitHub: d.GitHub, Cloudflare: d.Cloudflare}
+		relay = d.Relay
 		runners = append(runners, d.Run)
 		extra = d.Pages
 	} else {
@@ -143,13 +145,14 @@ func run(logger *log.Logger) error {
 		}
 		eng = engine.New(st, svc.Forge, svc.Fleet)
 		eng.Logf = logger.Printf
+		eng.Relay, relay = svc.Relay, svc.Relay
 		webhook = svc.Webhook(eng.HandleJob)
 		runners = append(runners, eng.Run)
 		runners = append(runners, svc.Run...)
 	}
 
 	srv := api.New(api.Deps{
-		Store: st, Engine: eng, Workers: svc.Workers, GitHub: svc.GitHub, Cloudflare: svc.Cloudflare, Box: box,
+		Store: st, Engine: eng, Workers: svc.Workers, GitHub: svc.GitHub, Cloudflare: svc.Cloudflare, Relay: relay, Box: box,
 		Hosts:   strings.Split(env("CI_PLANE_HOSTS", ""), ","),
 		Version: version, Demo: cfg.demo && !cfg.demoFresh, ResetPassword: cfg.adminPassword, Extra: extra,
 		Logf: logger.Printf,

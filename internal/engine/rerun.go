@@ -66,6 +66,9 @@ func (e *Engine) failedOnRunner(tx *store.Tx, job *model.Job) {
 }
 
 func (e *Engine) workerName(tx *store.Tx, id int64) string {
+	if id == model.RelayWorkerID {
+		return "the GitHub-hosted machine"
+	}
 	if w, err := tx.Worker(id); err == nil {
 		return "the worker " + w.Name
 	}
@@ -108,7 +111,7 @@ func (e *Engine) verdict(ctx context.Context, j model.Job) time.Duration {
 		if r, err = tx.Runner(j.RunnerID); err != nil {
 			return nil
 		}
-		if w, err = tx.Worker(r.WorkerID); err == nil {
+		if w, err = workerOf(tx, r.WorkerID); err == nil {
 			known = true
 		}
 		return nil
@@ -117,8 +120,8 @@ func (e *Engine) verdict(ctx context.Context, j model.Job) time.Duration {
 	switch {
 	case !known:
 		lost, why = true, "its worker was removed while it ran"
-	case e.fleet.Status(w.ID).Connected:
-		list, err := e.fleet.List(ctx, w)
+	case e.fleetOf(w.ID).Status(w.ID).Connected:
+		list, err := e.fleetOf(w.ID).List(ctx, w)
 		if err != nil {
 			return 5 * time.Second
 		}

@@ -147,6 +147,13 @@ function timelineHtml(events) {
   }).join('');
 }
 
+/** Where the job ran: a link to its worker, or GitHub's machine of the failover, which has no page here. */
+function workerFact(j) {
+  if (!j.worker) return '–';
+  if (j.workerId < 0) return `${esc(j.worker)} <span class="ds-meta">(a machine of GitHub's, through the failover)</span>`;
+  return `<a href="#/workers?open=${j.workerId}">${esc(j.worker)}</a>`;
+}
+
 function sheetHtml(d) {
   const j = d.job;
   const facts = [
@@ -155,7 +162,7 @@ function sheetHtml(d) {
     ['Branch', esc(j.branch || '–')],
     ['runs-on', `<code>${esc((j.labels || []).join(', '))}</code>`],
     ['Size', esc(j.size || '–')],
-    ['Worker', j.worker ? `<a href="#/workers?open=${j.workerId}">${esc(j.worker)}</a>` : '–'],
+    ['Worker', workerFact(j)],
     ['Runner', esc(j.runner || '–')],
     ['Queued', `${day(j.queuedAt)}, ${clock(j.queuedAt)}`],
   ];

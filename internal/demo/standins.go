@@ -14,6 +14,7 @@ import (
 
 	"github.com/saschazesiger/CI-Plane/internal/api"
 	"github.com/saschazesiger/CI-Plane/internal/engine"
+	"github.com/saschazesiger/CI-Plane/internal/github"
 	"github.com/saschazesiger/CI-Plane/internal/model"
 	"github.com/saschazesiger/CI-Plane/internal/store"
 )
@@ -393,3 +394,17 @@ var (
 	_ api.GitHub     = (*GitHub)(nil)
 	_ api.Cloudflare = (*Cloudflare)(nil)
 )
+
+// Relay stands in for the failover to GitHub-hosted runners: the simulated
+// world runs them, so there is nothing to check.
+type Relay struct{}
+
+func (*Relay) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	http.Error(w, "not in demo mode", http.StatusNotFound)
+}
+
+// Check implements api.Relay.
+func (*Relay) Check(context.Context) []string { return nil }
+
+// Workflow implements api.Relay.
+func (*Relay) Workflow() string { return github.RelayWorkflowYAML }

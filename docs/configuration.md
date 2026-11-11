@@ -67,6 +67,16 @@ job on.
 | A worker pauses after | 3 failed starts | 1 to 20 | In a row; then it is *unhealthy* and tested every 30 seconds. |
 | Keep finished jobs and events for | 30 days | 1 to 365 days | Older history is deleted. |
 
+**Failover to GitHub** ([Failover to GitHub](failover.md))
+
+| Setting | Default | Range | Meaning |
+|---|---|---|---|
+| Failover to GitHub | off | | Jobs that found no room may go to GitHub-hosted runners. It switches itself off after as many failed starts in a row as *A worker pauses after*. |
+| Relay repository | | a private repository CI-Plane sees | Runs the relay workflow; its owner pays the minutes. |
+| Waiting time | 3 minutes | 0 minutes to 24 hours | How long a job waits for room on your workers first. |
+| At most | 5 runners | 1 to 100 | Runners on GitHub at the same time. |
+| Largest size | `size-m` | one of the sizes | Larger jobs always wait for a worker. |
+
 **Elsewhere**
 
 - **Cloudflare tunnel**: status, the e-mail addresses that may sign in, repair and removal ([Cloudflare](cloudflare.md)).

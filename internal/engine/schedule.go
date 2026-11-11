@@ -171,9 +171,13 @@ func (e *Engine) schedule(s *snapshot) bool {
 		}
 	}
 	var spares []model.Runner
+	onRelay := 0
 	for _, r := range s.runners {
 		if r.JobID == 0 && r.Waiting() {
 			spares = append(spares, r)
+		}
+		if r.WorkerID == model.RelayWorkerID && r.Active() {
+			onRelay++
 		}
 	}
 	held := map[int64]bool{} // workers kept free for a job that waits long
@@ -257,7 +261,15 @@ func (e *Engine) schedule(s *snapshot) bool {
 			w, found, why = s.pick(z, caps, skip)
 		}
 		if !found {
-			e.setReason(j, why)
+			relay, note := s.relayChoice(j, z, onRelay, e.Relay != nil)
+			if relay && e.place(s, j, relayWorker(s.set), z, Capacity{}) {
+				onRelay++
+				perRepo[j.RepoID]++
+				perAcc[j.AccountID]++
+				dirty = true
+				continue
+			}
+			e.setReason(j, why+note)
 			full = true
 			if s.now-j.WaitingSince > int64(s.set.NoOvertakeSec)*1000 {
 				// Nothing overtakes it on a worker that could hold it once
@@ -333,6 +345,12 @@ func (e *Engine) place(s *snapshot, j model.Job, w model.Worker, z model.Size, c
 		JobID: j.ID, Labels: s.set.RunnerLabels(z.Name), Size: z.Name, CPUs: z.CPUs, MemMB: z.MemMB,
 		State: model.RunnerProvisioning, CreatedAt: s.now,
 	}
+	msg := fmt.Sprintf("Worker %s chosen (tier %d, %.1f CPUs and %.0f GB free); starting the runner %s",
+		w.Name, w.Tier, c.FreeCPUs(), float64(c.MemMB-c.UsedMemMB)/1024, r.Name)
+	if w.ID == model.RelayWorkerID {
+		msg = fmt.Sprintf("No worker had room for %s; starting the runner %s on a GitHub-hosted machine through %s",
+			span(int((s.now-j.WaitingSince)/1000)), r.Name, s.set.RelayRepo)
+	}
 	ok := false
 	err := e.st.Tx(func(tx *store.Tx) error {
 		job, err := tx.Job(j.ID)
@@ -343,10 +361,7 @@ func (e *Engine) place(s *snapshot, j model.Job, w model.Worker, z model.Size, c
 		if err := tx.SaveRunner(r); err != nil {
 			return err
 		}
-		event(tx, model.LevelInfo, "job.assigned",
-			fmt.Sprintf("Worker %s chosen (tier %d, %.1f CPUs and %.0f GB free); starting the runner %s",
-				w.Name, w.Tier, c.FreeCPUs(), float64(c.MemMB-c.UsedMemMB)/1024, r.Name),
-			job.ID, r.ID, w.ID)
+		event(tx, model.LevelInfo, "job.assigned", msg, job.ID, r.ID, w.ID)
 		ok = true
 		return tx.SaveJob(job)
 	})

@@ -138,3 +138,15 @@ type Cloudflare interface {
 	// through the tunnel and returns the e-mail of the user.
 	Authenticate(r *http.Request) (email string, err error)
 }
+
+// Relay is the failover to GitHub-hosted runners.
+type Relay interface {
+	// ServeHTTP hands runs of the relay workflow their runner
+	// (/webhook/relay on the tunnel).
+	http.Handler
+	// Check says what keeps the failover from working, one sentence per
+	// problem; nothing if it is ready.
+	Check(ctx context.Context) []string
+	// Workflow is the relay workflow to add to the relay repository.
+	Workflow() string
+}

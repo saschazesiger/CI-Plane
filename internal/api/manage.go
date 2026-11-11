@@ -241,6 +241,8 @@ var numFields = []numField{
 	{"failureThreshold", func(s *model.Settings) int { return s.FailureThreshold }, 1, 20, 1, "failed starts"},
 	{"noOvertakeSec", func(s *model.Settings) int { return s.NoOvertakeSec }, 0, 24 * 3600, 60, "minutes"},
 	{"historyDays", func(s *model.Settings) int { return s.HistoryDays }, 1, 365, 1, "days"},
+	{"relayAfterSec", func(s *model.Settings) int { return s.RelayAfterSec }, 0, 24 * 3600, 60, "minutes"},
+	{"relayMax", func(s *model.Settings) int { return s.RelayMax }, 1, 100, 1, "runners"},
 }
 
 // checkSettings returns an error per field, keyed by its JSON name (sizes
@@ -294,6 +296,7 @@ func checkSettings(set model.Settings) map[string]string {
 			errs[f.key] = fmt.Sprintf("Enter a number from %s to %s %s.", shown(f.min, f.factor), shown(f.max, f.factor), f.unit)
 		}
 	}
+	checkRelay(set, errs)
 	return errs
 }
 
@@ -309,6 +312,7 @@ func cleanSettings(set *model.Settings) {
 	set.RunnerImage = strings.TrimSpace(set.RunnerImage)
 	set.DindImage = strings.TrimSpace(set.DindImage)
 	set.MirrorImage = strings.TrimSpace(set.MirrorImage)
+	set.RelayRepo = strings.Trim(strings.TrimSpace(set.RelayRepo), "/")
 	for i := range set.Sizes {
 		set.Sizes[i].Name = strings.ToLower(strings.TrimSpace(set.Sizes[i].Name))
 	}
@@ -320,7 +324,18 @@ func (s *Server) validateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cleanSettings(&set)
-	writeJSON(w, http.StatusOK, map[string]any{"fields": checkSettings(set)})
+	errs := checkSettings(set)
+	if err := s.d.Store.View(func(tx *store.Tx) error {
+		msg, err := checkRelayRepo(tx, set)
+		if msg != "" && errs["relayRepo"] == "" {
+			errs["relayRepo"] = msg
+		}
+		return err
+	}); err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"fields": errs})
 }
 
 func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
@@ -329,7 +344,18 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cleanSettings(&set)
-	if errs := checkSettings(set); len(errs) > 0 {
+	errs := checkSettings(set)
+	if err := s.d.Store.View(func(tx *store.Tx) error {
+		msg, err := checkRelayRepo(tx, set)
+		if msg != "" && errs["relayRepo"] == "" {
+			errs["relayRepo"] = msg
+		}
+		return err
+	}); err != nil {
+		s.fail(w, err)
+		return
+	}
+	if len(errs) > 0 {
 		msg := "1 field needs attention."
 		if len(errs) > 1 {
 			msg = fmt.Sprintf("%d fields need attention.", len(errs))
@@ -337,7 +363,15 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "The settings were not saved: " + msg, Fields: errs})
 		return
 	}
-	if err := s.d.Store.Tx(func(tx *store.Tx) error { return tx.SaveSettings(set) }); err != nil {
+	if err := s.d.Store.Tx(func(tx *store.Tx) error {
+		if set.RelayEnabled {
+			// Switched on (again): what switched it off is history.
+			if err := tx.Delete(model.RelayOffKey); err != nil {
+				return err
+			}
+		}
+		return tx.SaveSettings(set)
+	}); err != nil {
 		s.fail(w, err)
 		return
 	}

@@ -49,6 +49,11 @@ So:
   rights.
 - `/webhook` accepts only `POST`s signed (HMAC-SHA256) with the webhook secret of the GitHub App that sent them. A
   delivery is handled once, and events about jobs older than seven days are ignored.
+- `/webhook/relay`, below `/webhook` and so also without Access, hands a run of the relay workflow the configuration
+  of its runner ([Failover to GitHub](failover.md#-security)). It accepts only an OIDC token of GitHub Actions
+  (RS256 against GitHub's published keys, issuer, audience `ci-plane-relay`, expiry) for the relay workflow on the
+  default branch of the relay repository, matched by repository id and started by the GitHub App, and hands each
+  configuration to one run only.
 
 ## 🔑 Login and sessions
 

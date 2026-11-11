@@ -63,6 +63,12 @@ func (e *Engine) load() (*snapshot, error) {
 		s.worker[w.ID] = w
 		s.status[w.ID] = e.fleet.Status(w.ID)
 	}
+	if e.Relay != nil {
+		// Not in s.workers: the relay is never picked like a worker.
+		rw := relayWorker(s.set)
+		s.worker[rw.ID] = rw
+		s.status[rw.ID] = e.Relay.Status(rw.ID)
+	}
 	for _, j := range s.jobs {
 		s.job[j.ID] = j
 	}
@@ -228,8 +234,12 @@ func (e *Engine) superviseRunners(ctx context.Context, s *snapshot) bool {
 			e.spawn(ctx, r.ID, 10*time.Minute, func(ctx context.Context) time.Duration { return e.provision(ctx, r) })
 
 		case model.RunnerStarting:
-			if s.now-r.StartedAt > sec(s.set.StartTimeoutSec) {
-				e.giveUpStart(ctx, r, fmt.Sprintf("the runner did not connect to GitHub within %d seconds", s.set.StartTimeoutSec), s.set.StartTimeoutSec, true)
+			limit := s.set.StartTimeoutSec
+			if r.WorkerID == model.RelayWorkerID {
+				limit = max(limit, int(relayStartLimit.Seconds()))
+			}
+			if s.now-r.StartedAt > sec(limit) {
+				e.giveUpStart(ctx, r, fmt.Sprintf("the runner did not connect to GitHub within %d seconds", limit), limit, true)
 			} else if r.JobID == 0 && (pressure || s.now-r.SpareAt > sec(s.set.SpareGraceSec)) {
 				e.retire(ctx, r, "no job is waiting for it")
 			} else {
@@ -292,7 +302,7 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 		if acc, err = tx.Account(r.AccountID); err != nil {
 			return fmt.Errorf("account: %w", err)
 		}
-		if w, err = tx.Worker(r.WorkerID); err != nil {
+		if w, err = workerOf(tx, r.WorkerID); err != nil {
 			return fmt.Errorf("worker: %w", err)
 		}
 		return nil
@@ -305,6 +315,7 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 		return 5 * time.Second
 	}
 	target := targetOf(acc, r.Repo)
+	fleet := e.fleetOf(w.ID)
 
 	// A registration is stored before the containers are started. If one is
 	// there, an earlier start was interrupted, perhaps by a restart of
@@ -312,7 +323,7 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 	// online and even run a job by now: it is taken over as it is, because
 	// starting it again would remove its containers in the middle of a job.
 	if r.ForgeID != 0 {
-		list, err := e.fleet.List(ctx, w)
+		list, err := fleet.List(ctx, w)
 		if err != nil {
 			// Docker on the worker does not answer. A few tries, then the
 			// start fails like any other, so the job is not stuck here.
@@ -323,7 +334,7 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 			if n < 6 {
 				return 5 * time.Second
 			}
-			e.failStart(r.ID, "the worker could not say whether the runner is running: "+err.Error(), e.fleet.Status(w.ID).Connected)
+			e.failStart(r.ID, "the worker could not say whether the runner is running: "+err.Error(), fleet.Status(w.ID).Connected)
 			return 0
 		}
 		for _, c := range list {
@@ -366,9 +377,13 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 	}
 
 	spec := RunnerSpec{Name: r.Name, JITConfig: reg.JITConfig, Image: set.RunnerImage, DindImage: set.DindImage, MemMB: r.MemMB, CPUPriority: w.CPUPriority}
-	if err := e.fleet.Start(ctx, w, spec); err != nil {
+	if err := fleet.Start(ctx, w, spec); err != nil {
 		// A worker that is not reachable did not fail to start anything.
-		e.failStart(r.ID, "the worker could not start the runner: "+err.Error(), e.fleet.Status(w.ID).Connected)
+		what := "the worker could not start the runner: "
+		if w.ID == model.RelayWorkerID {
+			what = ""
+		}
+		e.failStart(r.ID, what+err.Error(), fleet.Status(w.ID).Connected && !errors.Is(err, ErrPassing))
 		return 0
 	}
 	_ = e.st.Tx(func(tx *store.Tx) error {
@@ -450,6 +465,9 @@ func (e *Engine) watchOnline(ctx context.Context, s *snapshot, starting []model.
 					event(tx, model.LevelInfo, "runner.online", "Runner "+cur.Name+" is online and waits for the job", cur.JobID, cur.ID, cur.WorkerID)
 					return tx.SaveRunner(cur)
 				})
+				if r.WorkerID == model.RelayWorkerID {
+					e.relayWorks()
+				}
 				e.changed()
 			}
 			// Nothing waits for this: GitHub hands a job to the runner
@@ -504,6 +522,7 @@ func (e *Engine) failStart(runnerID, reason string, blame bool) {
 // and waits longer after every attempt, so a runner that cannot work does
 // not start in a tight loop.
 func (e *Engine) fail(runnerID, reason string, blame, idle bool) {
+	onRelay := false
 	err := e.st.Tx(func(tx *store.Tx) error {
 		r, err := tx.Runner(runnerID)
 		if err != nil {
@@ -512,6 +531,7 @@ func (e *Engine) fail(runnerID, reason string, blame, idle bool) {
 		if r.State != model.RunnerProvisioning && r.State != model.RunnerStarting && !(idle && r.State == model.RunnerIdle) {
 			return nil
 		}
+		onRelay = blame && r.WorkerID == model.RelayWorkerID
 		r.State, r.Failed, r.Error, r.EndedAt = model.RunnerCleaning, true, reason, e.now()
 		if err := tx.SaveRunner(r); err != nil {
 			return err
@@ -542,6 +562,9 @@ func (e *Engine) fail(runnerID, reason string, blame, idle bool) {
 	})
 	if err != nil {
 		e.logf("engine: fail start of %s: %v", runnerID, err)
+	}
+	if onRelay {
+		e.relayFailed(reason)
 	}
 	e.changed()
 }
@@ -621,7 +644,7 @@ func (e *Engine) clean(ctx context.Context, r model.Runner) time.Duration {
 		if acc, err = tx.Account(r.AccountID); err == nil {
 			haveAcc = true
 		}
-		if w, err = tx.Worker(r.WorkerID); err == nil {
+		if w, err = workerOf(tx, r.WorkerID); err == nil {
 			haveWorker = true
 		}
 		return nil
@@ -676,7 +699,7 @@ func (e *Engine) clean(ctx context.Context, r model.Runner) time.Duration {
 		e.mu.Unlock()
 	}
 	if haveWorker {
-		if err := e.fleet.Remove(ctx, w, r.Name); err != nil {
+		if err := e.fleetOf(w.ID).Remove(ctx, w, r.Name); err != nil {
 			return retry("worker", err)
 		}
 	}
@@ -705,6 +728,7 @@ func (e *Engine) clean(ctx context.Context, r model.Runner) time.Duration {
 // watchContainers looks at the containers of each worker: a runner whose
 // container is gone has ended, and a container without a runner is removed.
 func (e *Engine) watchContainers(ctx context.Context, s *snapshot) {
+	e.watchRelay(ctx, s)
 	for _, w := range s.workers {
 		w := w
 		if !s.status[w.ID].Connected {
@@ -763,7 +787,14 @@ func (e *Engine) compareContainers(ctx context.Context, w model.Worker, list []C
 			continue
 		}
 		what := "its container is gone"
-		if ok {
+		switch {
+		case w.ID == model.RelayWorkerID && !ok:
+			what = "its run of the relay workflow is gone"
+		case w.ID == model.RelayWorkerID && c.ExitCode == 0:
+			what = "its run of the relay workflow ended"
+		case w.ID == model.RelayWorkerID:
+			what = "its run of the relay workflow failed or was cancelled; its log on GitHub says why"
+		case ok:
 			what = fmt.Sprintf("its container exited with code %d", c.ExitCode)
 		}
 		// A runner exits after its one job. If the webhooks about that job
@@ -797,9 +828,12 @@ func (e *Engine) compareContainers(ctx context.Context, w model.Worker, list []C
 		}
 	}
 	// Containers nobody knows: left over from a lost database or a bug.
-	for name := range have {
+	for name, c := range have {
 		if known[name] || !strings.HasPrefix(name, e.prefix) {
 			continue
+		}
+		if w.ID == model.RelayWorkerID && !c.Running {
+			continue // an ended run of the relay workflow leaves nothing behind
 		}
 		name := name
 		e.spawn(ctx, "orphan:"+name, 5*time.Minute, func(ctx context.Context) time.Duration {
@@ -814,7 +848,7 @@ func (e *Engine) compareContainers(ctx context.Context, w model.Worker, list []C
 			if fresh {
 				return 0
 			}
-			if err := e.fleet.Remove(ctx, w, name); err != nil {
+			if err := e.fleetOf(w.ID).Remove(ctx, w, name); err != nil {
 				return time.Minute
 			}
 			_ = e.st.Tx(func(tx *store.Tx) error {

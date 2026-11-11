@@ -39,6 +39,7 @@ type Demo struct {
 	Workers    *Workers
 	GitHub     *GitHub
 	Cloudflare *Cloudflare
+	Relay      *Relay
 	Pages      http.Handler // the stand-in GitHub pages, mounted under /demo/
 
 	opts  Options
@@ -70,6 +71,10 @@ func New(opts Options) (*Demo, error) {
 	d.fleet = &fleet{World: d.World, d: d, failNext: map[int64]int{}}
 	d.Engine = engine.New(st, d.World, d.fleet)
 	d.Engine.Logf = opts.Logf
+	// GitHub-hosted runners are simulated runners on a worker of their own.
+	d.Engine.Relay = d.World
+	d.World.Connect(model.RelayWorkerID)
+	d.Relay = &Relay{}
 	d.Workers = &Workers{d: d}
 	d.GitHub = &GitHub{d: d, states: map[string]manifestState{}, installed: map[int64]bool{}, webhooks: map[int64]int64{}}
 	d.Cloudflare = &Cloudflare{d: d}

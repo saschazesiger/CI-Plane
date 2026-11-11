@@ -233,6 +233,10 @@ func (s *Server) activity(tx *store.Tx, sn *snapshot, n int) ([]activity, error)
 				a.Subject = j.Repo + " · " + j.Name
 			}
 			a.Href = fmt.Sprintf("#/jobs?open=%d", e.JobID)
+		case e.WorkerID == model.RelayWorkerID:
+			// No row of the workers table: its settings are where it is managed.
+			a.Subject = model.RelayWorkerName
+			a.Href = "#/settings?section=relay"
 		case e.WorkerID != 0:
 			a.Subject = names[e.WorkerID]
 			a.Href = fmt.Sprintf("#/workers?open=%d", e.WorkerID)
@@ -416,6 +420,9 @@ func jobWithRunner(tx *store.Tx, j model.Job, workers []model.Worker) jobView {
 	}
 	if rn, err := tx.Runner(j.RunnerID); err == nil {
 		v.Runner, v.WorkerID = rn.Name, rn.WorkerID
+		if rn.WorkerID == model.RelayWorkerID {
+			v.Worker = model.RelayWorkerName
+		}
 		for _, w := range workers {
 			if w.ID == rn.WorkerID {
 				v.Worker = w.Name

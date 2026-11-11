@@ -169,6 +169,7 @@ see [SECURITY.md](SECURITY.md).
 | 🧭 [How it works](docs/how-it-works.md) | Architecture, the life of a job, scheduling, what runs on a worker |
 | 🖥️ [Workers](docs/workers.md) | Requirements, the setup command, tiers, drain, clean up, removal |
 | 🐙 [GitHub](docs/github.md) | The app and its permissions, labels and sizes, `ubuntu-latest` differences, your own runner image |
+| 🛫 [Failover to GitHub](docs/failover.md) | GitHub-hosted runners when your workers are full: setup, costs, switching off |
 | ☁️ [Cloudflare](docs/cloudflare.md) | The token, what is created, Access, repair and removal |
 | 🛟 [Reliability](docs/reliability.md) | Every failure and what CI-Plane does about it |
 | 🔒 [Security](docs/security.md) | Trust model, the two listeners, secrets, privileged containers |

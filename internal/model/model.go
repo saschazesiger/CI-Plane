@@ -247,6 +247,13 @@ type Settings struct {
 	FailureThreshold int    `json:"failureThreshold"` // failed starts in a row until unhealthy
 	NoOvertakeSec    int    `json:"noOvertakeSec"`    // a job waiting this long is not overtaken
 	HistoryDays      int    `json:"historyDays"`      // finished jobs and events are kept for
+
+	// Failover to GitHub-hosted runners, through a relay repository.
+	RelayEnabled  bool   `json:"relayEnabled"`
+	RelayRepo     string `json:"relayRepo"`     // owner/name of the private repository with the relay workflow
+	RelayAfterSec int    `json:"relayAfterSec"` // a job waits this long for room before it goes to GitHub
+	RelayMax      int    `json:"relayMax"`      // GitHub-hosted runners at the same time
+	RelayMaxSize  string `json:"relayMaxSize"`  // the largest size that goes to GitHub
 }
 
 // DefaultSettings returns the values of a fresh installation.
@@ -275,7 +282,44 @@ func DefaultSettings() Settings {
 		FailureThreshold: 3,
 		NoOvertakeSec:    300,
 		HistoryDays:      30,
+		RelayAfterSec:    180,
+		RelayMax:         5,
+		RelayMaxSize:     "size-m",
 	}
+}
+
+// RelayWorkerID is the worker of the runners that run on GitHub-hosted
+// machines, started through the relay repository. It is no row of the
+// workers table: GitHub runs those machines, CI-Plane only asks for them.
+const RelayWorkerID int64 = -1
+
+// RelayWorkerName is how the interface names that worker.
+const RelayWorkerName = "GitHub-hosted"
+
+// RelayWorkflow is the file name of the relay workflow, in .github/workflows
+// of the relay repository.
+const RelayWorkflow = "ci-plane-relay.yml"
+
+// RelayAudience is the audience of the OIDC token the relay workflow shows
+// CI-Plane to collect the configuration of its runner.
+const RelayAudience = "ci-plane-relay"
+
+// RelayOffKey is where the store keeps why the failover switched itself
+// off (a RelayOff).
+const RelayOffKey = "relay.off"
+
+// RelayOff says when and why the failover switched itself off.
+type RelayOff struct {
+	At     int64  `json:"at"`
+	Reason string `json:"reason"`
+}
+
+// RelayFits reports whether a job of size z may go to a GitHub-hosted
+// runner: it asks for no more CPUs and memory than the largest size that
+// may go there.
+func (s Settings) RelayFits(z Size) bool {
+	m, ok := s.SizeByName(s.RelayMaxSize)
+	return ok && z.CPUs <= m.CPUs && z.MemMB <= m.MemMB
 }
 
 // SizeByName returns the size with that name.

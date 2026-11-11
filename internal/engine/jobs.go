@@ -203,6 +203,9 @@ func (e *Engine) bind(tx *store.Tx, job model.Job, runner model.Runner, at int64
 		return err
 	}
 	// A job that starts proves the worker is fine.
+	if runner.WorkerID == model.RelayWorkerID {
+		e.relayWorks()
+	}
 	if w, err := tx.Worker(runner.WorkerID); err == nil && w.Failures > 0 {
 		w.Failures = 0
 		if err := tx.SaveWorker(w); err != nil {
