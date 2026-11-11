@@ -246,6 +246,10 @@ func (r *Relay) Start(ctx context.Context, _ model.Worker, spec engine.RunnerSpe
 			return fmt.Errorf("the relay workflow .github/workflows/%s is not on the branch %s of %s: add it as shown under Settings → Failover to GitHub", model.RelayWorkflow, branch, rr.FullName)
 		case http.StatusUnprocessableEntity:
 			return fmt.Errorf("GitHub did not start the relay workflow in %s: %w. Replace the workflow with the one shown under Settings → Failover to GitHub", rr.FullName, err)
+		case http.StatusForbidden:
+			if strings.Contains(strings.ToLower(err.Error()), "not accessible by integration") {
+				return fmt.Errorf("the GitHub App of %s may not start workflows: give it \"Actions: Read and write\" at %s and accept the new permission on its installation", rr.account.Owner, appPermissionsURL(rr.account))
+			}
 		}
 		return passing(fmt.Errorf("GitHub did not start the relay workflow in %s: %w", rr.FullName, err))
 	}
@@ -463,6 +467,15 @@ func (r *Relay) Check(ctx context.Context) []string {
 	if err != nil {
 		return append(out, upper(err.Error())+".")
 	}
+	// The app must be allowed to start workflows; apps created by early
+	// versions of CI-Plane may only read Actions.
+	var inst struct {
+		Permissions map[string]string `json:"permissions"`
+	}
+	ip, _ := repoPath(rr.FullName)
+	if _, err := r.s.getJSON(ctx, call{method: http.MethodGet, path: ip + "/installation", auth: authApp, account: rr.AccountID}, &inst); err == nil && inst.Permissions["actions"] != "write" {
+		out = append(out, fmt.Sprintf("The GitHub App of %s may not start workflows. Give it \"Actions: Read and write\" at %s and accept the new permission on its installation.", rr.account.Owner, appPermissionsURL(rr.account)))
+	}
 	var info struct {
 		State string `json:"state"`
 	}
@@ -476,6 +489,14 @@ func (r *Relay) Check(ctx context.Context) []string {
 		out = append(out, fmt.Sprintf("The relay workflow in %s is disabled (%s). Enable it under Actions in the repository.", rr.FullName, info.State))
 	}
 	return out
+}
+
+// appPermissionsURL is the page where the permissions of an app are edited.
+func appPermissionsURL(a model.Account) string {
+	if a.IsOrg() {
+		return "https://github.com/organizations/" + url.PathEscape(a.Owner) + "/settings/apps/" + url.PathEscape(a.Slug) + "/permissions"
+	}
+	return "https://github.com/settings/apps/" + url.PathEscape(a.Slug) + "/permissions"
 }
 
 func upper(s string) string {

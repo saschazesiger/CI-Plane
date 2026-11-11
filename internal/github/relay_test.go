@@ -38,6 +38,7 @@ type relayFake struct {
 	dispatches   []map[string]any
 	cancels      int
 	noWorkflow   bool
+	readOnly     bool
 	disabled     bool
 	failDispatch int
 }
@@ -61,6 +62,14 @@ func newRelayFake(t *testing.T, e *env) *relayFake {
 			n := base64.RawURLEncoding.EncodeToString(k.PublicKey.N.Bytes())
 			eb := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(k.PublicKey.E)).Bytes())
 			json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{{"kty": "RSA", "kid": "k1", "n": n, "e": eb, "alg": "RS256"}}})
+		case p == repo+"/installation" && r.Method == "GET":
+			perm := "write"
+			if f.readOnly {
+				perm = "read"
+			}
+			json.NewEncoder(w).Encode(map[string]any{"id": 77, "permissions": map[string]string{"actions": perm, "metadata": "read"}})
+		case p == wf+"/dispatches" && r.Method == "POST" && f.readOnly:
+			apiErr(w, 403, "Resource not accessible by integration")
 		case p == repo && r.Method == "GET":
 			json.NewEncoder(w).Encode(map[string]any{"default_branch": "main"})
 		case p == wf && r.Method == "GET":
@@ -407,6 +416,16 @@ func TestRelayErrorsSayWhatToDo(t *testing.T) {
 		}
 		return nil
 	})
+
+	re.fake.readOnly = true
+	if err := re.relay.Start(ctx, model.Worker{}, spec); err == nil || !strings.Contains(err.Error(), "Actions: Read and write") ||
+		!strings.Contains(err.Error(), "github.com/organizations/acme/settings/apps/ci-plane-acme/permissions") {
+		t.Errorf("app without Actions write: %v", err)
+	}
+	if p := re.relay.Check(ctx); len(p) != 1 || !strings.Contains(p[0], "may not start workflows") {
+		t.Errorf("check of an app without Actions write: %v", p)
+	}
+	re.fake.readOnly = false
 
 	re.fake.disabled = true
 	if p := re.relay.Check(ctx); len(p) != 1 || !strings.Contains(p[0], "disabled") {
