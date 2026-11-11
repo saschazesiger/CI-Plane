@@ -74,8 +74,11 @@ docker volume create --label ` + labelRole + `=externals "$ext" >/dev/null
 `
 
 // fillExternals copies the runner tools into $ext unless that was finished
-// before; the marker is written last, so an interrupted copy is redone.
-const fillExternals = `docker run --rm --network none -u 0 -v "$ext:/e" --entrypoint sh "$img" -c 'test -f /e/.ci-plane-ready || { cp -a /home/runner/externals/. /e/ && touch /e/.ci-plane-ready; }'
+// before; the marker is written last, so an interrupted copy is redone, over
+// what is there. Runners that start at the same moment would copy into each
+// other's files: a lock in the volume lets one of them copy and the others
+// find the copy done.
+const fillExternals = `docker run --rm --network none -u 0 -v "$ext:/e" --entrypoint sh "$img" -c 'exec 9>/e/.ci-plane-lock; flock 9 2>/dev/null || :; test -f /e/.ci-plane-ready || { cp -a --remove-destination /home/runner/externals/. /e/ && touch /e/.ci-plane-ready; }'
 `
 
 // limits are the resource flags of both containers. CPU gets a weight and
