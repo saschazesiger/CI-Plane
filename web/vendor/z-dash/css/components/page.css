@@ -1,0 +1,630 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Page content inside the content panel (shell.css): the padded content
+ * area, one page at most --ds-content-max wide, the page header with its
+ * back link or breadcrumbs, the layout helpers for cards, and the sign-in
+ * page.
+ *
+ *   <div class="ds-content">            padding, container "ds-content"
+ *     <div class="ds-page">             one page, gap 20px
+ *       <header class="ds-page-head">
+ *         <a class="ds-btn ds-btn--text ds-sm ds-page-head__back" href="/devices">(arrowLeft 18) <span class="ds-sr">Back to </span>Devices</a>
+ *         (or <nav class="ds-breadcrumbs" aria-label="Breadcrumb"> <ol> <li><a href="/">Home</a></li> <li><a href="/devices">Devices</a></li> <li><a href="/devices/42" aria-current="page">LAPTOP-0042</a></li> </ol> </nav>)
+ *         <div class="ds-page-head__row">
+ *           <div class="ds-page-head__text"> <h1 class="ds-page-head__title" tabindex="-1">LAPTOP-0042</h1> <p class="ds-page-head__lead">...</p>
+ *             <div class="ds-page-head__status"> status chips </div> </div>
+ *           <div class="ds-page-head__actions"> buttons </div>
+ *         </div>
+ *         [<dl class="ds-page-head__details">
+ *           <div class="ds-page-head__detail"> <dt>Owner</dt> <dd>Ada Lovelace</dd> </div> ...
+ *         </dl>]
+ *         [<div class="ds-page-head__tabs"> <nav class="ds-tabs" aria-label="Device"> ... </nav> </div>]
+ *       </header>
+ *       (a plain head: <header class="ds-page-head"> <h1 class="ds-page-head__title"> <p class="ds-page-head__lead"> </header>)
+ *       <div class="ds-stack"> | <div class="ds-grid-2"> cards ...
+ *
+ *   Sign-in: <body class="ds-auth"> (or a <main class="ds-auth">)
+ *     <div class="ds-auth__alert"> an alert, when there is one </div>
+ *     <section class="ds-card ds-card--elevated ds-auth__card"> <h1>...</h1> <form class="ds-form"> ... <div class="ds-form-actions"> <button class="ds-btn ds-btn--filled" type="submit">Sign in</button> </div> </form> </section>
+ *
+ * The panel's width, not the window's, decides when tables and form grids
+ * get narrow: the persistent drawer takes --ds-drawer-width of it. Those
+ * rules are container queries on "ds-content". The end of a page stays
+ * clear of a one- or two-line snackbar (--ds-toast-room), so a success
+ * message never covers the actions just pressed.
+ *
+ * Page head: the back link (a small text button) or the breadcrumbs take
+ * the first row (one or the other); the title row wraps: the text takes
+ * --ds-page-head-text-basis, the actions sit at its end on the title's
+ * centre line (--ds-page-head-title-line, the headline's line height) and
+ * start under the title at 600px of the content. A text button hangs its
+ * padding into the gutter, as in a card's link row: the last one ends on
+ * the content edge, and under the title the first one starts on the
+ * title's edge (outlined and filled buttons, the buttons after the first
+ * under the title and a folded .ds-btn--adaptive keep their place and the
+ * 8px gap). Empty parts (and an empty head) take no room.
+ * .ds-page-head__details: a row of key facts under the title row, a label
+ * in the meta role over its value in the body role with tabular figures; it
+ * wraps, and stays on paper. .ds-page-head__tabs: the record's tabs as the
+ * head's last row, the head's gap plus --ds-space-3 above them, 16px in all.
+ *
+ * .ds-page-head--sticky: the head sticks --ds-page-head-top (0px) below the
+ * top of its scroller on --ds-page-head-bg (--ds-backdrop), --ds-space-3
+ * above and below; a hairline under it shows while the content scrolls
+ * under it. With page.js (data-ds-page-head) it condenses once the reader
+ * has scrolled past what folds: data-scrolled (written by the module) hides
+ * the back link or breadcrumbs, the lead, the status and the key facts, the
+ * title takes --ds-font-title on one line (an ellipsis when short of room)
+ * and the actions sit at its end, also on a narrow page; what folded
+ * keeps its room as a bottom margin (--ds-page-head-fold, written by the
+ * module), so the content stays where it was. The actions fold into a More menu by width: the module writes
+ * .ds-page-head__more (a quiet icon button) and its .ds-menu after them,
+ * hides the actions that do not fit the row (the filled one last) and
+ * lists them in the menu.
+ *
+ *   <header class="ds-page-head ds-page-head--sticky" data-ds-page-head> ... </header>
+ *
+ * Breadcrumbs
+ * are inline links (underlined, no ripple, the link ring) with a chevron
+ * between them; at 600px of the content only the parent shows. A docked
+ * drawer with a back item (.ds-drawer__back) hides the page head's back
+ * link (shell.css).
+ *
+ * A lone .ds-btn directly in .ds-page or .ds-stack keeps its own width.
+ *
+ * Options (src/core/options.css, docs/options.md): size, density, shape and
+ * tone reach the controls inside the page (each computes its own). The
+ * page's own rhythm, padding and head stay: they are layout, set through
+ * the spacing tokens. The head's actions line up with the button's computed
+ * height at every size and density. Type follows size on the breadcrumbs
+ * (--ds-breadcrumbs-font, the size's role). Touch: a breadcrumb link is at
+ * least --ds-target-min high.
+ *
+ * Read-only resulting properties of .ds-content (read them, never set
+ * them; set the spacing tokens instead): --ds-content-pad-top,
+ * --ds-content-pad-x and --ds-content-pad-bottom, the top, side and bottom
+ * padding of the panel at the current width (.ds-view defines the same,
+ * shell.css). The loading bar (loading.css) reads them, and inside
+ * .ds-page the page's centring (100cqw of the "ds-content" container), to
+ * reach the panel edges.
+ *
+ * .ds-auth: a page that is one centred card on the backdrop (a sign-in, a
+ * password reset), within the safe areas; its alert slot sits above the
+ * card, and the primary action takes the card's width.
+ *
+ * Hooks: --ds-stack-gap (--ds-space-4), --ds-stack-gap-page (--ds-space-5:
+ * a stack of cards directly in the page, or .ds-stack--page anywhere),
+ * --ds-page-head-text-basis (320px), --ds-page-head-title-line (32px),
+ * --ds-breadcrumbs-item-max (240px), --ds-breadcrumbs-font (the size's
+ * role), --ds-auth-width (400px), --ds-page-head-top (0px: where a sticky
+ * head stops), --ds-page-head-bg (--ds-backdrop: under a sticky head).
+ *
+ * Forced colours: the breadcrumb chevrons and the hairline under a sticky
+ * head paint in CanvasText.
+ *
+ * Print: the page fills the paper; the back link and the head's actions
+ * stay off it, and a sticky head prints in place, whole.
+ *
+ * Progressive:
+ * - scroll-driven animations (animation-timeline: scroll(), animation-range;
+ *   the hairline under a sticky head fades in over the first --ds-space-2
+ *   of scroll with ds-scroll-fade): without them data-scrolled shows it
+ *   over --ds-dur-fast.
+ * - text-wrap (the lead avoids a lone last word): without it the line
+ *   wraps as usual.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.page {
+  .ds-content {
+    --ds-content-pad-top: var(--ds-space-6);
+    --ds-content-pad-x: var(--ds-space-8);
+    --ds-content-pad-bottom: calc(var(--ds-space-6) + var(--ds-toast-room) + var(--ds-space-2));
+    container: ds-content / inline-size;
+    padding: var(--ds-content-pad-top) var(--ds-content-pad-x) var(--ds-content-pad-bottom);
+  }
+
+  .ds-page {
+    width: min(100%, var(--ds-content-max));
+    margin: 0 auto;
+    display: grid;
+    gap: var(--ds-space-5);
+    align-content: start;
+  }
+
+  /* The page's gap is the rhythm: a closing note has no browser margin. */
+  .ds-page > p {
+    margin: 0;
+  }
+
+  /* A lone button in the page or a stack keeps its own width (a grid item
+     would stretch across the column). */
+  .ds-page > .ds-btn,
+  .ds-stack > .ds-btn {
+    justify-self: start;
+  }
+
+  @media (max-width: 720px) {
+    .ds-content {
+      --ds-content-pad-top: var(--ds-space-5);
+      --ds-content-pad-x: var(--ds-space-4);
+    }
+  }
+
+  /* Phones: the snackbar sits closer to the bottom edge (toast.css). */
+  @media (max-width: 600px) {
+    .ds-content {
+      --ds-content-pad-bottom: calc(var(--ds-space-4) + var(--ds-toast-room) + var(--ds-space-2));
+    }
+  }
+
+  /* ── Page header ──────────────────────────────── */
+
+  .ds-page-head {
+    display: grid;
+    gap: var(--ds-space-1);
+    min-width: 0;
+    margin-bottom: var(--ds-space-1);
+  }
+
+  .ds-page-head:empty {
+    display: none;
+  }
+
+  /* A long name without spaces (a serial, a URL) breaks instead of
+     widening the page. */
+  .ds-page-head__title {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-headline);
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ds-page-head__lead {
+    margin: 0;
+    max-width: var(--ds-measure);
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    font-variant-numeric: tabular-nums;
+    text-wrap: pretty;
+  }
+
+  /* The way back: a small text button whose label lines up with the title
+     (it hangs out by its own start padding). */
+  .ds-page-head__back {
+    justify-self: start;
+    margin-inline-start: calc(-1 * var(--ds-btn-padding-start, var(--ds-space-3)));
+  }
+
+  /* Title and actions: the text takes its basis, the actions sit at the
+     end of the row and wrap under it when the row is full. */
+  .ds-page-head__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--ds-space-3) var(--ds-space-4);
+    min-width: 0;
+  }
+
+  .ds-page-head__text {
+    display: grid;
+    flex: 1 1 var(--ds-page-head-text-basis, 320px);
+    gap: var(--ds-space-1);
+    min-width: 0;
+  }
+
+  .ds-page-head__status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2);
+  }
+
+  /* On the title's centre line: the buttons hang out of the headline's
+     line by the same amount above and below. */
+  .ds-page-head__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin-block: calc((var(--ds-page-head-title-line, 32px) - max(var(--ds-target-min, 0px), calc(var(--ds-btn-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px))) / 2);
+    margin-inline-start: auto;
+  }
+
+  /* A trailing text button hangs its padding into the gutter, so its text
+     ends on the edge the title, the cards and the banners share (as in a
+     card's link row). Outlined and filled buttons keep their place. */
+  .ds-page-head__actions > .ds-btn--text:last-child {
+    margin-inline-end: calc(-1 * var(--ds-space-3));
+  }
+
+  .ds-page-head__lead:empty,
+  .ds-page-head__status:empty,
+  .ds-page-head__actions:empty,
+  .ds-page-head__details:empty,
+  .ds-page-head__tabs:empty {
+    display: none;
+  }
+
+  /* Key facts: a row that wraps, a label over its value. */
+  .ds-page-head__details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ds-space-2) var(--ds-space-6);
+    min-width: 0;
+    margin: var(--ds-space-2) 0 0;
+    padding: 0;
+  }
+
+  .ds-page-head__detail {
+    min-width: 0;
+  }
+
+  .ds-page-head__detail > dt {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-page-head__detail > dd {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-body);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+
+  /* The record's tabs: the head's last row. */
+  .ds-page-head__tabs {
+    min-width: 0;
+    margin-top: var(--ds-space-3);
+  }
+
+  /* Sticky: the head stays at the top of its scroller on the page's
+     ground, its hairline hidden until the content scrolls under it. */
+  .ds-page-head--sticky {
+    position: sticky;
+    top: var(--ds-page-head-top, 0px);
+    z-index: var(--ds-z-sticky);
+    padding-block: var(--ds-space-3);
+    background: var(--ds-page-head-bg, var(--ds-backdrop));
+  }
+
+  .ds-page-head--sticky::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    height: 1px;
+    background: var(--ds-line);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-page-head--sticky[data-scrolled]::after {
+    opacity: 1;
+  }
+
+  /* Where scroll timelines exist, the hairline follows the scroll itself
+     over its first --ds-space-2 (data-scrolled, the fallback, changes
+     nothing then). ds-scroll-fade names both ends, so a scroller without
+     overflow keeps the hairline's own opacity 0. The shorthand comes
+     first: it resets animation-timeline. */
+  @supports (animation-timeline: scroll()) {
+    .ds-page-head--sticky::after {
+      animation: ds-scroll-fade linear both;
+      animation-timeline: scroll(nearest block);
+      animation-range: 0 var(--ds-space-2);
+    }
+  }
+
+  /* Condensed (data-scrolled, written by page.js on a sticky head), on the
+     screen only (a head printed while condensed prints whole): the way back,
+     the lead, the status and the key facts fold away, the title takes the
+     title role and the actions sit on its centre line. The module writes the
+     height that folded as --ds-page-head-fold, which the head keeps as a
+     bottom margin, so the content stays where it was. */
+  @media screen {
+    .ds-page-head--sticky[data-scrolled] > :is(.ds-page-head__back, .ds-breadcrumbs, .ds-page-head__details),
+    .ds-page-head--sticky[data-scrolled] .ds-page-head__text > :is(.ds-page-head__lead, .ds-page-head__status) {
+      display: none;
+    }
+
+    /* What folded keeps its room in the flow: the content stays put. */
+    .ds-page-head--sticky[data-scrolled] {
+      margin-bottom: calc(var(--ds-space-1) + var(--ds-page-head-fold, 0px));
+    }
+
+    /* One line: the title (ellipsis when short of room) and the actions at
+       its end, also on a narrow page, where the whole head stacks them. */
+    .ds-page-head--sticky[data-scrolled] .ds-page-head__title {
+      overflow: hidden;
+      font: var(--ds-font-title);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ds-page-head--sticky[data-scrolled] .ds-page-head__row {
+      flex-wrap: nowrap;
+      align-items: center;
+    }
+
+    .ds-page-head--sticky[data-scrolled] .ds-page-head__text {
+      flex: 1 1 0;
+    }
+
+    .ds-page-head--sticky[data-scrolled] .ds-page-head__actions {
+      flex: 0 1 auto;
+      justify-content: flex-end;
+      margin-block: 0;
+      margin-inline-start: auto;
+    }
+
+    .ds-page-head--sticky[data-scrolled] .ds-page-head__tabs {
+      margin-top: 0;
+    }
+  }
+
+  /* Actions that fold (page.js writes .ds-page-head__more): one line, the
+     ones that do not fit hidden and listed in the More menu. */
+  .ds-page-head__actions:has(> .ds-page-head__more) {
+    flex-wrap: nowrap;
+  }
+
+  .ds-page-head__actions > [hidden] {
+    display: none;
+  }
+
+  /* A folded .ds-btn--adaptive (button.css: outside a content panel, by
+     the window) is a round icon button: it keeps its place. */
+  @media (max-width: 600px) {
+    .ds-page-head__actions > .ds-btn--adaptive:is(:not(.ds-content *), :is(.ds-sheet, .ds-dialog) *) {
+      margin-inline: 0;
+    }
+  }
+
+  /* Under the title the actions start on its edge: a text button that
+     comes first hangs its start padding out instead, so its text lines up
+     with the title; the buttons after it keep the 8px gap and their place.
+     A folded .ds-btn--adaptive (a round icon button at this width) keeps
+     its place too. */
+  @container ds-content (max-width: 600px) {
+    .ds-page-head__actions {
+      flex-basis: 100%;
+      justify-content: flex-start;
+      margin: 0;
+    }
+
+    .ds-page-head__actions > .ds-btn--text:first-child:not(.ds-btn--adaptive) {
+      margin-inline-start: calc(-1 * var(--ds-space-3));
+    }
+
+    .ds-page-head__actions > .ds-btn--text:last-child {
+      margin-inline-end: 0;
+    }
+  }
+
+  /*
+   * Breadcrumbs: where the page sits, in place of the back link. Inline
+   * links in the label role, a chevron mask between them; the last item is
+   * the page (aria-current="page"), in the text colour, not underlined.
+   */
+  .ds-breadcrumbs {
+    min-width: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-breadcrumbs-font, var(--ds-size-font, var(--ds-font-label)));
+  }
+
+  .ds-breadcrumbs ol {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-breadcrumbs li {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .ds-breadcrumbs li + li::before {
+    content: '';
+    flex: none;
+    width: var(--ds-space-4);
+    height: var(--ds-space-4);
+    margin-inline: var(--ds-space-1);
+    background: currentColor;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / 100% no-repeat;
+  }
+
+  .ds-breadcrumbs a {
+    /* A finger's target under .ds-touch, the text on its centre. */
+    min-height: var(--ds-target-min, 0px);
+    align-content: center;
+    max-width: var(--ds-breadcrumbs-item-max, 240px);
+    overflow: hidden;
+    color: inherit;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-decoration-line: underline;
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+    text-underline-offset: var(--ds-link-underline-offset);
+    text-decoration-color: var(--ds-link-underline);
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      text-decoration-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  @media (hover: hover) {
+    .ds-breadcrumbs a:hover {
+      text-decoration-color: var(--ds-link-underline-hover);
+    }
+  }
+
+  .ds-breadcrumbs a:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-breadcrumbs [aria-current="page"] {
+    color: var(--ds-text);
+    text-decoration-line: none;
+  }
+
+  /* Narrow pages: only the way up (the parent) shows. */
+  @container ds-content (max-width: 600px) {
+    .ds-breadcrumbs li:not(:nth-last-child(2)) {
+      display: none;
+    }
+
+    .ds-breadcrumbs li:nth-last-child(2)::before {
+      content: none;
+    }
+  }
+
+  /* ── Layout helpers ───────────────────────────── */
+
+  /* One column that never grows wider than the page: a wide table inside
+     scrolls in its own wrapper instead of scrolling the page sideways. */
+  .ds-stack {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--ds-stack-gap, var(--ds-space-4));
+    min-width: 0;
+  }
+
+  .ds-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  /* Cards in a list or a grid of the page keep the page's own rhythm. A
+     stack of fields inside a card keeps its 16px. */
+  .ds-page > .ds-stack,
+  .ds-stack--page {
+    gap: var(--ds-stack-gap-page, var(--ds-space-5));
+  }
+
+  .ds-grid-2 {
+    gap: var(--ds-space-5);
+  }
+
+  /* Cards side by side share one height; their link rows line up at the
+     bottom edge. The auto margin replaces the rhythm's 16px, so the block
+     before the links keeps it as a floor: the tallest card has no free
+     space, and flex margins add up instead of collapsing. The card owns
+     the gap (its private --_card-gap, inherited); these rules sit here, in
+     the later sublayer, because the grid gives the context. */
+  .ds-grid-2 > .ds-card:has(> .ds-card__links) {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ds-grid-2 > .ds-card > .ds-card__links {
+    margin-top: auto;
+  }
+
+  .ds-grid-2 > .ds-card > :has(+ .ds-card__links) {
+    margin-bottom: var(--_card-gap);
+  }
+
+  @media (max-width: 900px) {
+    .ds-grid-2 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* In a page (the skeleton of a loading page, a refresh above its
+     content) the bar also spans the page's centring: .ds-page is
+     min(100%, --ds-content-max) wide and centred in .ds-content, the
+     nearest size container, so 100cqw is the panel's content box. Sides
+     only, so the bottom margin of loading.css's 720px rule still
+     applies. */
+  .ds-page .ds-loadbar {
+    margin-inline: calc(-1 * var(--ds-content-pad-x, var(--ds-space-8)) - max(0px, (100cqw - var(--ds-content-max)) / 2));
+  }
+
+  /* ── Sign-in page ─────────────────────────────── */
+
+  /* height: auto undoes the base's body { height: 100% }: a card taller
+     than the window grows the page instead of overflowing it, which the
+     centring would push above the top, out of reach of the scroll. */
+  .ds-auth {
+    box-sizing: border-box;
+    height: auto;
+    min-height: 100dvh;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ds-space-4);
+    padding:
+      max(var(--ds-space-6), env(safe-area-inset-top))
+      max(var(--ds-space-4), env(safe-area-inset-right))
+      max(var(--ds-space-6), env(safe-area-inset-bottom))
+      max(var(--ds-space-4), env(safe-area-inset-left));
+    background: var(--ds-backdrop);
+  }
+
+  .ds-auth__card,
+  .ds-auth__alert {
+    width: min(100%, var(--ds-auth-width, 400px));
+  }
+
+  .ds-auth__alert:empty {
+    display: none;
+  }
+
+  .ds-auth .ds-form-actions > .ds-btn--filled {
+    flex: 1;
+  }
+
+  @media (forced-colors: active) {
+    .ds-breadcrumbs li + li::before {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+
+    /* A hairline is a background, which forced colours would turn to Canvas. */
+    .ds-page-head--sticky::after {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+  }
+
+  /* Print: the page fills the paper, without the panel's padding and width
+     cap. Last in the file, so it beats the rules above, the narrow-window
+     ones included, at the same specificity. */
+  @media print {
+    .ds-content {
+      padding: 0;
+    }
+
+    .ds-page {
+      width: auto;
+    }
+
+    .ds-page-head__back,
+    .ds-page-head__actions {
+      display: none;
+    }
+
+    .ds-page-head--sticky {
+      position: static;
+    }
+
+    .ds-page-head--sticky::after {
+      display: none;
+    }
+  }
+}

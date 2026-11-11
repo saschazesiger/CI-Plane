@@ -1,0 +1,145 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Thinking indicator: what an assistant or an agent is doing right now,
+ * while it works: the step it is on (a wheel line with the shimmer), the
+ * thought it has, how long it has been at it and how many tokens it used.
+ *
+ *   <div class="ds-thinking" data-ds-thinking="Reading the device list"
+ *        data-ds-thinking-since="2026-11-05T09:00:00Z" data-ds-thinking-tokens="1240">
+ *     <span class="ds-thinking__icon">[icon sparkle 20]</span>
+ *     <span class="ds-thinking__step" aria-live="polite"><span class="ds-wheel"></span></span>
+ *     <span class="ds-thinking__meta"><time class="ds-thinking__time"></time><span class="ds-thinking__tokens"></span></span>
+ *     <p class="ds-thinking__thought">Comparing the warranty dates of 40 devices</p>
+ *   </div>
+ *
+ * Parts:
+ *   __icon     optional, a glyph before the step (aria-hidden by the module)
+ *   __step     the step: a .ds-wheel the module rolls (wheel.css), its line a
+ *              .ds-shimmer while it works (shimmer.css); a polite live region,
+ *              so a new step is spoken once and nothing else is
+ *   __meta     the elapsed time (__time) and the tokens (__tokens), quiet,
+ *              tabular, joined by a dot; they tick outside the live region
+ *   __thought  optional, the current thought: two lines at most, cut with
+ *              an ellipsis
+ *
+ * State: data-ds-thinking-done (or set({ done: true })) ends it: the time
+ * stops, the shimmer goes, and data-state="done" is written. The module
+ * (thinking.js) writes the time, the tokens and the step; the page writes
+ * the thought, or set({ thought }).
+ *
+ * Layout: the step with the meta right after it, the thought under them.
+ * The icon hangs in the start padding, centred on the first line, so what
+ * wraps lines up with the step. When step and meta do not fit on a line,
+ * the meta wraps under the step (a narrow column, a phone).
+ *
+ * Options (src/core/options.css, docs/options.md), on the block or any
+ * ancestor:
+ *   size      .ds-xs ... .ds-xl: the step's type (--ds-size-font) and the
+ *             icon, 4px per step; meta and thought keep their roles
+ *   density   .ds-density-*: the gaps, 2px per step
+ *   shape, tone, touch: not read; it is no target and shows no meaning of
+ *             its own (an error is the message's, not the indicator's)
+ *
+ * Hooks: --ds-thinking-font (the step's type, default --ds-size-font, else
+ * --ds-font-label), --ds-thinking-gap (--ds-space-2, the base the density
+ * applies to), --ds-thinking-icon-color (--ds-primary).
+ *
+ * Motion: the wheel's turn and the shimmer's travel (their own files);
+ * nothing else moves. The time and the token count change in place.
+ *
+ * Forced colours: the icon takes CanvasText; the shimmer's copy goes
+ * (shimmer.css), the text stays.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.thinking {
+  .ds-thinking {
+    --_gap: max(0px, calc(var(--ds-thinking-gap, var(--ds-space-2)) + var(--ds-density, 0) * 2px));
+    --_icon: calc(20px + var(--ds-size-step, 0) * 4px);
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--_gap);
+    row-gap: calc(var(--_gap) / 2);
+    min-width: 0;
+    color: var(--ds-text);
+  }
+
+  /* The icon hangs in the start padding, centred on the step's first line,
+     so whatever wraps lines up with the step. */
+  .ds-thinking:has(> .ds-thinking__icon) {
+    padding-inline-start: calc(var(--_icon) + var(--_gap));
+  }
+
+  .ds-thinking__icon {
+    position: absolute;
+    inset-block-start: calc((1lh - var(--_icon)) / 2);
+    inset-inline-start: 0;
+    display: flex;
+    color: var(--ds-thinking-icon-color, var(--ds-primary));
+    font: var(--ds-thinking-font, var(--ds-size-font, var(--ds-font-label)));
+  }
+
+  .ds-thinking__icon > svg {
+    width: var(--_icon);
+    height: var(--_icon);
+  }
+
+  /* The meta follows the step; when both do not fit, the meta wraps under
+     it and a long step is cut on its own line. */
+  .ds-thinking__step {
+    display: flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    font: var(--ds-thinking-font, var(--ds-size-font, var(--ds-font-label)));
+  }
+
+  .ds-thinking__meta {
+    display: flex;
+    flex: none;
+    align-items: baseline;
+    gap: var(--ds-space-1);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* The dot between time and tokens, only when both show. */
+  .ds-thinking__time:not(:empty) ~ .ds-thinking__tokens:not(:empty)::before {
+    content: "\00b7" / "";
+    margin-inline-end: var(--ds-space-1);
+  }
+
+  .ds-thinking__time:empty,
+  .ds-thinking__tokens:empty {
+    display: none;
+  }
+
+  .ds-thinking__thought {
+    display: -webkit-box;
+    flex: 1 0 100%;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow-wrap: anywhere;
+  }
+
+  .ds-thinking__thought:empty {
+    display: none;
+  }
+
+  @media (forced-colors: active) {
+    .ds-thinking__icon {
+      color: CanvasText;
+    }
+  }
+}

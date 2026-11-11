@@ -1,0 +1,79 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Back to top: a button that appears once the reader has scrolled a long
+ * page (or a long box) down, and takes them back to its top (backtop.js).
+ * Its look is the button's (an elevated icon button, or one with a label);
+ * this file places it and hides it until it is needed.
+ *
+ *   At the end of the scrolling content (the page's, or a box's):
+ *   <button class="ds-btn ds-btn--elevated ds-btn--icon ds-backtop" type="button" data-ds-backtop hidden>(arrowUp 20)</button>
+ *
+ *   With a label (an extended button):
+ *   <button class="ds-btn ds-btn--elevated ds-backtop" type="button" data-ds-backtop hidden>(arrowUp 18) Back to top</button>
+ *
+ *   Fixed to the window's corner instead (a page that scrolls the window):
+ *   <button class="ds-btn ds-btn--elevated ds-btn--icon ds-backtop ds-backtop--fixed" type="button" data-ds-backtop hidden> ... </button>
+ *
+ * Variants:
+ *   .ds-backtop          sticks to the bottom end of its scroller (its
+ *                        content edge, inside the scroller's padding), from
+ *                        the end of the content it sits in (it takes its
+ *                        own row there, so it never covers the last line)
+ *   .ds-backtop--fixed   fixed to the window's bottom end corner, clear of
+ *                        the safe areas
+ *
+ * Shown and hidden: the module sets `hidden` (owned state) and plays the
+ * scale entrance and exit (DS.motion.enter / leave, 'scale'); without the
+ * module the button stays where the page put it.
+ *
+ * Options: size, density, shape and touch are the button's own (it computes
+ * them in its rule); this file reads none. Tone: none (no status).
+ *
+ * Hooks: --ds-backtop-offset (--ds-space-6: the room to the scroller's or
+ * the window's bottom and end edges).
+ *
+ * Forced colours: the button's own edge and ink.
+ *
+ * Print: off the paper.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.backtop {
+  .ds-backtop {
+    position: sticky;
+    inset-block-end: var(--ds-backtop-offset, var(--ds-space-6));
+    z-index: var(--ds-z-sticky);
+    display: flex;
+    /* As much room before it as it keeps from the bottom: at the end of the
+       scroll it rises by that much and lands just under the last line. */
+    margin-block-start: var(--ds-backtop-offset, var(--ds-space-6));
+    margin-inline: auto 0;
+  }
+
+  /* A block of its own (so the auto margin puts it at the end) that keeps
+     the button's width: an icon button sets its own, a labelled one its
+     content's. */
+  .ds-backtop:not(.ds-btn--icon) {
+    width: fit-content;
+  }
+
+  .ds-backtop--fixed {
+    position: fixed;
+    inset-block-end: max(var(--ds-backtop-offset, var(--ds-space-6)), env(safe-area-inset-bottom));
+    inset-inline-end: max(var(--ds-backtop-offset, var(--ds-space-6)), env(safe-area-inset-right));
+    margin: 0;
+  }
+
+  /* Hidden until the reader has scrolled: gone whatever display the button sets. */
+  .ds-backtop[hidden] {
+    display: none;
+  }
+
+  @media print {
+    .ds-backtop {
+      display: none;
+    }
+  }
+}

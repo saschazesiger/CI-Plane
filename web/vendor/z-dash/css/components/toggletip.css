@@ -1,0 +1,197 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Toggletip: the info button "i" next to a field label or a heading, which
+ * opens a help card (a .ds-popover--tip: a title, a text and a link) on a
+ * click or a tap, and says its text to a screen reader. Unlike a tooltip it
+ * never opens on hover, and its card may hold a link the keyboard reaches.
+ *
+ *   <div class="ds-field">
+ *     <label class="ds-field__label" for="serial">Serial number</label>
+ *     <button class="ds-toggletip" type="button" aria-label="About the serial number"
+ *             aria-expanded="false" aria-controls="serial-help" data-ds-toggletip="#serial-help">(info)</button>
+ *     <div class="ds-popover ds-popover--tip ds-popover--arrow" id="serial-help" role="group" aria-label="Serial number" hidden>
+ *       <div class="ds-popover__head"><h3 class="ds-popover__title">Serial number</h3></div>
+ *       <div class="ds-popover__body"><p>On the sticker under the device, 8 to 12 letters and digits.</p></div>
+ *       <div class="ds-popover__foot"><a class="ds-link-btn" href="#help">Where to find it</a></div>
+ *     </div>
+ *     <input class="ds-input" id="serial">
+ *   </div>
+ *
+ * In a .ds-field the label and the button share the first row (the button
+ * right after the label); anywhere else the button sits inline, centred on
+ * the line (a heading, a table header, a key figure).
+ *
+ * Options: size steps the button, 4px per step from --ds-toggletip-size
+ * (24px; an icon-only control: density leaves it); .ds-touch widens its hit
+ * area to --ds-target-min around the glyph without moving the label (the
+ * ::after box); shape multiplies its radius (a circle at the default, a
+ * rounded square at square). Tone does not apply.
+ *
+ * States: a state layer in the content colour (hover, a press in
+ * --ds-dur-micro, the focus layer), the focus ring that snaps from offset +
+ * width to the offset, the press morph of a pill (--ds-radius-action-pressed
+ * in --ds-dur-micro, back on the spring over --ds-dur-medium); open
+ * (aria-expanded="true") it takes the primary ink. No ripple: a 24px glyph
+ * next to a label, whose ripple would be smaller than the finger.
+ *
+ * Forced colours: open, it is Highlight on HighlightText (an open disclosure
+ * button); disabled, GrayText.
+ *
+ * Hook: --ds-toggletip-size (24px).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.toggletip {
+  .ds-toggletip {
+    --_box: calc(var(--ds-toggletip-size, 24px) + var(--ds-size-step, 0) * 4px);
+    --_half: calc(var(--_box) / 2);
+    --_radius: min(calc(min(var(--ds-radius-action), var(--_half)) * var(--ds-shape, 1)), var(--_half));
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: var(--_box);
+    height: var(--_box);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--_radius);
+    background: transparent;
+    color: var(--ds-text-2);
+    font: inherit;
+    vertical-align: middle;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-toggletip svg {
+    width: calc(var(--_box) - var(--ds-space-2));
+    height: calc(var(--_box) - var(--ds-space-2));
+    pointer-events: none;
+  }
+
+  /* The state layer in the content colour. */
+  .ds-toggletip::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* The hit area: at least --ds-target-min around the glyph (.ds-touch), so a
+     finger finds it while the label keeps its line. */
+  .ds-toggletip::after {
+    content: '';
+    position: absolute;
+    inset: min(0px, calc((var(--_box) - var(--ds-target-min, 0px)) / 2));
+  }
+
+  @media (hover: hover) {
+    .ds-toggletip:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-toggletip:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-toggletip:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  /* Press-in in --ds-dur-micro (:active, and .ds-pressed when a page's
+     ripple holds it). */
+  .ds-toggletip:active::before,
+  .ds-toggletip.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  /* The press morph of a pill: the pressed role, never rounder than at rest. */
+  .ds-toggletip:active:not(:disabled, [aria-disabled="true"], [aria-busy="true"]),
+  .ds-toggletip.ds-pressed:not(:disabled, [aria-disabled="true"], [aria-busy="true"]) {
+    border-radius: min(calc(var(--ds-radius-action-pressed) * var(--ds-shape, 1)), var(--_radius));
+    transition:
+      border-radius var(--ds-dur-micro) var(--ds-ease-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* Open: its card shows; the word is aria-expanded, the ink only repeats it. */
+  .ds-toggletip[aria-expanded="true"] {
+    color: var(--ds-primary);
+  }
+
+  .ds-toggletip:disabled,
+  .ds-toggletip[aria-disabled="true"] {
+    opacity: var(--ds-disabled-opacity, var(--ds-state-disabled));
+    color: var(--ds-disabled-ink, var(--ds-text-2));
+    cursor: default;
+  }
+
+  @media (hover: hover) {
+    .ds-toggletip:is(:disabled, [aria-disabled="true"]):hover::before {
+      opacity: 0;
+    }
+  }
+
+  .ds-toggletip:is(:disabled, [aria-disabled="true"]):is(:active, .ds-pressed)::before {
+    opacity: 0;
+  }
+
+  /* In a field: the label and the button share the first row; what
+     follows them spans both columns (selected from the button, not as
+     children of a field that :has() one: Chromium restyles every ancestor
+     of each DOM change anywhere on the page for that form, and lays the
+     whole page out). */
+  .ds-field:has(> .ds-field__label + .ds-toggletip) {
+    grid-template-columns: auto 1fr;
+    column-gap: var(--ds-space-1);
+  }
+
+  .ds-field > .ds-field__label + .ds-toggletip ~ * {
+    grid-column: 1 / -1;
+  }
+
+  .ds-field > .ds-field__label:has(+ .ds-toggletip) {
+    grid-column: 1;
+    align-self: center;
+  }
+
+  .ds-field > .ds-field__label + .ds-toggletip {
+    grid-column: 2;
+    justify-self: start;
+    align-self: center;
+  }
+
+  @media (forced-colors: active) {
+    .ds-toggletip[aria-expanded="true"] {
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+    }
+
+    .ds-toggletip:disabled,
+    .ds-toggletip[aria-disabled="true"] {
+      color: GrayText;
+    }
+  }
+}

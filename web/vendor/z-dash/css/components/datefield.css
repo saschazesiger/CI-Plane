@@ -1,0 +1,259 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Date field: a date, a time, a date and a time, or a range of dates,
+ * typed part by part. It draws the box of a text field (the input's hooks,
+ * so a theme that styles fields styles it too); DS.datefield
+ * (datefield.js) renders one spinbutton per part in the locale's order,
+ * with its separators, and keeps them in step.
+ *
+ *   <span class="ds-field__label" id="due-label">Due date</span>
+ *   <div class="ds-datefield" role="group" aria-labelledby="due-label" data-ds-datefield data-ds-value="2026-11-04"
+ *        [data-ds-datefield-type="date | time | datetime | range"] [data-ds-datefield-zone="local"]>
+ *     [<span class="ds-datefield__leading" aria-hidden="true">(calendar)</span>]
+ *     (rendered:)
+ *     <span class="ds-datefield__input">
+ *       <span class="ds-datefield__segment" role="spinbutton" contenteditable="true" aria-label="month"
+ *             aria-valuenow="11" aria-valuetext="11 – November" [data-placeholder]>11</span>
+ *       <span class="ds-datefield__literal" aria-hidden="true">/</span> ...
+ *       (a range: two <span class="ds-datefield__group" role="group" aria-label="Start">,
+ *        a .ds-datefield__literal.ds-datefield__between between them)
+ *     </span>
+ *     [<span class="ds-datefield__zone">GMT+1</span>]   (a datetime with data-ds-datefield-zone)
+ *     [<button class="ds-btn ds-btn--quiet ds-btn--icon ds-datefield__toggle" type="button" aria-label="Choose date">(calendar)</button>]
+ *   </div>
+ *
+ * Variants: the outlined box (default, .ds-datefield--outlined) and
+ * .ds-datefield--filled on the tonal fill (also inside a .ds-field--filled).
+ *
+ * States: an empty part shows its placeholder (the first letter of its
+ * name, "mm", in the quieter ink: data-placeholder); the focused part is
+ * filled in the action colour, and the box takes the field's focus ring at
+ * once; aria-invalid="true" (out of min and max, a day that does not exist,
+ * a range that ends before it starts; the script sets it) draws the error
+ * border, and the page shows a message under the field, so the colour is
+ * never alone; aria-disabled="true" on the group: the disabled look, no
+ * part takes focus; aria-readonly="true": the read-only look, focusable,
+ * nothing changes.
+ *
+ * Options (src/core/options.css, docs/options.md), on the field or any
+ * ancestor; each is computed here:
+ *   size      .ds-xs ... .ds-xl: 8px of height per step from
+ *             --ds-input-height (40px), 4px of side padding per step, the
+ *             type of the size (--ds-size-font)
+ *   density   .ds-density-*: 4px of height per step; type and side
+ *             padding stay
+ *   shape     .ds-shape-*: multiplies the box's radius and a part's
+ *   touch     .ds-touch: at least --ds-touch-target high
+ *   tone      none: the invalid look is the field's (aria-invalid)
+ * On a phone (600px or less) the type is --ds-font-input (16px), so iOS
+ * does not zoom into the field.
+ *
+ * Motion: border, fill and ink change over --ds-dur-fast; the focus ring
+ * and the focused part appear at once.
+ *
+ * Forced colours: the box keeps its border (CanvasText, Highlight when
+ * focused), the focused part is Highlight / HighlightText, a placeholder
+ * GrayText, a disabled field GrayText.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.datefield {
+  .ds-datefield {
+    /* The options, as on a text field (form.css): the hooks are the input's. */
+    --_h: calc(var(--ds-input-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    --_radius: min(calc(var(--ds-input-radius, var(--ds-radius-field)) * var(--ds-shape, 1)), calc(var(--_box) / 2));
+    --_px: calc(var(--ds-input-padding-x, var(--ds-space-3)) + var(--ds-size-step, 0) * 4px);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    box-sizing: border-box;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    min-block-size: var(--_box);
+    padding-inline: var(--_px);
+    border: 1px solid var(--ds-input-border, var(--ds-outline));
+    border-radius: var(--_radius);
+    background: var(--ds-input-bg, var(--ds-surface));
+    color: var(--ds-text);
+    font: var(--ds-input-font, var(--ds-size-font, var(--ds-font-body)));
+    font-weight: var(--ds-input-weight, var(--ds-weight-regular));
+    cursor: text;
+    transition:
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* The default look, named explicitly. */
+  .ds-datefield--outlined {
+    border-color: var(--ds-input-border, var(--ds-outline));
+    background-color: var(--ds-input-bg, var(--ds-surface));
+  }
+
+  /* On the tonal fill, no outline at rest (a state keeps its border). */
+  .ds-datefield--filled,
+  :where(.ds-field--filled) .ds-datefield:where(:not(.ds-datefield--outlined)) {
+    border-color: transparent;
+    background-color: var(--ds-surface-high);
+  }
+
+  /* A field that fills its row (in a form grid, a filter bar). */
+  .ds-datefield--block {
+    display: flex;
+    inline-size: 100%;
+  }
+
+  /* With a button at its end, the button sits closer to the edge. */
+  .ds-datefield:has(> .ds-datefield__toggle:last-child) {
+    padding-inline-end: var(--ds-space-1);
+  }
+
+  @media (max-width: 600px) {
+    .ds-datefield {
+      font: var(--ds-input-font, var(--ds-font-input));
+      font-weight: var(--ds-input-weight, var(--ds-weight-regular));
+    }
+  }
+
+  @media (hover: hover) {
+    .ds-datefield:hover:not(:focus-within, [aria-disabled="true"], [aria-readonly="true"], [aria-invalid="true"]) {
+      border-color: var(--ds-text);
+    }
+  }
+
+  /* Focus on a part: the field's ring, at once (the toggle button shows
+     its own ring instead). */
+  .ds-datefield:has(.ds-datefield__segment:focus) {
+    border-color: var(--ds-input-focus-color, var(--ds-primary));
+    box-shadow: inset 0 0 0 1px var(--ds-input-focus-color, var(--ds-primary));
+    transition-duration: 0s;
+  }
+
+  .ds-datefield[aria-invalid="true"] {
+    border-color: var(--ds-error);
+  }
+
+  .ds-datefield[aria-invalid="true"]:has(.ds-datefield__segment:focus) {
+    border-color: var(--ds-error);
+    box-shadow: inset 0 0 0 1px var(--ds-error);
+  }
+
+  .ds-datefield:is([aria-disabled="true"], [aria-readonly="true"]) {
+    background: var(--ds-surface-low);
+    color: var(--ds-text-2);
+  }
+
+  .ds-datefield[aria-disabled="true"],
+  .ds-datefield[aria-readonly="true"]:where(:not(:focus-within)) {
+    border-color: var(--ds-line);
+  }
+
+  .ds-datefield[aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  .ds-datefield__leading {
+    display: inline-flex;
+    flex: none;
+    color: var(--ds-text-2);
+    pointer-events: none;
+  }
+
+  /* The parts: one line, numbers of one width, never wrapping. */
+  .ds-datefield__input {
+    display: inline-flex;
+    flex: 1 1 auto;
+    align-items: center;
+    min-inline-size: 0;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .ds-datefield--block > .ds-datefield__input {
+    flex: 1 1 auto;
+  }
+
+  .ds-datefield__group {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .ds-datefield__segment {
+    box-sizing: content-box;
+    min-inline-size: 1ch;
+    padding-inline: 2px;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    color: inherit;
+    text-align: end;
+    caret-color: transparent;
+    outline: none;
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-datefield__segment::selection {
+    background: transparent;
+  }
+
+  .ds-datefield__segment[data-placeholder] {
+    color: var(--ds-text-3);
+  }
+
+  /* On the tonal fill text-3 falls short of 4.5:1; text-2 keeps it. */
+  .ds-datefield--filled .ds-datefield__segment[data-placeholder],
+  :where(.ds-field--filled) .ds-datefield .ds-datefield__segment[data-placeholder] {
+    color: var(--ds-text-2);
+  }
+
+  /* The focused part: filled in the action colour, at once. */
+  .ds-datefield__segment:focus {
+    background: var(--ds-primary);
+    color: var(--ds-on-primary);
+    transition-duration: 0s;
+  }
+
+  .ds-datefield__literal {
+    color: var(--ds-text-2);
+    white-space: pre;
+  }
+
+  .ds-datefield__between {
+    padding-inline: var(--ds-space-1);
+  }
+
+  /* The zone of a wall time: its offset, the long name as the description
+     (and its tooltip). */
+  .ds-datefield__zone {
+    flex: none;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    white-space: nowrap;
+  }
+
+  /* The field's border does not add to the button's height. */
+  .ds-datefield__toggle {
+    flex: none;
+    margin-block: -1px;
+  }
+
+  @media (forced-colors: active) {
+    .ds-datefield:has(.ds-datefield__segment:focus) {
+      border-color: Highlight;
+    }
+
+    .ds-datefield__segment:focus {
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+    }
+
+    .ds-datefield__segment[data-placeholder]:not(:focus),
+    .ds-datefield[aria-disabled="true"] {
+      color: GrayText;
+    }
+  }
+}

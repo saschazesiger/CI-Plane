@@ -1,0 +1,263 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Notification centre: a bell with the unread count that opens a side
+ * sheet of notifications in groups, read and unread.
+ *
+ *   <span class="ds-notifications__bell">
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" data-ds-open="#inbox" aria-label="Notifications">(bell 20)</button>
+ *     <span class="ds-badge ds-tone-error" aria-hidden="true">3</span>          notifications.js (DS.badge)
+ *   </span>
+ *   <dialog class="ds-sheet ds-notifications" id="inbox" data-ds-notifications aria-labelledby="inbox-title">
+ *     ... .ds-sheet__head (title, subtitle "3 unread", settings link, close)
+ *     <div class="ds-notifications__bar"> (unread-only switch) (Mark all as read) </div>
+ *     <div class="ds-sheet__body ds-notifications__feed" tabindex="0">
+ *       <section class="ds-notifications__group" aria-labelledby="h1">
+ *         <h3 class="ds-notifications__heading" id="h1">Today</h3>
+ *         <ul class="ds-notifications__list" role="list">
+ *           <li class="ds-notifications__item" data-ds-key="n1" data-unread>
+ *             <span class="ds-notifications__icon ds-tone-warning" aria-hidden="true">(wifiOff 20)</span>
+ *             <div class="ds-notifications__content">
+ *               <p class="ds-notifications__title" id="t1"><a class="ds-notifications__link" href="/devices/42">LAPTOP-0042 is offline</a></p>
+ *               <p class="ds-notifications__text">Last seen in Building A.</p>
+ *               <p class="ds-notifications__meta"><span class="ds-notifications__dot" aria-hidden="true"></span><span class="ds-sr">Unread, </span><time datetime="...">3 minutes ago</time></p>
+ *               <div class="ds-notifications__actions"><button class="ds-btn ds-btn--text ds-sm" type="button">Open a ticket</button></div>
+ *             </div>
+ *             <button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm ds-notifications__toggle" type="button" aria-label="Mark as read" aria-describedby="t1">(mailOpen 20)</button>
+ *           </li>
+ *       <div class="ds-empty ds-notifications__empty" hidden> ... </div>
+ *
+ * notifications.js renders the groups and rows from data (or reads the
+ * rows of the markup), the badge, the subtitle and the empty state.
+ *
+ * Unread (data-unread on the row): a dot before the time, the title in the
+ * label weight and the word "Unread" for screen readers: never colour
+ * alone. The icon's tone is the class on the icon itself (an inherited
+ * tone is ignored); its glyph carries the meaning.
+ *
+ * Options (docs/options.md), computed here:
+ *   size      .ds-xs ... .ds-xl on the sheet or any ancestor: a row's
+ *             padding 4px per step (8px of height), the icon disc 8px per
+ *             step; type stays
+ *   density   any container: a row's padding 2px per step, the bar's
+ *             height 4px per step
+ *   shape     the disc's radius (round at the default) times --ds-shape
+ *   touch     reaches the buttons (the read button, the actions)
+ *   tone      per notification, on its icon
+ *
+ * Hooks: --ds-notifications-icon-size (40px, the disc at md),
+ * --ds-notifications-item-padding (12px, a row's block padding at md and
+ * the comfortable density), --ds-notifications-dot-size (8px).
+ *
+ * Forced colours: the dot takes CanvasText (a background would vanish),
+ * the disc keeps a CanvasText edge; links are LinkText by themselves.
+ *
+ * Motion: an arriving row fades in while the others glide
+ * (DS.motion.flip()), only while the sheet is open; the dot comes in over
+ * --ds-dur-fast and goes at once (--ds-dur-instant); the link's focus ring
+ * snaps in on --ds-dur-fast. The sheet's own motion is DS.overlay's.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.notifications {
+  /* The bell: the count on the icon button's corner, outside the button
+     (a ripple host clips while a ripple is inside), so it never covers the
+     glyph's centre and takes no press. */
+  .ds-notifications__bell {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+
+  .ds-notifications__bell > .ds-badge {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    translate: 25% -25%;
+    pointer-events: none;
+  }
+
+  /* The bar under the sheet's head: the unread-only switch and mark all
+     read, at the sheet's side padding. */
+  .ds-notifications__bar {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ds-space-2) var(--ds-space-4);
+    min-height: calc(48px + var(--ds-density, 0) * 4px);
+    padding: var(--ds-space-1) calc(var(--ds-sheet-padding, var(--ds-space-6)) + var(--ds-density, 0) * 2px);
+    border-bottom: 1px solid var(--ds-line);
+  }
+
+  .ds-notifications__bar > .ds-btn:only-child {
+    margin-inline-start: auto;
+  }
+
+  /* The feed starts a little under the bar: the first heading is no
+     cramped line under the hairline. */
+  .ds-notifications .ds-notifications__feed {
+    padding-top: var(--ds-space-4);
+  }
+
+  .ds-notifications__group + .ds-notifications__group {
+    margin-top: var(--ds-space-4);
+  }
+
+  .ds-notifications__heading {
+    margin: 0 0 var(--ds-space-1);
+    color: var(--ds-text-2);
+    font: var(--ds-font-label);
+  }
+
+  .ds-notifications__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-notifications__item {
+    --_pad: calc(var(--ds-notifications-item-padding, 12px) + var(--ds-size-step, 0) * 4px + var(--ds-density, 0) * 2px);
+    --_disc: calc(var(--ds-notifications-icon-size, 40px) + var(--ds-size-step, 0) * 8px);
+    display: grid;
+    grid-template-columns: var(--_disc) minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--ds-space-3);
+    padding-block: var(--_pad);
+  }
+
+  .ds-notifications__item + .ds-notifications__item {
+    border-top: 1px solid var(--ds-line);
+  }
+
+  .ds-notifications__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--_disc);
+    height: var(--_disc);
+    border-radius: min(calc(var(--_disc) / 2 * var(--ds-shape, 1)), calc(var(--_disc) / 2));
+    background: var(--ds-surface-high);
+    color: var(--ds-text-2);
+  }
+
+  /* A tone only from the class on the icon itself. */
+  .ds-notifications__icon:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    background: var(--ds-tone-container);
+    color: var(--ds-on-tone-container);
+  }
+
+  .ds-notifications__content {
+    display: grid;
+    gap: var(--ds-space-1);
+    min-width: 0;
+  }
+
+  .ds-notifications__content > * {
+    margin: 0;
+  }
+
+  .ds-notifications__title {
+    color: var(--ds-text);
+    font: var(--ds-font-body);
+    overflow-wrap: anywhere;
+  }
+
+  .ds-notifications__item[data-unread] .ds-notifications__title {
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-notifications__link {
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    color: inherit;
+    text-decoration: none;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-notifications__link:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  @media (hover: hover) {
+    .ds-notifications__link:hover {
+      text-decoration: underline;
+      text-decoration-thickness: var(--ds-link-underline-thickness);
+      text-underline-offset: var(--ds-link-underline-offset);
+    }
+  }
+
+  .ds-notifications__text {
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    overflow-wrap: anywhere;
+  }
+
+  .ds-notifications__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+  }
+
+  .ds-notifications__dot {
+    flex: none;
+    width: var(--ds-notifications-dot-size, 8px);
+    height: var(--ds-notifications-dot-size, 8px);
+    border-radius: 50%;
+    background: var(--ds-primary);
+    opacity: 0;
+    transition: opacity var(--ds-dur-instant) var(--ds-ease-exit);
+  }
+
+  .ds-notifications__item[data-unread] .ds-notifications__dot {
+    opacity: 1;
+    transition-duration: var(--ds-dur-fast);
+    transition-timing-function: var(--ds-ease-in-out);
+  }
+
+  /* Read: no dot and no room for one, so the time starts at the text. */
+  .ds-notifications__item:not([data-unread]) .ds-notifications__dot {
+    width: 0;
+    margin-inline-end: calc(-1 * var(--ds-space-2));
+  }
+
+  /* The read button lines up with the title's first line. */
+  .ds-notifications__toggle {
+    align-self: start;
+    margin-block-start: calc(var(--ds-space-1) * -1);
+  }
+
+  /* The text buttons' labels line up with the text above them. */
+  .ds-notifications__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ds-space-1);
+    margin-top: var(--ds-space-1);
+    margin-inline-start: calc(-1 * var(--ds-space-3));
+  }
+
+  .ds-notifications__actions[hidden],
+  .ds-notifications__content > [hidden] {
+    display: none;
+  }
+
+  .ds-notifications__empty[hidden] {
+    display: none;
+  }
+
+  @media (forced-colors: active) {
+    .ds-notifications__dot {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+
+    .ds-notifications__icon {
+      border: 1px solid CanvasText;
+    }
+  }
+}

@@ -1,0 +1,292 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Empty state: centred, at most 400px. A tinted disc with the icon (24px),
+ * a title, at most one line of what to do next and at most one action.
+ *
+ *   <div class="ds-empty">
+ *     <span class="ds-empty__disc" aria-hidden="true"><svg ...></span>
+ *     <p class="ds-empty__title">No devices yet</p>
+ *     <p class="ds-empty__text">Add the first one to start the inventory.</p>
+ *     <button class="ds-btn ds-btn--tonal" type="button">Add device</button>
+ *
+ * Where it stands (the variant is a placement, not a look):
+ *   --section (or none)  in a card or a panel: the 2.x look
+ *   --page               fills a page: more room, a 72px disc, the title type
+ *   --inline             in a row, a list or a popup: disc or picture, words
+ *                        and action side by side, left-aligned, 32px; 12px of
+ *                        block padding that follows density only (neither the
+ *                        size step nor --ds-empty-padding); actions take at
+ *                        most half the row and stack in a narrow one
+ *
+ * Why it is empty (the disc's colours; the icon, words and action are the
+ * page's, docs/components.md lists them per cause):
+ *   --no-data       nothing yet: the tint
+ *   --first-use     nothing yet, here is how to start: primary container
+ *   --not-set-up    a step is missing: primary container
+ *   --no-results    a filter or search left nothing: neutral
+ *   --no-access     not allowed to see it: neutral
+ *   --offline       cannot reach it now: warning container
+ *   --error         it failed: error container
+ *   .ds-tone-*      any other meaning, from the class on .ds-empty itself
+ * An icon and words always say it, never the colour alone.
+ *
+ * A picture in place of the disc: <span class="ds-empty__media" aria-hidden="true">
+ * <img ... alt=""></span>, at most --ds-empty-media-size high (120px; 160px
+ * in --page). Two actions: .ds-empty__actions around them.
+ *
+ * Options (docs/options.md), read here:
+ *   size      .ds-xs ... .ds-xl on it or any ancestor: 8px of disc and 8px of
+ *             block padding per step (--inline: the disc only); the type stays
+ *             that of its variant
+ *   density   any container: 2px of padding per step. So the compact theme
+ *             (density -2) gives 28px of block padding, 2.x's 32px with less
+ *             room, on purpose.
+ *   shape     the disc's radius times --ds-shape, never above half its size
+ *   tone      above. target-min: only its buttons read it.
+ *
+ * No motion of its own; the page picks it by what brought the empty state
+ * (docs/motion.md, "Data motion"):
+ *   replacing a skeleton           .ds-reveal
+ *   a filter, search or live update the rows leave through DS.motion.flip
+ *                                  (they fade out in place), then
+ *                                  DS.motion.enter(empty, 'fade'), no rise
+ *   the filter cleared             DS.motion.leave(empty) while the rows
+ *                                  enter through flip
+ *   the user deleted the last item DS.motion.enter(disc, 'pop') on the disc
+ *
+ * A confirmation (a request sent, a job done): .ds-empty--done with a
+ * pathLength="1" check in the disc:
+ *
+ *   <div class="ds-empty ds-empty--done" role="status">
+ *     <span class="ds-empty__disc" aria-hidden="true"><svg ...>(check, 24)</svg></span>
+ *     <p class="ds-empty__title">Request sent</p>
+ *     <p class="ds-empty__text">We will answer within a day.</p>
+ *
+ * Its own entrance: the disc fades in and pops up on the spring
+ * (ds-fade-in, ds-pop-in, --ds-dur-slow) after --ds-dur-base; a ring
+ * widens and fades once behind it (ds-ripple on ::after) after
+ * --ds-dur-slow; the check draws itself (ds-draw, --ds-dur-glide,
+ * --ds-ease-out). Keyframes, so they play when the element is inserted or
+ * shown (hidden removed), never again while a re-render keeps the node.
+ * Forced colours: the disc keeps an outline (its fill is dropped).
+ *
+ * Hooks: --ds-empty-disc-size (48px; --page 72px, --inline 32px): the disc's
+ * width and height (a confirmation page may want a larger one); the ring
+ * follows, the glyph keeps the size of its markup. --ds-empty-disc-bg and
+ * --ds-empty-disc-color (the tint), under any cause or tone;
+ * --ds-empty-padding (32px, the md base of the block padding; not --inline);
+ * --ds-empty-media-size (--inline: 32px).
+ *
+ * Progressive:
+ * - text-wrap (the text avoids a lone last word): without it the line
+ *   wraps as usual.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.empty {
+  .ds-empty {
+    --_disc: 48px;
+    --_media: 120px;
+    --_disc-bg: var(--ds-accent);
+    --_disc-ink: var(--ds-on-accent-icon);
+    display: grid;
+    justify-items: center;
+    gap: var(--ds-space-2);
+    max-width: 400px;
+    margin: 0 auto;
+    padding: calc(var(--ds-empty-padding, var(--ds-space-8)) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 2px) calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+    text-align: center;
+  }
+
+  .ds-empty__disc {
+    --_d: calc(var(--ds-empty-disc-size, var(--_disc)) + var(--ds-size-step, 0) * 8px);
+    display: grid;
+    place-items: center;
+    width: var(--_d);
+    height: var(--_d);
+    margin-bottom: var(--ds-space-2);
+    border-radius: min(calc(min(var(--ds-radius-action), calc(var(--_d) / 2)) * var(--ds-shape, 1)), calc(var(--_d) / 2));
+    background: var(--ds-empty-disc-bg, var(--_disc-bg));
+    color: var(--ds-empty-disc-color, var(--_disc-ink));
+  }
+
+  /* The slot for a picture, in place of the disc. */
+  .ds-empty__media {
+    display: grid;
+    place-items: center;
+    max-width: 100%;
+    height: var(--ds-empty-media-size, var(--_media));
+    margin-bottom: var(--ds-space-2);
+    color: var(--ds-text-2);
+  }
+
+  .ds-empty__media > :is(img, svg) {
+    display: block;
+    max-width: 100%;
+    height: 100%;
+  }
+
+  /* Why it is empty: the disc's colours. */
+  .ds-empty--no-data {
+    --_disc-bg: var(--ds-accent);
+    --_disc-ink: var(--ds-on-accent-icon);
+  }
+
+  .ds-empty--first-use,
+  .ds-empty--not-set-up {
+    --_disc-bg: var(--ds-primary-container);
+    --_disc-ink: var(--ds-on-primary-container);
+  }
+
+  .ds-empty--no-results,
+  .ds-empty--no-access {
+    --_disc-bg: var(--ds-surface-high);
+    --_disc-ink: var(--ds-text-2);
+  }
+
+  .ds-empty--offline {
+    --_disc-bg: var(--ds-warning-container);
+    --_disc-ink: var(--ds-on-warning-container);
+  }
+
+  .ds-empty--error {
+    --_disc-bg: var(--ds-error-container);
+    --_disc-ink: var(--ds-on-error-container);
+  }
+
+  /* A tone from the class on the state itself; it wins over a cause. */
+  .ds-empty:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --_disc-bg: var(--ds-tone-container);
+    --_disc-ink: var(--ds-on-tone-container);
+  }
+
+  .ds-empty__title {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-subtitle);
+  }
+
+  .ds-empty__text {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    text-wrap: pretty;
+  }
+
+  .ds-empty > .ds-btn,
+  .ds-empty__actions {
+    margin-top: var(--ds-space-3);
+  }
+
+  .ds-empty__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--ds-space-2);
+  }
+
+  /* Page: fills a page or a whole panel. */
+  .ds-empty--page {
+    --_disc: 72px;
+    --_media: 160px;
+    max-width: 480px;
+    padding-block: calc(var(--ds-empty-padding, var(--ds-space-12)) * 2 + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 2px);
+  }
+
+  .ds-empty--page > .ds-empty__title {
+    font: var(--ds-font-title);
+  }
+
+  /* Section: the default, named. */
+  .ds-empty--section {
+    max-width: 400px;
+  }
+
+  /* Inline: in a row, a list or a popup. Disc, words, then the action. */
+  .ds-empty--inline {
+    --_disc: 32px;
+    --_media: 32px;
+    /* The actions take at most half a narrow row and stack there, so the
+       words keep theirs (it stays this box's own width: a size container
+       would collapse in a table cell or a popup that fits its content). */
+    grid-template-columns: auto minmax(0, 1fr) fit-content(50%);
+    justify-items: start;
+    align-items: center;
+    column-gap: var(--ds-space-3);
+    row-gap: 0;
+    max-width: none;
+    padding: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px) 0;
+    text-align: start;
+  }
+
+  .ds-empty--inline > :is(.ds-empty__disc, .ds-empty__media) {
+    grid-row: 1 / span 2;
+    margin: 0;
+  }
+
+  /* Its width from the slot's height, not from the markup's. */
+  .ds-empty--inline > .ds-empty__media > :is(img, svg) {
+    width: auto;
+  }
+
+  .ds-empty--inline > :is(.ds-empty__title, .ds-empty__text) {
+    grid-column: 2;
+  }
+
+  .ds-empty--inline > .ds-empty__title {
+    font: var(--ds-font-label);
+  }
+
+  .ds-empty--inline > .ds-empty__text {
+    font: var(--ds-font-meta);
+  }
+
+  .ds-empty--inline > :is(.ds-btn, .ds-empty__actions) {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    justify-self: end;
+    justify-content: flex-end;
+    margin: 0;
+  }
+
+  /* The confirmation: the disc pops in, a ring widens behind it once, the
+     check draws itself. */
+  .ds-empty--done .ds-empty__disc {
+    position: relative;
+    /* The ring (z-index -1) widens behind the check, above the disc's fill. */
+    isolation: isolate;
+    animation:
+      ds-fade-in var(--ds-dur-slow) var(--ds-ease-in-out) var(--ds-dur-base) backwards,
+      ds-pop-in var(--ds-dur-slow) var(--ds-ease-spatial) var(--ds-dur-base) backwards;
+  }
+
+  .ds-empty--done .ds-empty__disc::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--ds-accent);
+    opacity: 0;
+    pointer-events: none;
+    animation: ds-ripple var(--ds-dur-slow) var(--ds-ease-out) var(--ds-dur-slow);
+  }
+
+  .ds-empty--done .ds-empty__disc [pathLength] {
+    stroke-dasharray: 1;
+  }
+
+  /* The check draws on its <svg>; the pathLength="1" path inherits the
+     stroke (Chromium can miss a change above a [pathLength] rule). */
+  .ds-empty--done .ds-empty__disc > svg {
+    animation: ds-draw var(--ds-dur-glide) var(--ds-ease-out) var(--ds-dur-slow) backwards;
+  }
+
+  @media (forced-colors: active) {
+    .ds-empty--done .ds-empty__disc {
+      outline: 1px solid CanvasText;
+    }
+  }
+}

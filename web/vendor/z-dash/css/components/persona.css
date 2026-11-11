@@ -1,0 +1,160 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Persona: a person (or an entity) in one block: the avatar, the name, a
+ * role and a status. In a list row, a table cell, a card head, a menu.
+ *
+ *   <div class="ds-persona">
+ *     <span class="ds-avatar ds-avatar--hue-3" aria-hidden="true">AL<span class="ds-presence-dot ds-presence-dot--online"></span></span>
+ *     <span class="ds-persona__text">
+ *       <span class="ds-persona__name">Ada Lovelace</span>
+ *       <span class="ds-persona__role">Field engineer</span>
+ *       <span class="ds-persona__status"><span class="ds-presence-label"><span class="ds-presence-dot ds-presence-dot--online"></span>Online</span></span>
+ *     </span>
+ *   </div>
+ *
+ *   <a class="ds-persona ds-pressable" href="/people/ada"> ... </a>       (opens the profile)
+ *
+ * The avatar is aria-hidden: the name beside it names the person once. A
+ * status shows as a word: in .ds-persona__status (a .ds-presence-label), or
+ * as the avatar's dot plus that word; never the dot alone.
+ *
+ * Parts:
+ *   .ds-persona__text    the column of lines, which may shrink (each line
+ *                        ends in an ellipsis rather than wrap)
+ *   .ds-persona__name    the name in the size's type role, --ds-text
+ *   .ds-persona__role    a role, a team or an address in --ds-font-meta,
+ *                        --ds-text-2
+ *   .ds-persona__status  a status line in the role's type and ink, usually
+ *                        a .ds-presence-label (presence.css)
+ *
+ * Variants:
+ *   (none)               the avatar at the start, the lines beside it,
+ *                        centred on it
+ *   --stacked            the avatar above, the lines centred under it: the
+ *                        head of a profile card or a people grid
+ *   --inline             one line: the name and, after it, the role
+ *   :is(a, button).ds-persona
+ *                        a persona that opens something: add .ds-pressable
+ *                        (the state layer, the focus ring and the ripple of
+ *                        utilities.css); it takes a little room of its own
+ *                        around its content (--ds-space-1 / --ds-space-2)
+ *                        and reaches --ds-target-min
+ *
+ * Options (docs/options.md), computed here:
+ *   size      .ds-xs ... .ds-xl on the persona or any ancestor: the avatar
+ *             follows (16 to 48px), the name takes the size's type role
+ *             (--ds-size-font), the gap 2px per step (8 to 16px)
+ *   shape     the avatar's and the pressable's own radius (theirs)
+ *   touch     an interactive persona is at least --ds-target-min high
+ *   density, tone: not read; a persona sits in a row that has its own
+ *             density, and a status says itself in words
+ *
+ * Hooks: --ds-persona-gap (--ds-space-3, the md base), --ds-persona-name-font
+ * (the size's role, --ds-font-label), --ds-persona-role-font
+ * (--ds-font-meta).
+ *
+ * Motion: none of its own; the pressable's state layer and focus snap.
+ *
+ * Forced colours: text in system colours by itself; the avatar and the
+ * presence dot keep their own forced looks.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.persona {
+  .ds-persona {
+    --_gap: calc(var(--ds-persona-gap, var(--ds-space-3)) + var(--ds-size-step, 0) * 2px);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--_gap);
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    color: var(--ds-text);
+    text-align: start;
+    text-decoration: none;
+    vertical-align: middle;
+  }
+
+  .ds-persona__text {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+  }
+
+  .ds-persona__name,
+  .ds-persona__role,
+  .ds-persona__status {
+    overflow: hidden;
+    min-inline-size: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-persona__name {
+    color: var(--ds-text);
+    font: var(--ds-persona-name-font, var(--ds-size-font, var(--ds-font-label)));
+  }
+
+  .ds-persona__role,
+  .ds-persona__status {
+    color: var(--ds-text-2);
+    font: var(--ds-persona-role-font, var(--ds-font-meta));
+  }
+
+  /* The status line holds the dot and its word on one line. */
+  .ds-persona__status {
+    display: flex;
+    align-items: center;
+  }
+
+  .ds-persona--stacked {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .ds-persona--stacked > .ds-persona__text {
+    align-items: center;
+    max-inline-size: 100%;
+  }
+
+  .ds-persona--stacked .ds-persona__status {
+    justify-content: center;
+  }
+
+  .ds-persona--inline > .ds-persona__text {
+    flex-direction: row;
+    align-items: baseline;
+    gap: var(--ds-space-2);
+  }
+
+  .ds-persona--inline .ds-persona__name {
+    flex-shrink: 0;
+    max-inline-size: 100%;
+  }
+
+  /* An interactive persona: room around its content for the state layer. */
+  :is(a, button).ds-persona {
+    box-sizing: border-box;
+    min-block-size: var(--ds-target-min, 0px);
+    margin: 0;
+    padding: var(--ds-space-1) var(--ds-space-2);
+    border: 0;
+    background: none;
+    font: inherit;
+  }
+
+  :is(a, button).ds-persona:is(:disabled, [aria-disabled="true"]) {
+    color: var(--ds-disabled-ink);
+  }
+
+  :is(a, button).ds-persona:is(:disabled, [aria-disabled="true"]) :is(.ds-persona__name, .ds-persona__role, .ds-persona__status) {
+    color: inherit;
+  }
+
+  @media (forced-colors: active) {
+    :is(a, button).ds-persona:is(:disabled, [aria-disabled="true"]) {
+      color: GrayText;
+    }
+  }
+}

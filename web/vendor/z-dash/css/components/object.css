@@ -1,0 +1,145 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Object page: one record on one page. The page head with its key facts,
+ * the section anchors (a bar of jump links) under it, and the sections as
+ * cards; an edit mode turns a section, or all of them, into its inline-edit
+ * form (object.js).
+ *
+ *   <div class="ds-object" data-ds-object>
+ *     <header class="ds-page-head ds-page-head--sticky" data-ds-page-head>
+ *       ... <h1 class="ds-page-head__title" id="obj-title" tabindex="-1">LAPTOP-0042</h1> ...
+ *       <div class="ds-page-head__actions">
+ *         <button class="ds-btn" type="button" data-ds-object-cancel hidden>Cancel</button>
+ *         <button class="ds-btn ds-btn--filled" type="button" data-ds-object-save hidden>Save all</button>
+ *         <button class="ds-btn ds-btn--filled" type="button" data-ds-object-edit>Edit</button>
+ *       </div>
+ *       <dl class="ds-page-head__details"> key facts </dl>
+ *     </header>
+ *     <nav class="ds-toc ds-toc--bar ds-toc--sticky" aria-label="Sections" data-ds-toc> links to the sections </nav>
+ *     <section class="ds-card ds-object__section" id="general" aria-labelledby="general-title">
+ *       <div class="ds-object__head">
+ *         <h2 class="ds-object__title" id="general-title">General</h2>
+ *         <button class="ds-btn ds-btn--text ds-sm ds-object__edit" type="button" data-ds-object-edit aria-describedby="general-title">Edit</button>
+ *       </div>
+ *       <div class="ds-object__view"> <dl class="ds-facts ds-facts--rows"> ... </dl> </div>
+ *       <form class="ds-form ds-object__form" hidden> fields ...
+ *         <div class="ds-form-actions"><button class="ds-btn" type="button" data-ds-object-cancel>Cancel</button><button class="ds-btn ds-btn--filled" type="submit">Save</button></div>
+ *       </form>
+ *     </section>
+ *   </div>
+ *
+ * Layout: a column of --ds-object-gap (--ds-space-5). The head and the bar
+ * stick one under the other: the module writes the head's height as
+ * --ds-object-head and the bar's as --ds-object-bar on the .ds-object (runtime
+ * properties: never set them), the bar sticks at --ds-object-head, and a
+ * section's scroll-margin-top keeps its title clear of both when a jump
+ * scrolls to it.
+ *
+ * Parts: .ds-object__section (a section, a .ds-card), .ds-object__head (its
+ * title row: the title, the section's edit action at its end),
+ * .ds-object__title (the title role), .ds-object__edit (the section's edit
+ * action, a small text button, gone while the section edits), .ds-object__view
+ * and .ds-object__form (the two faces; the module owns their hidden).
+ *
+ * State, written by the module: data-editing on a section that shows its
+ * form, and on the .ds-object while every section does (edit mode).
+ *
+ * Options: size, density, shape and tone reach the controls and the cards
+ * inside (each computes its own); the object page's own rhythm is layout.
+ *
+ * Hooks: --ds-object-gap (--ds-space-5: between the parts).
+ *
+ * Forced colours: the cards keep their edges; a section that edits shows its
+ * form (the state is the form, never a colour).
+ *
+ * Print: the bar of anchors and the edit actions stay off the paper (the
+ * head prints in place).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.object {
+  .ds-object {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--ds-object-gap, var(--ds-space-5));
+    align-content: start;
+    min-width: 0;
+  }
+
+  /* The head carries no bottom margin of its own here: the gap is the rhythm. */
+  .ds-object > .ds-page-head {
+    margin-bottom: 0;
+  }
+
+  /* A condensed head keeps the room of what folded (page.css). */
+  .ds-object > .ds-page-head[data-scrolled] {
+    margin-bottom: var(--ds-page-head-fold, 0px);
+  }
+
+  /* The bar of anchors sticks under the head (its height, written by the
+     module), on the same ground. */
+  .ds-object > .ds-toc--bar.ds-toc--sticky {
+    top: calc(var(--ds-page-head-top, 0px) + var(--ds-object-head, 0px));
+  }
+
+  /* A sticky head and the bar under it are one band: the bar takes the
+     head's hairline, so the head drops its own. */
+  .ds-object > .ds-page-head--sticky:has(+ .ds-toc--bar)::after {
+    display: none;
+  }
+
+  /* The bar follows the head with no gap, so nothing shows between them. */
+  .ds-object > .ds-page-head + .ds-toc--bar {
+    margin-top: calc(-1 * var(--ds-object-gap, var(--ds-space-5)));
+  }
+
+  .ds-object__section {
+    display: grid;
+    gap: var(--ds-space-3);
+    min-width: 0;
+    /* A jump lands with the title clear of the head and the bar. */
+    scroll-margin-top: calc(var(--ds-page-head-top, 0px) + var(--ds-object-head, 0px) + var(--ds-object-bar, 0px) + var(--ds-space-4));
+  }
+
+  .ds-object__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ds-space-3);
+    min-width: 0;
+  }
+
+  .ds-object__title {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-title);
+    overflow-wrap: anywhere;
+  }
+
+  /* The section's edit action: its text ends on the card's content edge
+     (it hangs its padding into the gutter, as in a card's link row). */
+  .ds-object__edit {
+    flex: none;
+    margin-inline-end: calc(-1 * var(--ds-space-3));
+  }
+
+  .ds-object__section[data-editing] .ds-object__edit,
+  .ds-object__view[hidden],
+  .ds-object__form[hidden] {
+    display: none;
+  }
+
+  .ds-object__view,
+  .ds-object__form {
+    min-width: 0;
+  }
+
+  @media print {
+    .ds-object > .ds-toc,
+    .ds-object__edit {
+      display: none;
+    }
+  }
+}

@@ -1,0 +1,164 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Options: size, density, shape, tone and touch, as classes on any element
+ * (docs/options.md). Each class sets only custom properties, which
+ * inherit, so a class on a container reaches every control inside it and a
+ * class nearer the control wins:
+ *
+ *   .ds-xs .ds-sm .ds-md .ds-lg .ds-xl
+ *       --ds-size-step -2 ... 2, and --ds-size-font, the type role of that
+ *       size (xs caption, sm chip, md label, lg and xl subtitle)
+ *   .ds-density-comfortable  -compact  -dense  -tight
+ *       --ds-density 0, -1, -2, -3
+ *   .ds-shape-square  -soft  -default  -round
+ *       --ds-shape 0, .5, 1, 1.5
+ *   .ds-tone-neutral  -primary  -info  -success  -warning  -error
+ *       --ds-tone (the full colour), --ds-on-tone (text on it),
+ *       --ds-tone-container (the tint), --ds-on-tone-container (text on it)
+ *   .ds-touch
+ *       --ds-target-min: var(--ds-touch-target); the target hooks of the
+ *       components not yet on this model stay in utilities.css
+ *
+ *   <section class="ds-density-dense">
+ *     <button class="ds-btn ds-sm" type="button">Refresh</button>
+ *   </section>
+ *
+ * The defaults (step 0, density 0, shape 1, target-min 0px) sit on
+ * .ds-theme in tokens.css ("Options"), as themeable values, never folded
+ * into a role: a role resolves its var() on .ds-theme, so a nested class
+ * would change nothing. A component computes at the use site instead, in
+ * its own rule (plans/3.0-conventions.md, section 3), for example
+ *
+ *   --_h: calc(var(--ds-btn-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+ *   block-size: max(var(--ds-target-min, 0px), var(--_h));
+ *
+ * so touch wins over size and density, and a hook a theme sets is the base
+ * the options apply to. Tones apply only where a component reads them
+ * (badge, status, tag, alert, empty state, chip, progress, spinner, the
+ * filled error button of a confirmation); a tone always comes with an icon
+ * or a word.
+ *
+ * Layer: ds.utilities. An option class is the page's explicit choice, so
+ * on one element it beats a component's own value of the same property (a
+ * toolbar that is dense by default, given .ds-density-comfortable), and
+ * the defaults in ds.tokens lose to a class on the theme element itself.
+ * In ds.base every component rule would beat it. Nothing else in
+ * ds.utilities sets these properties, and the option classes set nothing
+ * but them (tested), so the layer changes no other cascade. Unlayered
+ * themes still win on the elements they match (themes/compact.css on the
+ * theme root): put option classes on a region, not on .ds-theme, when a
+ * theme sets the same option.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.utilities {
+  /* ── Size ── */
+  .ds-xs {
+    --ds-size-step: -2;
+    --ds-size-font: var(--ds-font-caption);
+  }
+
+  .ds-sm {
+    --ds-size-step: -1;
+    --ds-size-font: var(--ds-font-chip);
+  }
+
+  .ds-md {
+    --ds-size-step: 0;
+    --ds-size-font: var(--ds-font-label);
+  }
+
+  .ds-lg {
+    --ds-size-step: 1;
+    --ds-size-font: var(--ds-font-subtitle);
+  }
+
+  .ds-xl {
+    --ds-size-step: 2;
+    --ds-size-font: var(--ds-font-subtitle);
+  }
+
+  /* ── Density ── */
+  .ds-density-comfortable {
+    --ds-density: 0;
+  }
+
+  .ds-density-compact {
+    --ds-density: -1;
+  }
+
+  .ds-density-dense {
+    --ds-density: -2;
+  }
+
+  .ds-density-tight {
+    --ds-density: -3;
+  }
+
+  /* ── Shape ── */
+  .ds-shape-square {
+    --ds-shape: 0;
+  }
+
+  .ds-shape-soft {
+    --ds-shape: .5;
+  }
+
+  .ds-shape-default {
+    --ds-shape: 1;
+  }
+
+  .ds-shape-round {
+    --ds-shape: 1.5;
+  }
+
+  /* ── Tone ── */
+  .ds-tone-neutral {
+    --ds-tone: var(--ds-text-2);
+    --ds-on-tone: var(--ds-surface);
+    --ds-tone-container: var(--ds-surface-high);
+    --ds-on-tone-container: var(--ds-text);
+  }
+
+  .ds-tone-primary {
+    --ds-tone: var(--ds-primary);
+    --ds-on-tone: var(--ds-on-primary);
+    --ds-tone-container: var(--ds-primary-container);
+    --ds-on-tone-container: var(--ds-on-primary-container);
+  }
+
+  .ds-tone-info {
+    --ds-tone: var(--ds-info);
+    --ds-on-tone: var(--ds-on-info);
+    --ds-tone-container: var(--ds-info-container);
+    --ds-on-tone-container: var(--ds-on-info-container);
+  }
+
+  .ds-tone-success {
+    --ds-tone: var(--ds-success);
+    --ds-on-tone: var(--ds-on-success);
+    --ds-tone-container: var(--ds-success-container);
+    --ds-on-tone-container: var(--ds-on-success-container);
+  }
+
+  .ds-tone-warning {
+    --ds-tone: var(--ds-warning);
+    --ds-on-tone: var(--ds-on-warning);
+    --ds-tone-container: var(--ds-warning-container);
+    --ds-on-tone-container: var(--ds-on-warning-container);
+  }
+
+  .ds-tone-error {
+    --ds-tone: var(--ds-error);
+    --ds-on-tone: var(--ds-on-error);
+    --ds-tone-container: var(--ds-error-container);
+    --ds-on-tone-container: var(--ds-on-error-container);
+  }
+
+  /* ── Touch: the smallest target, whatever the size and the density ── */
+  .ds-touch {
+    --ds-target-min: var(--ds-touch-target);
+  }
+}

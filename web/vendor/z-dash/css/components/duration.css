@@ -1,0 +1,37 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Duration input: a text field that reads a length of time as people write
+ * it ("1h 30m", "90 min", "1:30", PT1H30M) and writes it back in the
+ * locale's short form once it is left. The box is the text field's
+ * (.ds-input, form.css: its hooks, states and options); this sheet adds the
+ * figures. DS.duration (duration.js) makes it a spinbutton and keeps the
+ * value.
+ *
+ *   <span class="ds-field__label" id="timeout-label">Timeout</span>
+ *   <input class="ds-input ds-duration" type="text" aria-labelledby="timeout-label" data-ds-duration
+ *          data-ds-value="PT1H30M" [data-ds-duration-step="15m"] [data-ds-duration-min="1m"] [data-ds-duration-max="7d"]>
+ *   (rendered: role="spinbutton", aria-valuenow in seconds, aria-valuetext "1 hour, 30 minutes";
+ *    with data-ds-duration-name a hidden input with the ISO value after it)
+ *
+ * States: those of the text field. aria-invalid="true" (unreadable, or
+ * outside min and max; the script sets it once the field is left) draws the
+ * error border; the page shows the reason under the field, so the colour is
+ * never alone. disabled and readonly as on any input.
+ *
+ * Options: the text field's (size, density, shape, touch), computed in
+ * form.css; this sheet adds none. Tone: none.
+ *
+ * Motion: none of its own (the field's border and ring).
+ *
+ * Forced colours: the text field's.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.duration {
+  /* Figures of one width, so a stepped value does not jitter. */
+  .ds-duration {
+    font-variant-numeric: tabular-nums;
+  }
+}

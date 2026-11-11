@@ -73,7 +73,7 @@ func (a *assets) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	f, ok := a.files[p]
 	// The vendored design system keeps its tools and checksums out of the page.
-	if !ok || strings.HasPrefix(p, "/vendor/dashboard-style/tools/") {
+	if !ok || strings.HasPrefix(p, "/vendor/z-dash/tools/") {
 		http.NotFound(w, r)
 		return
 	}

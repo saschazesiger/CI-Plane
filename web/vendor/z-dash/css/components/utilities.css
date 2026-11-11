@@ -1,0 +1,400 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Utilities: screen-reader text and small text helpers, the press model
+ * for a project element, actions that show on demand, keys, dividers,
+ * icons that fill and touch targets. (Border-box sizing inside .ds-theme
+ * is core: src/core/global.css.)
+ *
+ *   .ds-sr       visually hidden, still read by screen readers
+ *   .ds-muted    quieter body text (tabular figures, no margin)
+ *   .ds-meta     a meta line: hints, "last saved ..." (tabular figures);
+ *                a leading 16px icon (> svg:first-child) sits on its line
+ *   .ds-stale    content on its way out, dimmed until it is replaced (set
+ *                aria-busy="true" on the container while it is stale)
+ *   .ds-num      right-aligned tabular figures (table cells)
+ *   .ds-center   centred text
+ *   .ds-nowrap   keeps a value and its unit together
+ *
+ * .ds-stale dims only after --ds-delay-loader, so an update that answers
+ * within 200ms never dims; taking it off is instant, so fresh values show
+ * at once (docs/motion.md, "Data motion").
+ *
+ * Every component scroller is positioned (a containing block), so
+ * .ds-sr text and absolute parts inside it never escape to the page.
+ *
+ * A pressable element of your own (a row, a card of a project component):
+ *
+ *   <div class="x-row ds-pressable" tabindex="0" role="button">...</div>
+ *   .ds-pressable--lg     the larger hover layer (--ds-state-hover-lg) of big surfaces
+ *   .ds-pressable--inset  the ring inside the edge (rests at 0, snaps to -width)
+ *
+ * The state layer (::before) in var(--ds-pressable-layer, currentColor):
+ * hover --ds-state-hover inside @media (hover: hover), the press
+ * --ds-state-pressed in --ds-dur-micro (also while js/ripple.js holds
+ * .ds-pressed), the focus layer --ds-state-focus at once with the ring,
+ * which rests at offset + width and snaps to the offset (--ds-dur-fast).
+ * It is a ripple host (DS.ripple.attach()); under .ds-ripples the press is
+ * the ripple's. No morph: pills are .ds-btn. Disabled, aria-disabled and
+ * aria-busy show no hover or press layer, no ripple and the not-allowed
+ * cursor (aria-disabled keeps the focus layer). Forced colours: no layer,
+ * the ring stays. Options: .ds-touch makes it at least --ds-touch-target
+ * high, .ds-shape-* multiplies its radius; size, density and tone are the
+ * project element's own.
+ *
+ * Actions that show on demand (a row's edit button):
+ *
+ *   <td><span class="ds-hover-actions"><button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm" type="button" aria-label="Edit">...</button></span></td>
+ *
+ * .ds-hover-actions fades in (opacity, --ds-dur-fast) while its nearest
+ * host (a tr, li, .ds-card, .ds-drawer__row or .ds-hover-host: a table in
+ * a card answers to its rows, not to the card) is hovered (devices that
+ * hover), holds the focus, is current or selected (a drawer row: its item
+ * is current) or carries data-ds-shown, or while the actions hold an open
+ * menu ([aria-expanded="true"]) or data-ds-shown; it fades out
+ * faster (--ds-dur-instant, 0.67). Always shown on touch screens
+ * (hover: none) and under .ds-touch. Opacity only: the buttons stay in the
+ * tab order and the accessibility tree, and hover moves nothing.
+ *
+ *   <kbd class="ds-kbd">Ctrl</kbd>    a key (the code font in a hairline box;
+ *                                     .ds-shape-* multiplies its radius)
+ *   <hr class="ds-divider">           a hairline (--inset: from --ds-space-4)
+ *   <span class="ds-divider ds-divider--vertical" role="separator" aria-orientation="vertical"></span>
+ *                                     upright (--inset: short of the row's edges)
+ *   <div class="ds-divider ds-divider--label" role="separator"><span>Today</span></div>
+ *                                     around a caption (--start, --end: near that end)
+ *   <div class="ds-divider ds-divider--vertical ds-divider--label" role="separator" aria-orientation="vertical"><span>or</span></div>
+ *                                     upright around a caption
+ *   The colour: --ds-divider-color (--ds-line).
+ *
+ * Icons that fill when on (js/icons.js, the fillable glyphs):
+ * .ds-icon--fillable on the <svg> fills its last element in currentColor
+ * while an ancestor is [aria-pressed="true"] or [aria-checked="true"]
+ * (fill on --ds-dur-fast); .ds-icon--filled fills it always.
+ *
+ * Touch screens: .ds-touch (on .ds-theme or any container) sets fields to the
+ * input type role; every component takes --ds-touch-target (48px) from
+ * --ds-target-min, which core/options.css sets on .ds-touch. Opt in
+ * (docs/theming.md, "Touch screens"); never automatic.
+ *
+ * Hooks: --ds-pressable-radius (--ds-radius-sm), --ds-pressable-layer
+ * (currentColor), --ds-kbd-border (--ds-line-2), --ds-kbd-bg (--ds-surface),
+ * --ds-divider-color (--ds-line).
+ *
+ * Progressive:
+ * - text-wrap (a paragraph of .ds-muted avoids a lone last word): without
+ *   it the text wraps as usual.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.utilities {
+  /* Placed at the top left of its positioned ancestor: left where it stands
+     (the end of a row that scrolls sideways) it would widen the nearest
+     positioned scroller, up to a sideways scroll of the page. */
+  .ds-sr {
+    position: absolute !important;
+    top: 0 !important;
+    inset-inline-start: 0 !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+  }
+
+  .ds-muted {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    /* Counts and times beside a title line up. */
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A paragraph of notes keeps the reading measure and ends without a lone
+     last word. */
+  p.ds-muted {
+    max-width: var(--ds-measure);
+    text-wrap: pretty;
+  }
+
+  .ds-meta {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A 16px glyph leading the line fills the meta role's 16px line from
+     its top, so it centres on the text without growing the line (on the
+     baseline it stood 4px high and the line grew), and keeps the gap of
+     .ds-kv-list__icon to the text. */
+  .ds-meta > svg:first-child {
+    display: inline-block;
+    margin-inline-end: var(--ds-space-1);
+    vertical-align: top;
+  }
+
+  /* Content on its way out (a filter applied, a test running again): it
+     stays in place, dimmed, until the new one replaces it in one step, so
+     nothing collapses and jumps back meanwhile. It dims after the loader
+     delay (a fast answer never dims); the rest state has no transition, so
+     removing the class shows the fresh values at once. */
+  .ds-stale {
+    opacity: var(--ds-state-stale);
+    transition: opacity var(--ds-dur-base) var(--ds-ease-in-out) var(--ds-delay-loader);
+  }
+
+  .ds-num {
+    text-align: end !important;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-center {
+    text-align: center !important;
+  }
+
+  .ds-nowrap {
+    white-space: nowrap;
+  }
+
+  /*
+   * A pressable element of the project's own: the state layer of the
+   * system, the focus snap and the ripple; never a morph.
+   */
+  .ds-pressable {
+    position: relative;
+    /* The layer (z-index -1) stays above the fill, below the content. */
+    isolation: isolate;
+    min-height: var(--ds-target-min, 0px);
+    border-radius: calc(var(--ds-pressable-radius, var(--ds-radius-sm)) * var(--ds-shape, 1));
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-pressable::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--ds-pressable-layer, currentColor);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-pressable:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+
+    .ds-pressable--lg:hover::before {
+      opacity: var(--ds-state-hover-lg);
+    }
+  }
+
+  /* Keyboard focus: the layer appears with the ring and fades out on blur. */
+  .ds-pressable:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  .ds-pressable:active::before,
+  .ds-pressable.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-pressable:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  /* An inset ring (a row in a list that clips): it rests on the edge and snaps inward. */
+  .ds-pressable--inset {
+    outline-offset: 0;
+  }
+
+  .ds-pressable--inset:focus-visible {
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  /* Blocked: no hover or press layer and no ripple (js/ripple.js); an
+     aria-disabled element stays focusable and keeps its focus layer. */
+  .ds-pressable:is(:disabled, [aria-disabled="true"], [aria-busy="true"]) {
+    cursor: not-allowed;
+  }
+
+  @media (hover: hover) {
+    .ds-pressable:is(:disabled, [aria-disabled="true"], [aria-busy="true"]):hover::before {
+      opacity: 0;
+    }
+  }
+
+  .ds-pressable:is(:disabled, [aria-disabled="true"], [aria-busy="true"]):is(:active, .ds-pressed)::before {
+    opacity: 0;
+  }
+
+  /*
+   * Actions that show on demand: hidden by opacity only (still in the tab
+   * order and the tree), shown with their nearest host's hover, focus,
+   * current or selected state, or their own open menu; they leave faster
+   * than they come.
+   */
+  .ds-hover-actions {
+    opacity: 0;
+    transition: opacity var(--ds-dur-instant) var(--ds-ease-in-out);
+  }
+
+  /* Only the nearest host reveals its actions: a table in a card or a list
+     in a list item shows the pointed row's actions, not every row's. A
+     hovered host's ancestors are hovered too, so "no host around the
+     actions is left unhovered" means the nearest one is hovered. The hosts
+     of other components (a card, a drawer row, a selected table row) reveal
+     them with the same rules in their own stylesheets, which come later
+     (card.css, shell.css, table.css); every rule keeps the whole list of
+     hosts in its exclusion. */
+  @media (hover: hover) {
+    :is(tr, li, .ds-hover-host):hover .ds-hover-actions:not(:is(tr, li, .ds-card, .ds-drawer__row, .ds-hover-host):not(:hover) .ds-hover-actions) {
+      opacity: 1;
+      transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+    }
+  }
+
+  /* The same for the states: a host in one of them shows its actions
+     unless a host nearer the actions is in none of them. An open menu
+     counts where it is, in the actions (no :has() on every row and card). */
+  :is(tr, li, .ds-hover-host):is(:focus-within, [aria-current]:not([aria-current="false"]), [aria-selected="true"], [data-ds-shown]) .ds-hover-actions:not(:is(tr, li, .ds-card, .ds-drawer__row, .ds-hover-host):is(:focus-within, [aria-current]:not([aria-current="false"]), [aria-selected="true"], .ds-table__row--selected, [data-ds-shown]) :is(tr, li, .ds-card, .ds-drawer__row, .ds-hover-host):not(:focus-within, [aria-current]:not([aria-current="false"]), [aria-selected="true"], .ds-table__row--selected, [data-ds-shown]) .ds-hover-actions),
+  .ds-hover-actions:is(:focus-within, [data-ds-shown], [aria-expanded="true"], :has([aria-expanded="true"])) {
+    opacity: 1;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* No hover to reveal them: always there. */
+  @media (hover: none) {
+    .ds-hover-actions {
+      opacity: 1;
+    }
+  }
+
+  .ds-touch .ds-hover-actions {
+    opacity: 1;
+  }
+
+  /* A key on the keyboard: the code font in a hairline box. */
+  .ds-kbd {
+    display: inline-grid;
+    place-items: center;
+    min-width: var(--ds-space-5);
+    padding: 0 var(--ds-space-1);
+    border: 1px solid var(--ds-kbd-border, var(--ds-line-2));
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-kbd-bg, var(--ds-surface));
+    color: var(--ds-text-2);
+    font: var(--ds-font-code);
+  }
+
+  /* Dividers: a hairline across, inset, upright or around a caption. Borders,
+     so they survive forced colours. */
+  .ds-divider {
+    display: block;
+    height: 0;
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--ds-divider-color, var(--ds-line));
+  }
+
+  .ds-divider--inset {
+    margin-inline-start: var(--ds-space-4);
+  }
+
+  .ds-divider--vertical {
+    display: inline-block;
+    align-self: stretch;
+    width: 0;
+    height: auto;
+    min-height: 1em;
+    border-top: 0;
+    border-inline-start: 1px solid var(--ds-divider-color, var(--ds-line));
+  }
+
+  /* Upright and inset: it stops short of the row's top and bottom edges. */
+  .ds-divider--vertical.ds-divider--inset {
+    margin-inline-start: 0;
+    margin-block: var(--ds-space-2);
+  }
+
+  .ds-divider--label {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-3);
+    height: auto;
+    border-top: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-divider--label::before,
+  .ds-divider--label::after {
+    content: '';
+    flex: 1 1 0;
+    border-top: 1px solid var(--ds-divider-color, var(--ds-line));
+  }
+
+  /* The caption near one end: a short lead hairline on its side. */
+  .ds-divider--label.ds-divider--start::before,
+  .ds-divider--label.ds-divider--end::after {
+    flex: 0 0 var(--ds-space-4);
+  }
+
+  /* Upright around a caption ("or" between two columns): the hairlines
+     above and below it. */
+  .ds-divider--vertical.ds-divider--label {
+    flex-direction: column;
+    width: auto;
+    border-inline-start: 0;
+  }
+
+  .ds-divider--vertical.ds-divider--label::before,
+  .ds-divider--vertical.ds-divider--label::after {
+    min-height: var(--ds-space-2);
+    border-top: 0;
+    border-inline-start: 1px solid var(--ds-divider-color, var(--ds-line));
+    box-sizing: border-box;
+  }
+
+  /* Icons that fill when on: the last element of a fillable glyph is a closed outline. */
+  .ds-icon--fillable > :last-child {
+    fill: transparent;
+    transition: fill var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  :is([aria-pressed="true"], [aria-checked="true"]) .ds-icon--fillable > :last-child,
+  .ds-icon--filled > :last-child {
+    fill: currentColor;
+  }
+
+  /*
+   * Touch screens (opt-in, docs/theming.md): every target at least
+   * --ds-touch-target, fields at the input role (no zoom on focus in iOS).
+   * A component takes it from --ds-target-min (core/options.css), as a
+   * minimum over its computed height: setting its base hook here would add
+   * the size step on top.
+   */
+  .ds-touch {
+    --ds-input-font: var(--ds-font-input);
+  }
+
+  @media (forced-colors: active) {
+    .ds-pressable::before {
+      display: none;
+    }
+  }
+}

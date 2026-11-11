@@ -1,5 +1,5 @@
 /*
- * Small helpers every view uses: markup builders on Dashboard-Style
+ * Small helpers every view uses: markup builders on Z-Dash
  * (status chips, page heads, buttons with busy faces, copy buttons, field
  * errors), formatting of times and sizes, and the snackbar.
  */
@@ -62,16 +62,20 @@ export const PRIORITY_HINT = 'Jobs are never limited in CPU. The priority decide
 
 /* ── Markup ────────────────────────────────────────────────────────── */
 
+/* The kinds of a status chip as Z-Dash tones; any other kind is a tone already. */
+const TONES = { ok: 'success' };
+
 /** A status chip: always an icon (or the spinner) and a word. */
 export function chip(kind, label, glyph) {
   const mark = kind === 'running' ? '<span class="ds-spinner ds-status__spinner" aria-hidden="true"></span>' : icon(glyph || 'info', 16);
-  return `<span class="ds-status${kind && kind !== 'neutral' ? ` ds-status--${kind}` : ''}">${mark}<span>${esc(label)}</span></span>`;
+  const tone = kind === 'running' ? ' ds-status--running' : kind && kind !== 'neutral' ? ` ds-tone-${TONES[kind] || kind}` : '';
+  return `<span class="ds-status${tone}">${mark}<span>${esc(label)}</span></span>`;
 }
 
 /** The page head: the way back, the title (it takes focus after navigation), the lead and the actions. */
 export function head(title, lead, actions = '', back = null) {
   return '<header class="ds-page-head">' +
-    (back ? `<a class="ds-btn ds-btn--text ds-btn--sm ds-page-head__back" href="${back.href}">${icon('arrowLeft', 18)}<span class="ds-sr">Back to </span>${esc(back.label)}</a>` : '') +
+    (back ? `<a class="ds-btn ds-btn--text ds-sm ds-page-head__back" href="${back.href}">${icon('arrowLeft', 18)}<span class="ds-sr">Back to </span>${esc(back.label)}</a>` : '') +
     `<div class="ds-page-head__row"><div class="ds-page-head__text"><h1 class="ds-page-head__title" tabindex="-1">${esc(title)}</h1>` +
     `<p class="ds-page-head__lead">${lead}</p></div>${actions ? `<div class="ds-page-head__actions">${actions}</div>` : ''}</div></header>`;
 }
@@ -81,7 +85,7 @@ export function busyButton(className, label, busyLabel, doneLabel, attributes = 
   const type = /\btype=/.test(attributes) ? '' : 'type="button" ';
   return `<button class="${className}" ${type}${attributes}><span class="ds-btn__faces">` +
     `<span class="ds-btn__face">${glyph ? icon(glyph, 16) : ''}${esc(label)}</span>` +
-    `<span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--sm"></span>${esc(busyLabel)}</span>` +
+    `<span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--ink ds-sm"></span>${esc(busyLabel)}</span>` +
     `<span class="ds-btn__face ds-btn__face--done" aria-hidden="true">${icon('check', 16)}${esc(doneLabel)}</span></span></button>`;
 }
 
@@ -141,7 +145,7 @@ export function switchHtml({ attrs = '', label, checked, hint = '', srLabel = fa
 export function alertHtml(kind, title, text, actions = '', attrs = '') {
   const glyph = { error: 'alertCircle', warning: 'alert', success: 'checkCircle' }[kind] || 'info';
   const role = kind === 'error' ? ' role="alert"' : '';
-  return `<div class="ds-alert${kind ? ` ds-alert--${kind}` : ''}"${role} ${attrs}>${icon(glyph, 20)}<div class="ds-alert__text">` +
+  return `<div class="ds-alert${kind ? ` ds-tone-${kind}` : ''}"${role} ${attrs}>${icon(glyph, 20)}<div class="ds-alert__text">` +
     (title ? `<p class="ds-alert__title">${esc(title)}</p>` : '') + (text ? `<p>${text}</p>` : '') + '</div>' +
     (actions ? `<div class="ds-alert__actions">${actions}</div>` : '') + '</div>';
 }
@@ -155,13 +159,13 @@ export function taskSteps(task) {
     let status = 'done';
     if (last && task.state === 'running') status = 'running';
     if (last && task.state === 'failed') status = 'failed';
-    const mark = status === 'running' ? '<span class="ds-spinner ds-spinner--sm"></span>' : icon(status === 'failed' ? 'alertCircle' : 'checkCircle', 20);
+    const mark = status === 'running' ? '<span class="ds-spinner ds-spinner--ink ds-sm"></span>' : icon(status === 'failed' ? 'alertCircle' : 'checkCircle', 20);
     const word = { done: 'done', running: 'running', failed: 'failed' }[status];
     return `<li class="ds-tasks__item" data-status="${status}" data-ds-key="s${index}"><span class="ds-tasks__mark">${mark}</span>` +
       `<span class="ds-tasks__text">${esc(step.text)}<span class="ds-sr">: ${word}</span></span></li>`;
   });
   if (!steps.length && task.state === 'running') {
-    items.push('<li class="ds-tasks__item" data-status="running" data-ds-key="s0"><span class="ds-tasks__mark"><span class="ds-spinner ds-spinner--sm"></span></span><span class="ds-tasks__text">Starting<span class="ds-sr">: running</span></span></li>');
+    items.push('<li class="ds-tasks__item" data-status="running" data-ds-key="s0"><span class="ds-tasks__mark"><span class="ds-spinner ds-spinner--ink ds-sm"></span></span><span class="ds-tasks__text">Starting<span class="ds-sr">: running</span></span></li>');
   }
   const count = task.state === 'running' ? `Step ${Math.max(steps.length, 1)}` : task.state === 'done' ? 'Done' : 'Stopped';
   return `<div class="ds-tasks__head"><h3 class="ds-card__title">${esc(task.title)}</h3><p class="ds-meta">${count}</p></div>` +
@@ -270,6 +274,6 @@ export const share = (part, whole) => (whole > 0 ? Math.max(0, Math.min(1, part 
 
 /** A meter with its tone: warning from 85 %, error from 95 %. */
 export function meter(value, label, text) {
-  const tone = value >= 0.95 ? ' ds-meter--error' : value >= 0.85 ? ' ds-meter--warning' : '';
+  const tone = value >= 0.95 ? ' ds-tone-error' : value >= 0.85 ? ' ds-tone-warning' : '';
   return `<span class="ds-meter${tone}" role="meter" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(value * 100)}" aria-valuetext="${esc(text)}" style="--ds-share: ${value.toFixed(3)}"></span>`;
 }

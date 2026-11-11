@@ -1,0 +1,216 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Pagination: moving through a table (or a list) whose records come in
+ * pages. All its buttons are .ds-btn, so they ripple, morph, guard and follow
+ * the options as every action does; this file only places them.
+ *
+ * The default, as in Material data tables: rows per page, the range shown,
+ * and buttons to the first, previous, next and last page.
+ *
+ *   <nav class="ds-pagination" aria-label="Pages of devices">
+ *     <div class="ds-pagination__size">
+ *       <label class="ds-pagination__label" for="pp">Rows per page</label>
+ *       <select class="ds-input ds-input--filled" id="pp"><option>25</option><option selected>50</option><option>100</option></select>
+ *     </div>
+ *     <p class="ds-pagination__range" aria-live="polite">1–50 of 1,234</p>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="First page" aria-disabled="true" data-tip="First page">(chevronFirst 20)</button>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Previous page" aria-disabled="true" data-tip="Previous page">(chevronLeft 20)</button>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Next page" data-tip="Next page">(chevronRight 20)</button>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Last page" data-tip="Last page">(chevronLast 20)</button>
+ *   </nav>
+ *
+ * Variants (the parts combine; leave out what the variant has no use for):
+ *   .ds-pagination--simple    previous and next only, the range ("Page 3 of
+ *                             12") beside them: leave out first and last
+ *   .ds-pagination--numbered  the range at the start, numbered pages at the
+ *                             end, between previous and next:
+ *     <ol class="ds-pagination__pages">
+ *       <li><button class="ds-btn ds-btn--quiet ds-pagination__page" type="button" aria-label="Page 1">1</button></li>
+ *       <li class="ds-pagination__gap" aria-hidden="true">…</li>
+ *       <li><button class="ds-btn ds-btn--quiet ds-pagination__page" type="button" aria-label="Page 7" aria-current="page">7</button></li>
+ *     </ol>
+ *   .ds-pagination--cursor    previous and next with their labels at the two
+ *                             ends, no total (keyset paging: "Newer", "Older")
+ *
+ * Parts: .ds-pagination__size (rows per page), .ds-pagination__jump (a number
+ * field, "Go to page"), .ds-pagination__range (the range or the page, meta
+ * text with tabular figures), .ds-pagination__pages, .ds-pagination__page,
+ * .ds-pagination__gap, .ds-pagination__label.
+ *
+ * Options (src/core/options.css, docs/options.md), on the bar or any ancestor:
+ * size, density, shape and touch reach its .ds-btn and .ds-input controls,
+ * which compute them; a page button is at least as wide as high and its gap
+ * lines up (the same formula as the button's height). Density also takes 2px
+ * per step of the bar's padding under a table. The range and the labels keep
+ * --ds-font-meta. No tone: a page shows no meaning of its own.
+ *
+ * End-aligned. At the end of a table card (after its .ds-table-wrap) it
+ * runs to the card's edges like the table, with a hairline above. When the
+ * content area is at most 600px wide the size and jump fields drop and the
+ * range leads; a numbered bar gives the range its own line and keeps only
+ * the current page between previous and next. A button that leads nowhere (first and previous on the first
+ * page) is aria-disabled, not disabled: focus stays on it, the click is
+ * blocked, and its tooltip still names it. The page holds the page number; a
+ * page change dims the rows (.ds-stale with the loading bar), then renders
+ * them through DS.motion.flip() and DS.dom.morphHtml() (docs/motion.md,
+ * "Data motion").
+ *
+ * Hooks: --ds-pagination-current-bg (--ds-accent) and
+ * --ds-pagination-current-color (--ds-on-accent), the current page;
+ * --ds-pagination-jump-width (72px), the jump field.
+ *
+ * Forced colours: the current page is a choice in a set, SelectedItem and
+ * SelectedItemText. Print: hidden.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.pagination {
+  .ds-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ds-space-1);
+    color: var(--ds-text-2);
+  }
+
+  /* After the table of a card: right under it (no card rhythm), with a
+     hairline, out to the card's edges like the table. */
+  .ds-card > .ds-table-wrap + .ds-pagination {
+    margin-top: 0;
+    margin-inline: calc(-1 * var(--ds-card-pad));
+    padding-block-start: max(0px, calc(var(--ds-space-2) + var(--ds-density, 0) * 2px));
+    padding-inline: var(--ds-card-pad);
+    border-top: 1px solid var(--ds-line);
+  }
+
+  /* A grid, so the field keeps its own room: it fills its column, as a field
+     does everywhere (form.css), and the column is as wide as the select's
+     options or the jump width. */
+  .ds-pagination__size,
+  .ds-pagination__jump {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin: 0;
+    margin-inline-end: var(--ds-space-4);
+  }
+
+  .ds-pagination__jump {
+    grid-template-columns: auto var(--ds-pagination-jump-width, 72px);
+  }
+
+  .ds-pagination__label {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    white-space: nowrap;
+  }
+
+  .ds-pagination__range {
+    margin: 0;
+    margin-inline-end: var(--ds-space-4);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* Simple: the page sits right next to its two buttons. */
+  .ds-pagination--simple .ds-pagination__range {
+    margin-inline-end: var(--ds-space-2);
+  }
+
+  /* Numbered: the range leads, the pages go to the end. */
+  .ds-pagination--numbered .ds-pagination__range {
+    margin-inline-end: auto;
+  }
+
+  /* Cursor: previous and next at the two ends, whatever stands between. */
+  .ds-pagination--cursor {
+    justify-content: space-between;
+  }
+
+  .ds-pagination--cursor .ds-pagination__range {
+    margin-inline-end: 0;
+  }
+
+  .ds-pagination__pages {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A page button is at least a disc: as wide as the button is high (the
+     button's own height, which the options compute). Its figures stay
+     tabular and a long one still has room. */
+  .ds-pagination__page {
+    min-width: max(var(--ds-target-min, 0px), calc(var(--ds-btn-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    padding-inline: var(--ds-space-1);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The current page: filled, so it does not rest on the colour, and
+     aria-current says it. */
+  .ds-pagination__page[aria-current="page"] {
+    --ds-btn-border: var(--ds-pagination-current-bg, var(--ds-accent));
+    --ds-btn-bg: var(--ds-pagination-current-bg, var(--ds-accent));
+    --ds-btn-color: var(--ds-pagination-current-color, var(--ds-on-accent));
+    --ds-btn-hover-color: var(--ds-pagination-current-color, var(--ds-on-accent));
+  }
+
+  /* The room of a page that is left out. */
+  .ds-pagination__gap {
+    display: grid;
+    place-items: center;
+    min-width: max(var(--ds-target-min, 0px), calc(var(--ds-btn-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    font: var(--ds-font-meta);
+    list-style: none;
+  }
+
+  @container ds-content (max-width: 600px) {
+    .ds-pagination__size,
+    .ds-pagination__jump {
+      display: none;
+    }
+
+    .ds-pagination__range,
+    .ds-pagination--simple .ds-pagination__range {
+      margin-inline-end: auto;
+    }
+
+    /* Numbered: the range on a line of its own, and only the current page
+       between previous and next, so the three never break apart. */
+    .ds-pagination--numbered .ds-pagination__range {
+      flex-basis: 100%;
+    }
+
+    .ds-pagination--numbered .ds-pagination__pages li:not(:has([aria-current="page"])) {
+      display: none;
+    }
+  }
+
+  /* A choice in a set: one model with the other selected items. */
+  @media (forced-colors: active) {
+    .ds-pagination__page[aria-current="page"] {
+      border-color: SelectedItem;
+      background: SelectedItem;
+      color: SelectedItemText;
+    }
+
+    .ds-pagination__page[aria-current="page"]:focus-visible {
+      outline-color: CanvasText;
+    }
+  }
+
+  @media print {
+    .ds-pagination {
+      display: none;
+    }
+  }
+}

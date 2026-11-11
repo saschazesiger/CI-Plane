@@ -1,0 +1,397 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Command palette: one search field over every command of an app, in a
+ * modal dialog near the top of the window (the box stays where it is while
+ * the results change). The WAI-ARIA combobox pattern: the field keeps
+ * focus, the active option (data-active, aria-selected) gets the hover
+ * layer, never colour alone; the matched letters are marked in the label's
+ * weight and the primary ink.
+ *
+ *   <dialog class="ds-dialog ds-command" id="palette" data-ds-command aria-label="Command palette">
+ *     <div class="ds-dialog__backdrop" data-ds-close></div>
+ *     <div class="ds-dialog__box">
+ *       <div class="ds-command__search">
+ *         <svg ...>(search 20)</svg>
+ *         [<button class="ds-command__back" type="button" tabindex="-1" aria-label="Back">(chevronLeft) <span>Devices</span></button>]  command.js
+ *         <input class="ds-command__input" type="text" role="combobox" aria-label="Search commands" placeholder="Search or run a command">
+ *         <kbd class="ds-kbd">Esc</kbd>
+ *         <button class="ds-btn ds-btn--text ds-command__close" type="button" data-ds-close>Cancel</button>   phones only
+ *       </div>
+ *       <div class="ds-command__list" role="listbox" aria-label="Commands">
+ *         <div class="ds-command__group" role="group" aria-labelledby="g1">
+ *           <div class="ds-command__heading" id="g1" role="presentation">Devices</div>
+ *           <div class="ds-command__item" role="option" id="o1" aria-selected="true" data-active aria-keyshortcuts="Control+Shift+A">
+ *             <svg class="ds-command__icon" ...>(plus 20)</svg>
+ *             <span class="ds-command__content">
+ *               <span class="ds-command__label"><mark class="ds-command__match">Add</mark> a device</span>
+ *               <span class="ds-command__description">Register a laptop, tablet or phone</span></span>
+ *             <span class="ds-command__shortcut" aria-hidden="true"><kbd class="ds-kbd">Ctrl</kbd><kbd class="ds-kbd">Shift</kbd><kbd class="ds-kbd">A</kbd></span>
+ *             [<svg class="ds-command__chevron" ...>(chevronRight)</svg>]   a command that opens a page
+ *       <p class="ds-command__empty">No results for "x"</p>                      command.js, hidden while there are results
+ *       <div class="ds-command__foot"><span>(hints)</span><p class="ds-command__status" role="status">12 results</p></div>
+ *
+ * command.js renders the groups and options from data (or from the
+ * options of the markup), writes the status line (a .ds-spinner while
+ * providers answer) and the empty message, and makes the back button of a
+ * page. aria-disabled="true" on an option: the disabled ink, no layer.
+ *
+ * Options (docs/options.md), computed here:
+ *   size      .ds-xs ... .ds-xl on the dialog or any ancestor: the search
+ *             row and an option 8px per step, the option's type
+ *             (--ds-size-font)
+ *   density   any container: the search row and an option 4px per step, the
+ *             list's padding 2px per step; type stays
+ *   shape     the box's radius (the dialog's), an option's radius times
+ *             --ds-shape
+ *   touch     .ds-touch: an option at least --ds-target-min tall
+ *   tone      none: a palette states no status
+ *
+ * Phones (600px and below): the box fills the window from the top, the
+ * list takes the rest of the height.
+ *
+ * Hooks: --ds-command-width (640px), --ds-command-top (the room above the
+ * box, min(12vh, 96px)), --ds-command-height (the box's most height,
+ * 480px), --ds-command-search-height (56px) and --ds-command-item-height
+ * (48px), the md comfortable bases, --ds-command-item-radius
+ * (--ds-radius-sm).
+ *
+ * Forced colours: the active option takes a Highlight ring, a match its
+ * underline (the colour is gone), blocked options GrayText.
+ *
+ * Motion: the dialog's (DS.overlay); the active layer fades in over
+ * --ds-dur-micro and goes at once, so a held arrow key leaves no trail.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar on the
+ *   list): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.command {
+  /* Near the top, not centred: the box keeps its place while the list
+     grows and shrinks under the field. */
+  .ds-command {
+    place-items: start center;
+    padding-top: var(--ds-command-top, min(12vh, 96px));
+  }
+
+  .ds-command .ds-dialog__box {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: min(var(--ds-command-width, 640px), 100%);
+    max-height: min(var(--ds-command-height, 480px), 100%);
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .ds-command__search {
+    --_h: calc(var(--ds-command-search-height, 56px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-3);
+    min-height: max(var(--ds-target-min, 0px), var(--_h));
+    padding-inline: var(--ds-space-4);
+    border-bottom: 1px solid var(--ds-line);
+    color: var(--ds-text-2);
+    transition: border-color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-command__search > svg {
+    flex: none;
+  }
+
+  /* The field has no box of its own: the search row is its box. Its type
+     is the input role (16px on phones, so they never zoom). */
+  .ds-command__input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ds-text);
+    font: var(--ds-font-input);
+    outline: none;
+  }
+
+  .ds-command__input::placeholder {
+    color: var(--ds-text-2);
+    opacity: 1;
+  }
+
+  /* The field has no ring of its own (it would draw inside the box's
+     edge): while it has focus, the row's line under it turns primary, as
+     a field's border does. */
+  .ds-command__search:has(> .ds-command__input:focus) {
+    border-bottom-color: var(--ds-primary);
+  }
+
+  /* A page: its label and the way back, before the field. */
+  .ds-command__back {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-1);
+    max-width: 40%;
+    min-height: 28px;
+    margin: 0;
+    padding-block: 0;
+    padding-inline: var(--ds-space-1) var(--ds-space-2);
+    border: 0;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-surface-low);
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+    cursor: pointer;
+  }
+
+  .ds-command__back[hidden] {
+    display: none;
+  }
+
+  .ds-command__back > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-command__search > .ds-kbd {
+    flex: none;
+  }
+
+  /* The way out without an Escape key: on phones only. */
+  .ds-command__close {
+    display: none;
+    flex: none;
+    margin-inline-end: calc(-1 * var(--ds-space-2));
+  }
+
+  .ds-command__list {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding-block: var(--ds-space-2);
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+  }
+
+  .ds-command__list[hidden] {
+    display: none;
+  }
+
+  .ds-command__group + .ds-command__group,
+  .ds-command__item + .ds-command__group {
+    margin-top: var(--ds-space-2);
+  }
+
+  .ds-command__heading {
+    padding: var(--ds-space-2) var(--ds-space-3) var(--ds-space-1);
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    cursor: default;
+  }
+
+  .ds-command__item {
+    --_h: calc(var(--ds-command-item-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-3);
+    min-height: max(var(--ds-target-min, 0px), var(--_h));
+    padding: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px) var(--ds-space-3);
+    border-radius: calc(var(--ds-command-item-radius, var(--ds-radius-sm)) * var(--ds-shape, 1));
+    color: var(--ds-text);
+    cursor: pointer;
+  }
+
+  /* The state layer of the active option (keyboard and pointer share
+     data-active, so there is no separate hover layer): in over
+     --ds-dur-micro, gone at once. */
+  .ds-command__item::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--ds-text);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-micro) var(--ds-ease-in-out);
+  }
+
+  .ds-command__item:not([data-active])::before {
+    transition-duration: 0ms;
+  }
+
+  .ds-command__item[data-active]::before {
+    opacity: var(--ds-state-hover);
+  }
+
+  .ds-command__item[aria-disabled="true"] {
+    color: var(--ds-disabled-ink, var(--ds-text-2));
+    cursor: default;
+  }
+
+  .ds-command__item[aria-disabled="true"]::before {
+    opacity: 0;
+  }
+
+  .ds-command__icon,
+  .ds-command__chevron {
+    position: relative;
+    flex: none;
+    color: var(--ds-text-2);
+  }
+
+  .ds-command__content {
+    position: relative;
+    display: grid;
+    flex: 1;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .ds-command__label {
+    overflow: hidden;
+    font: var(--ds-size-font, var(--ds-font-body));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The matched letters: the label's weight and the primary ink. */
+  .ds-command__match {
+    background: transparent;
+    color: var(--ds-primary);
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-command__item[aria-disabled="true"] .ds-command__match {
+    color: inherit;
+  }
+
+  .ds-command__description {
+    overflow: hidden;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-command__shortcut {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    gap: var(--ds-space-1);
+    color: var(--ds-text-2);
+  }
+
+  .ds-command__empty {
+    margin: 0;
+    padding: var(--ds-space-8) var(--ds-space-4);
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    text-align: center;
+  }
+
+  .ds-command__empty[hidden] {
+    display: none;
+  }
+
+  .ds-command__foot {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ds-space-2) var(--ds-space-4);
+    padding: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px) var(--ds-space-4);
+    border-top: 1px solid var(--ds-line);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-command__foot > span {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-1) var(--ds-space-3);
+  }
+
+  .ds-command__status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin: 0;
+    margin-inline-start: auto;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  /* A status line of its own (no foot): only while it says something. */
+  .ds-dialog__box > .ds-command__status:has(> span:empty):not(:has(.ds-spinner)) {
+    display: none;
+  }
+
+  .ds-dialog__box > .ds-command__status {
+    padding: var(--ds-space-2) var(--ds-space-4);
+    border-top: 1px solid var(--ds-line);
+  }
+
+  /* Phones: the whole window from the top; the hints and the keys go (no keyboard to press them), the status stays. */
+  @media (max-width: 600px) {
+    .ds-command {
+      padding: 0;
+    }
+
+    .ds-command .ds-dialog__box {
+      width: 100%;
+      height: 100%;
+      max-height: none;
+      border-radius: 0;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .ds-command__foot > span,
+    .ds-command__search > .ds-kbd,
+    .ds-command__shortcut {
+      display: none;
+    }
+
+    .ds-command__close {
+      display: inline-flex;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-command__item[data-active] {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+
+    .ds-command__match {
+      color: inherit;
+      text-decoration: underline;
+    }
+
+    .ds-command__item[aria-disabled="true"] {
+      color: GrayText;
+    }
+
+    .ds-command__search:has(> .ds-command__input:focus) {
+      border-bottom-color: Highlight;
+    }
+
+    .ds-command__back {
+      border: 1px solid ButtonText;
+    }
+  }
+}

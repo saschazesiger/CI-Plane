@@ -20,10 +20,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-The web interface is built on Dashboard-Style
-(https://github.com/saschazesiger/Dashboard-Style), vendored in
-web/vendor/dashboard-style/ under its own licences: see
-web/vendor/dashboard-style/LICENSE (MIT; Google Sans under the SIL Open Font
+The web interface is built on Z-Dash
+(https://github.com/saschazesiger/Z-Dash), vendored in
+web/vendor/z-dash/ under its own licences: see
+web/vendor/z-dash/LICENSE (MIT; Google Sans under the SIL Open Font
 License 1.1; icon shapes from Lucide, ISC, and Feather, MIT).
 
 The container image bundles cloudflared (https://github.com/cloudflare/cloudflared),

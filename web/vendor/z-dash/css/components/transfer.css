@@ -1,0 +1,98 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Transfer list: two lists side by side, the available options and the
+ * chosen ones, with buttons that move the marked options across (dueling
+ * lists): a role's permissions, the devices of a group. Each side is a
+ * listbox of several values (DS.listbox) with an optional filter; DS.transfer
+ * (transfer.js) moves the options and keeps the value.
+ *
+ *   <div class="ds-transfer" data-ds-transfer>
+ *     <div class="ds-transfer__side" data-ds-transfer-side="source">
+ *       <span class="ds-transfer__title" id="avail">Available</span>
+ *       <input class="ds-input ds-transfer__search" type="search" aria-label="Filter available">
+ *       <div class="ds-listbox ds-transfer__list" role="listbox" aria-multiselectable="true" aria-labelledby="avail"> options </div>
+ *     </div>
+ *     <div class="ds-transfer__actions" role="group" aria-label="Move">
+ *       <button class="ds-btn ds-btn--outlined ds-btn--icon" type="button" data-ds-transfer-add aria-label="Add the marked">(arrowRight)</button>
+ *       <button class="ds-btn ds-btn--outlined ds-btn--icon" type="button" data-ds-transfer-remove aria-label="Remove the marked">(arrowLeft)</button>
+ *     </div>
+ *     <div class="ds-transfer__side" data-ds-transfer-side="target"> ... the chosen ... </div>
+ *   </div>
+ *
+ * Both lists take one height (--ds-transfer-list-height, 264px), so the
+ * buttons stand between them in the middle. Where the transfer is 560px
+ * wide or less (a container query on itself) the sides stack and the
+ * buttons turn a quarter (their arrows point down and up).
+ *
+ * Options (src/core/options.css, docs/options.md): the lists are listboxes
+ * and the buttons icon buttons; both compute size, density, shape and touch
+ * themselves. Here only the gaps. No tone.
+ *
+ * Forced colours: the lists are the listbox's.
+ *
+ * Hooks: --ds-transfer-list-height (264px).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.transfer {
+  .ds-transfer {
+    container-type: inline-size;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--ds-space-3);
+  }
+
+  /* The list sits at the bottom of its side, so both lists line up when
+     only one side has a filter. */
+  .ds-transfer__side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ds-space-2);
+    min-width: 0;
+    align-self: stretch;
+  }
+
+  .ds-transfer__side > .ds-transfer__list {
+    margin-block-start: auto;
+  }
+
+  .ds-transfer__title {
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+  }
+
+  .ds-transfer__search {
+    width: 100%;
+  }
+
+  .ds-transfer__list {
+    height: var(--ds-transfer-list-height, 264px);
+    max-height: none;
+  }
+
+  .ds-transfer__actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ds-space-2);
+  }
+
+  /* Narrow: one side above the other, the arrows a quarter turned. */
+  @container (max-width: 560px) {
+    .ds-transfer__actions {
+      flex-direction: row;
+      justify-content: center;
+    }
+
+    .ds-transfer__actions svg {
+      rotate: 90deg;
+    }
+
+    /* The grid cannot query its own width; its children take a row each. */
+    .ds-transfer > * {
+      grid-column: 1 / -1;
+    }
+  }
+}

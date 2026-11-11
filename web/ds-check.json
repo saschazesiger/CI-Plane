@@ -1,10 +1,11 @@
 {
+  "major": 3,
   "prefix": "cp",
   "css": ["app.css"],
   "js": ["app/**/*.js"],
   "html": ["index.html"],
   "themes": ["theme.css"],
-  "themesWith": ["vendor/dashboard-style/themes/dark.css"],
-  "vendor": "vendor/dashboard-style",
+  "themesWith": ["vendor/z-dash/themes/dark.css"],
+  "vendor": "vendor/z-dash",
   "exceptions": []
 }

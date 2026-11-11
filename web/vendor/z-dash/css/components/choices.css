@@ -1,0 +1,175 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Choice list: a set of checkboxes (form.css's .ds-check rows) with what a
+ * long set needs: a "select all" box that shows all, none or some
+ * (indeterminate), a count, a filter field, columns and a box that scrolls
+ * on its own. DS.choices (choices.js) keeps them in step.
+ *
+ *   <fieldset class="ds-field">
+ *     <legend class="ds-field__label">Sites</legend>
+ *     <div class="ds-choices ds-choices--columns ds-choices--scroll" data-ds-choices>
+ *       <div class="ds-choices__tools">
+ *         <input class="ds-input ds-choices__search" type="search" aria-label="Filter sites" placeholder="Filter">
+ *         <label class="ds-check"><input type="checkbox" data-ds-choices-all><span>Select all</span></label>
+ *         <span class="ds-choices__count"></span>
+ *       </div>
+ *       <div class="ds-choices__list" role="group" aria-label="Sites">
+ *         <label class="ds-check"><input type="checkbox" name="site" value="a"><span>Building A</span></label> ...
+ *       </div>
+ *       <p class="ds-choices__empty" hidden>No results</p>
+ *     </div>
+ *   </fieldset>
+ *
+ * Variants:
+ *   .ds-choices--columns  the rows fill columns of at least
+ *                         --ds-choices-column-width (180px), at most
+ *                         --ds-choices-columns (4), row by row, so the Tab
+ *                         order follows the eye
+ *   .ds-choices--scroll   the list is an outlined box that scrolls on its
+ *                         own beyond --ds-choices-max-height (264px), its
+ *                         cut edges fading (--ds-scroll-fade)
+ *
+ * The filter hides the rows that do not match (`hidden`) and marks the
+ * matched letters in a .ds-choices__match (weight and a line, never colour
+ * alone); .ds-choices__empty shows when nothing does. A checked row's label
+ * takes the label weight.
+ *
+ * Options (src/core/options.css, docs/options.md): the rows are .ds-check
+ * rows and compute size, density and touch themselves; here the gaps and
+ * the box: density takes 2px per step off the box's padding; shape
+ * multiplies the box's radius. No tone.
+ *
+ * Forced colours: the scrolling box keeps its border; the marks keep their
+ * line in CanvasText.
+ *
+ * Hooks: --ds-choices-column-width (180px), --ds-choices-columns (4),
+ * --ds-choices-max-height (264px), --ds-scroll-fade (scroller.css's). The
+ * private --_gap, --_n are computed here: never set them.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar): without
+ *   them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.choices {
+  .ds-choices {
+    display: grid;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  /* Filter, "select all" and the count on one line that wraps. */
+  .ds-choices__tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-1) var(--ds-space-4);
+  }
+
+  .ds-choices__search {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+
+  .ds-choices__count {
+    margin-inline-start: auto;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-choices__list {
+    display: grid;
+    grid-auto-rows: max-content;
+    justify-items: start;
+    min-width: 0;
+  }
+
+  .ds-choices__list > .ds-check[hidden] {
+    display: none;
+  }
+
+  .ds-choices__list > .ds-check:has(> input:checked) {
+    font-weight: var(--ds-weight-label);
+  }
+
+  /* Columns, filled row by row, so the Tab order follows the eye; never
+     more than --ds-choices-columns, never narrower than the column width
+     (one column where two do not fit). A grid, not CSS columns: in a box
+     that scrolls, columns would overflow to the side. */
+  .ds-choices--columns > .ds-choices__list {
+    --_gap: var(--ds-space-6);
+    --_n: var(--ds-choices-columns, 4);
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, max(var(--ds-choices-column-width, 180px), calc((100% - (var(--_n) - 1) * var(--_gap)) / var(--_n)))), 1fr));
+    column-gap: var(--_gap);
+    justify-items: stretch;
+  }
+
+  /* A long set in a box of its own that scrolls; its cut edges fade. */
+  .ds-choices--scroll > .ds-choices__list {
+    position: relative;
+    max-height: var(--ds-choices-max-height, 264px);
+    padding: calc(var(--ds-space-1) + var(--ds-density, 0) * 2px) var(--ds-space-4);
+    overflow-y: auto;
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-radius-card) * var(--ds-shape, 1));
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    scroll-padding-block: var(--ds-scroll-fade, var(--ds-space-8));
+    mask-image:
+      linear-gradient(to bottom, transparent, #000 calc(var(--ds-scroll-edge-start) * var(--ds-scroll-fade, var(--ds-space-8))), #000 calc(100% - var(--ds-scroll-edge-end) * var(--ds-scroll-fade, var(--ds-space-8))), transparent),
+      linear-gradient(#000, #000);
+    mask-size: calc(100% - var(--ds-scrollbar-width, 0px)) 100%, var(--ds-scrollbar-width, 0px) 100%;
+    mask-position: 0 0, 100% 0;
+    mask-repeat: no-repeat;
+  }
+
+  /* The fades glide only once DS.dom.scrollEdges() has measured. */
+  .ds-choices--scroll > .ds-choices__list[data-ds-edges] {
+    transition:
+      --ds-scroll-edge-start var(--ds-dur-fast) var(--ds-ease-in-out),
+      --ds-scroll-edge-end var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-choices--scroll > .ds-choices__list[data-ds-overflow-start] {
+    --ds-scroll-edge-start: 1;
+  }
+
+  .ds-choices--scroll > .ds-choices__list[data-ds-overflow-end] {
+    --ds-scroll-edge-end: 1;
+  }
+
+  /* The letters the filter matched: weight and a line, not colour. */
+  .ds-choices__match {
+    background: transparent;
+    color: inherit;
+    font-weight: var(--ds-weight-label);
+    text-decoration: underline;
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+    text-underline-offset: var(--ds-link-underline-offset);
+  }
+
+  .ds-choices__empty {
+    margin: 0;
+    padding-block: var(--ds-space-2);
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+
+  .ds-choices__empty[hidden] {
+    display: none;
+  }
+
+  @media (forced-colors: active) {
+    .ds-choices--scroll > .ds-choices__list {
+      border-color: CanvasText;
+    }
+
+    .ds-choices__match {
+      text-decoration-color: CanvasText;
+    }
+  }
+}

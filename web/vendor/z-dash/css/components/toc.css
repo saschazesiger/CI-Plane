@@ -1,0 +1,344 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Jump links, table of contents: the sections of a long page, the one being
+ * read marked as the reader scrolls (scroll-spy, toc.js). A column beside
+ * the content (sticky with .ds-toc--sticky) or a bar over it (.ds-toc--bar,
+ * the section anchors of an object page).
+ *
+ *   <nav class="ds-toc ds-toc--sticky" aria-labelledby="toc-title" data-ds-toc>
+ *     <p class="ds-toc__title" id="toc-title">On this page</p>
+ *     <ol class="ds-toc__list">
+ *       <li><a class="ds-toc__link" href="#overview" aria-current="location">Overview</a></li>
+ *       <li><a class="ds-toc__link" href="#hardware">Hardware</a>
+ *         <ol class="ds-toc__list">
+ *           <li><a class="ds-toc__link" href="#storage">Storage</a></li>
+ *         </ol></li>
+ *       <li><a class="ds-toc__link" href="#history">History<span class="ds-toc__count"><span class="ds-sr">, </span>3</span></a></li>
+ *     </ol>
+ *   </nav>
+ *
+ *   A bar of anchors: <nav class="ds-toc ds-toc--bar ds-toc--sticky" aria-label="Sections" data-ds-toc> (the same list; nested lists stay off the bar)
+ *
+ * Current: aria-current="location" on the link of the section being read
+ * (toc.js writes it). It takes the primary ink, the label weight (in a
+ * column; a bar keeps the weight, so the links after it never move) and
+ * the indicator (DS.indicator, .ds-toc__indicator): a bar on the column's
+ * line at its start, under the link in a bar; never colour alone.
+ *
+ * Variants:
+ *   .ds-toc            a column: a hairline at its start, a row per link,
+ *                      nested lists indented (the bar stays on the line)
+ *   .ds-toc--bar       a row of anchors over a hairline, as line tabs; it
+ *                      scrolls sideways without a scrollbar and keeps the
+ *                      current one in view; only the first level shows
+ *   .ds-toc--sticky    sticks: a column --ds-toc-top below the top of its
+ *                      scroller (scrolling itself when taller than the
+ *                      view; at 600px of the content it sits above the
+ *                      text and stops sticking), a bar at the top on
+ *                      --ds-toc-bg
+ *
+ * Parts: .ds-toc__title (the meta role, text-2), .ds-toc__list,
+ * .ds-toc__link, .ds-toc__count (a count after the label, tabular).
+ *
+ * Options (src/core/options.css, docs/options.md), on the toc or any
+ * ancestor; each is computed here, in the link's own rule:
+ *   size      .ds-xs ... .ds-xl: 8px of height per step (a column row 32px,
+ *             a bar 48px at md), 4px of side padding per step, the type
+ *             role of the size at the regular weight
+ *   density   .ds-density-*: 4px of height per step; not the padding
+ *   shape     .ds-shape-*: multiplies the radius of the ring and the state
+ *             layer, at rest and pressed
+ *   touch     .ds-touch: a link is at least --ds-target-min high
+ *   tone      none: a link states no status
+ *
+ * Press: the state layer is a pill inside the link (in a bar --ds-space-1
+ * from its top and bottom edge) that turns squarer while pressed
+ * (--ds-radius-action-pressed times the shape, in --ds-dur-micro, back on
+ * the spring) and ripples (js/ripple.js); the keyboard ring is inset and
+ * snaps inward. The label changes colour on the indicator's timing.
+ *
+ * Hooks: --ds-toc-height (32px: a column row at md, comfortable),
+ * --ds-toc-bar-height (48px: a bar's link), --ds-toc-padding-x
+ * (--ds-space-3), --ds-toc-font (the size's role), --ds-toc-indicator-width
+ * (3px), --ds-toc-indicator-color (--ds-primary), --ds-toc-top
+ * (--ds-space-4: where a sticky column stops), --ds-toc-bg (--ds-backdrop:
+ * under a sticky bar). The computed --_h, --_box, --_half, --_radius,
+ * --_layer and --_pad are private.
+ *
+ * Forced colours: the current link is a choice in a set (SelectedItem /
+ * SelectedItemText, the indicator hidden), a focused one a CanvasText ring
+ * inside; the hairlines stay CanvasText.
+ *
+ * Print: the toc stays off the paper (its links lead nowhere there).
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a bar hides its scrollbar while it
+ *   scrolls sideways): without them the platform scrollbar shows under the
+ *   bar.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.toc {
+  .ds-toc {
+    min-width: 0;
+  }
+
+  .ds-toc__title {
+    margin: 0 0 var(--ds-space-2);
+    padding-inline-start: calc(var(--ds-toc-padding-x, var(--ds-space-3)) + var(--ds-size-step, 0) * 4px);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-toc__list {
+    position: relative;
+    display: grid;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* The column's line: the start edge of the top list; the indicator's bar
+     lies on it. */
+  .ds-toc:not(.ds-toc--bar) > .ds-toc__list::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: 1px;
+    background: var(--ds-line);
+    pointer-events: none;
+  }
+
+  .ds-toc__link {
+    /* The options, computed here: the hook (size md, comfortable) plus 8px
+       per size step and 4px per density step, never below the touch
+       minimum. */
+    --_h: calc(var(--ds-toc-height, 32px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    --_half: calc(var(--_box) / 2);
+    --_radius: min(calc(min(var(--ds-radius-action), var(--_half)) * var(--ds-shape, 1)), var(--_half));
+    --_inset: 0px;
+    --_layer-half: calc(var(--_half) - var(--_inset));
+    --_layer: min(calc(min(var(--ds-radius-action), var(--_layer-half)) * var(--ds-shape, 1)), var(--_layer-half));
+    --_layer-pressed: min(calc(var(--ds-radius-action-pressed) * var(--ds-shape, 1)), var(--_layer));
+    /* Side padding: 4px per size step; density leaves it alone. */
+    --_pad: calc(var(--ds-toc-padding-x, var(--ds-space-3)) + var(--ds-size-step, 0) * 4px);
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-height: var(--_box);
+    min-width: 0;
+    padding: var(--ds-space-1) var(--_pad);
+    border-radius: var(--_radius);
+    color: var(--ds-text-2);
+    font: var(--ds-toc-font, var(--ds-size-font, var(--ds-font-label)));
+    font-weight: var(--ds-weight-regular);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    outline-offset: 0;
+    transition:
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out),
+      color var(--ds-indicator-dur, var(--ds-dur-medium)) var(--ds-ease-in-out);
+  }
+
+  /* Nested sections: indented by padding, so every link starts on the line
+     and the bar meets it. */
+  .ds-toc__list .ds-toc__list .ds-toc__link {
+    padding-inline-start: calc(var(--_pad) + var(--ds-space-4));
+  }
+
+  .ds-toc__list .ds-toc__list .ds-toc__list .ds-toc__link {
+    padding-inline-start: calc(var(--_pad) + var(--ds-space-8));
+  }
+
+  .ds-toc__link[aria-current]:not([aria-current="false"]) {
+    color: var(--ds-primary);
+    font-weight: var(--ds-weight-label);
+  }
+
+  /* In a bar the links sit side by side: a heavier current one would push
+     the ones after it sideways at every change of the scroll-spy, and the
+     indicator would glide to a moving target. The weight stays; the ink and
+     the indicator under the link mark it. */
+  .ds-toc--bar .ds-toc__link[aria-current]:not([aria-current="false"]) {
+    font-weight: var(--ds-weight-regular);
+  }
+
+  .ds-toc__count {
+    margin-inline-start: auto;
+    color: inherit;
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* State layer: a pill inside the link, the colour of the label. */
+  .ds-toc__link::before {
+    content: '';
+    position: absolute;
+    inset: var(--_inset) 0;
+    border-radius: var(--_layer);
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  @media (hover: hover) {
+    .ds-toc__link:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-toc__link:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-toc__link:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s, var(--ds-dur-medium);
+  }
+
+  .ds-toc__link:active::before,
+  .ds-toc__link.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    border-radius: var(--_layer-pressed);
+    transition:
+      opacity var(--ds-dur-micro) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-micro) var(--ds-ease-out);
+  }
+
+  /* With the ripple (js/ripple.js) the flat layer stays at its hover value
+     (focus value after a key) and the ripple brings the press. */
+  :where(.ds-ripples) .ds-toc__link:where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *)):is(:active, .ds-pressed)::before {
+    opacity: 0;
+  }
+
+  @media (hover: hover) {
+    :where(.ds-ripples) .ds-toc__link:where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *)):is(:active, .ds-pressed)::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  :where(.ds-ripples) .ds-toc__link:where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *)):focus-visible:is(:active, .ds-pressed)::before {
+    opacity: var(--ds-state-focus);
+  }
+
+  /* The indicator of the column: a bar on the line, at the link's start (the
+     box is the link's; its clip glides). */
+  .ds-toc__indicator {
+    box-sizing: border-box;
+    border-inline-start: var(--ds-toc-indicator-width, 3px) solid var(--ds-toc-indicator-color, var(--ds-primary));
+  }
+
+  /* Sticky: a column stops --ds-toc-top below the top of its scroller and
+     scrolls itself when taller than the view. */
+  .ds-toc--sticky:not(.ds-toc--bar) {
+    position: sticky;
+    top: var(--ds-toc-top, var(--ds-space-4));
+    align-self: start;
+    max-height: calc(100dvh - 2 * var(--ds-toc-top, var(--ds-space-4)));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* Narrow content: a column no longer fits beside the text and sits above
+     it, so it stops sticking (it would cover what it lies over). */
+  @container ds-content (max-width: 600px) {
+    .ds-toc--sticky:not(.ds-toc--bar) {
+      position: static;
+      max-height: none;
+      overflow-y: visible;
+    }
+  }
+
+  /* ── Bar ─────────────────────────────────────── */
+
+  .ds-toc--bar > .ds-toc__title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ds-toc--bar > .ds-toc__list {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid var(--ds-line);
+    scrollbar-width: none;
+  }
+
+  .ds-toc--bar > .ds-toc__list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ds-toc--bar > .ds-toc__list > li {
+    flex: none;
+  }
+
+  .ds-toc--bar .ds-toc__list .ds-toc__list {
+    display: none;
+  }
+
+  .ds-toc--bar .ds-toc__link {
+    --_h: calc(var(--ds-toc-bar-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_inset: var(--ds-space-1);
+    padding-block: 0;
+    padding-inline: calc(var(--_pad) + var(--ds-space-1));
+    white-space: nowrap;
+  }
+
+  .ds-toc--bar .ds-toc__count {
+    margin-inline-start: 0;
+  }
+
+  .ds-toc--bar .ds-toc__indicator {
+    border-inline-start: 0;
+    border-block-end: var(--ds-toc-indicator-width, 3px) solid var(--ds-toc-indicator-color, var(--ds-primary));
+  }
+
+  .ds-toc--bar.ds-toc--sticky {
+    position: sticky;
+    top: 0;
+    z-index: var(--ds-z-sticky);
+    background: var(--ds-toc-bg, var(--ds-backdrop));
+  }
+
+  @media (forced-colors: active) {
+    .ds-toc__indicator {
+      display: none;
+    }
+
+    /* A hairline is a background, which forced colours would turn to Canvas. */
+    .ds-toc:not(.ds-toc--bar) > .ds-toc__list::before {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+
+    .ds-toc__link[aria-current]:not([aria-current="false"]) {
+      forced-color-adjust: none;
+      background: SelectedItem;
+      color: SelectedItemText;
+    }
+
+    .ds-toc__link[aria-current]:not([aria-current="false"]):focus-visible {
+      outline-color: CanvasText;
+    }
+  }
+
+  @media print {
+    .ds-toc {
+      display: none;
+    }
+  }
+}

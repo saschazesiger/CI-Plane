@@ -1,0 +1,235 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Dashboard panel: a titled block of a dashboard (a chart, a table, a
+ * list, a few figures) with a menu at its end and the states its data goes
+ * through: loading, refreshing, failed, nothing to show. Panels sit in a
+ * grid (.ds-grid-2, an auto-fit grid) and fill their cell's height, so a
+ * row of panels lines up whatever each one shows.
+ *
+ *   <section class="ds-dashpanel" aria-labelledby="p-tickets">
+ *     <header class="ds-dashpanel__head">
+ *       <div class="ds-dashpanel__heading">
+ *         <h3 class="ds-dashpanel__title" id="p-tickets">Tickets per day</h3>
+ *         <p class="ds-dashpanel__subtitle">Last 7 days</p>
+ *       </div>
+ *       <div class="ds-dashpanel__actions">
+ *         <button class="ds-btn ds-btn--icon ds-btn--quiet ds-sm" type="button" aria-label="Actions for tickets per day"
+ *                 aria-haspopup="menu" aria-expanded="false" aria-controls="p-tickets-menu" data-ds-open="#p-tickets-menu">(moreVertical 18)</button>
+ *         <div class="ds-menu" id="p-tickets-menu" role="menu" aria-label="Tickets per day" hidden> ... </div>
+ *       </div>
+ *       <span class="ds-loadbar" aria-hidden="true"><span class="ds-loadbar__bar"></span></span>
+ *     </header>
+ *     <div class="ds-dashpanel__body"> ... </div>
+ *     <div class="ds-dashpanel__foot"><span>Updated 09:12</span> <a href="/tickets">All tickets</a></div>
+ *   </section>
+ *
+ * Parts:
+ *   .ds-dashpanel__head      the title row: the heading, then the actions;
+ *                            at least --ds-dashpanel-head-height (56px)
+ *   .ds-dashpanel__heading   the title and the subtitle, as wide as it gets
+ *   .ds-dashpanel__title     one line, an ellipsis when it is too long
+ *                            (give the panel the whole title in its name)
+ *   .ds-dashpanel__subtitle  the period, the unit or the source, one line
+ *   .ds-dashpanel__actions   at the end: a status (.ds-status: stale data,
+ *                            partial data), a small quiet icon button or two
+ *                            and the menu button with its .ds-menu
+ *   .ds-dashpanel__body      the content; it grows to fill the panel and is
+ *                            at least --ds-dashpanel-body-min (160px) high,
+ *                            so a state that replaces it keeps the place
+ *   .ds-dashpanel__body--flush   no padding: a table, a list or a chart that
+ *                            runs to the panel's edges
+ *   .ds-dashpanel__foot      a hairline, then meta text and a link: when it
+ *                            was updated, where the rest is
+ *
+ * States (the page sets them; status is never told by colour alone):
+ *   loading      aria-busy="true" on the panel and a skeleton (loading.css)
+ *                in the body; the loading bar of the head shows
+ *   refreshing   DS.motion.refresh(body, load, { loadbar: false }): the body
+ *                takes aria-busy="true" at once and dims (.ds-stale) after
+ *                --ds-delay-loader; the loading bar of the head shows while
+ *                the body is busy
+ *   failed       an empty state in the body, .ds-empty--error with its icon,
+ *                words and a "Try again" button
+ *   no data      an empty state in the body, .ds-empty--no-data
+ *   stale        a .ds-status (icon and word) in the actions
+ * An empty state alone in the body sits in its middle. The loading bar
+ * (.ds-loadbar, last in the head) lies along the head's lower edge and
+ * shows only while the panel or its body is busy; it waits the loader delay
+ * like every loading bar.
+ *
+ * Variants:
+ *   .ds-dashpanel             outlined: the hairline on --ds-surface
+ *   .ds-dashpanel--filled     --ds-surface-low, no hairline: a panel inside
+ *                             a card or on a busy dashboard
+ *   .ds-dashpanel--elevated   --ds-dashpanel-shadow (--ds-elev-1) instead of
+ *                             the hairline
+ *
+ * Options (src/core/options.css, docs/options.md), computed here:
+ *   density   .ds-density-*: the padding, 2px per step, and the head's
+ *             height, 4px per step
+ *   shape     .ds-shape-*: the corners
+ *   touch     .ds-touch: the head at least the touch target high
+ *   size      not read: a size class reaches the controls in it
+ *   tone      not read: the empty state, a status or an alert in it says
+ *             what is wrong, with an icon and a word
+ *
+ * Forced colours: the hairline stays (a border), the filled and the elevated
+ * panel get a transparent border that becomes their edge.
+ *
+ * Hooks: --ds-dashpanel-padding (--ds-space-4), --ds-dashpanel-radius
+ * (--ds-radius-card), --ds-dashpanel-bg (--ds-surface),
+ * --ds-dashpanel-border (--ds-line), --ds-dashpanel-filled-bg
+ * (--ds-surface-low), --ds-dashpanel-shadow (--elevated: --ds-elev-1),
+ * --ds-dashpanel-head-height (56px), --ds-dashpanel-body-min (160px).
+ * --_dashpanel-pad, --_dashpanel-radius, --_bg, --_border, --_shadow and
+ * --_head are private.
+ *
+ * No progressive features.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.dashpanel {
+  .ds-dashpanel {
+    /* The padding and the corners, computed here and read by the parts (a
+       density class on a part changes that part only where it computes its
+       own); the names are the panel's own. */
+    --_dashpanel-pad: calc(var(--ds-dashpanel-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px);
+    --_dashpanel-radius: calc(var(--ds-dashpanel-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    --_bg: var(--ds-dashpanel-bg, var(--ds-surface));
+    --_border: var(--ds-dashpanel-border, var(--ds-line));
+    --_shadow: none;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    block-size: 100%;
+    border: 1px solid var(--_border);
+    border-radius: var(--_dashpanel-radius);
+    background: var(--_bg);
+    box-shadow: var(--_shadow);
+    color: var(--ds-text);
+  }
+
+  .ds-dashpanel--filled {
+    --_bg: var(--ds-dashpanel-filled-bg, var(--ds-surface-low));
+    --_border: transparent;
+  }
+
+  .ds-dashpanel--elevated {
+    --_border: transparent;
+    --_shadow: var(--ds-dashpanel-shadow, var(--ds-elev-1));
+  }
+
+  .ds-dashpanel__head {
+    --_head: max(var(--ds-target-min, 0px), calc(var(--ds-dashpanel-head-height, 56px) + var(--ds-density, 0) * 4px));
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-block-size: var(--_head);
+    padding-block: var(--ds-space-2);
+    padding-inline: var(--_dashpanel-pad) calc(var(--_dashpanel-pad) - var(--ds-space-2));
+  }
+
+  .ds-dashpanel__heading {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+  }
+
+  .ds-dashpanel__title,
+  .ds-dashpanel__subtitle {
+    margin: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .ds-dashpanel__title {
+    color: var(--ds-text);
+    font: var(--ds-font-subtitle);
+  }
+
+  .ds-dashpanel__subtitle {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-dashpanel__actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-1);
+  }
+
+  /* The loading bar along the head's lower edge, while the panel or its
+     body is busy (it waits the loader delay, loading.css). */
+  .ds-dashpanel__head > .ds-loadbar {
+    position: absolute;
+    inset-block: auto 0;
+    inset-inline: 0;
+    margin: 0;
+  }
+
+  .ds-dashpanel:not([aria-busy="true"], :has(> .ds-dashpanel__body[aria-busy="true"])) > .ds-dashpanel__head > .ds-loadbar {
+    display: none;
+  }
+
+  .ds-dashpanel__body {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+    min-inline-size: 0;
+    min-block-size: var(--ds-dashpanel-body-min, 160px);
+    padding: 0 var(--_dashpanel-pad) var(--_dashpanel-pad);
+  }
+
+  .ds-dashpanel__body--flush {
+    padding: 0;
+  }
+
+  /* An empty state alone in the body (failed, no data) sits in its middle. */
+  .ds-dashpanel__body > .ds-empty:only-child {
+    margin-block: auto;
+  }
+
+  /* A list in a flush body runs to the panel's edges: a hairline above it,
+     and at the panel's foot the panel's lower corners (inside its border). */
+  .ds-dashpanel__body--flush > .ds-list {
+    border-inline: 0;
+    border-block-end: 0;
+    border-radius: 0;
+  }
+
+  .ds-dashpanel > .ds-dashpanel__body--flush:last-child > .ds-list:last-child {
+    border-end-start-radius: var(--_dashpanel-radius);
+    border-end-end-radius: var(--_dashpanel-radius);
+  }
+
+  .ds-dashpanel__foot {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ds-space-2) var(--ds-space-4);
+    padding: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px) var(--_dashpanel-pad);
+    border-block-start: 1px solid var(--ds-line);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  @media print {
+    .ds-dashpanel {
+      break-inside: avoid;
+    }
+
+    .ds-dashpanel__head > .ds-loadbar {
+      display: none;
+    }
+  }
+}

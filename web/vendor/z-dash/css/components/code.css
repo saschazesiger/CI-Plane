@@ -1,0 +1,365 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Code: .ds-code-block for a block of code or a raw request (a pre in
+ * .ds-prose looks the same), and .ds-code, the frame around one or more
+ * blocks with a header, line numbers, marked lines, tabs for several files
+ * and a folded height (DS.code, code.js).
+ *
+ *   <pre class="ds-code-block" tabindex="0" aria-label="Request"><code>GET /devices/42</code></pre>
+ *   <pre class="ds-code-block ds-code-block--wrap">...</pre>   (long lines wrap)
+ *
+ *   <figure class="ds-code ds-code--lines" data-ds-code data-ds-code-max="12">
+ *     <div class="ds-code__head ds-sm">
+ *       <span class="ds-code__title">device.json</span>             (or a .ds-tabs ds-tabs--flush tablist)
+ *       <span class="ds-code__lang"></span>
+ *       <span class="ds-code__actions"> wrap toggle, copy button (.ds-btn--quiet.ds-btn--icon) </span>
+ *     </div>
+ *     <pre class="ds-code-block" tabindex="0" data-ds-code-lang="json" data-ds-code-mark="2"><code>...</code></pre>
+ *     <div class="ds-code__foot"><button class="ds-btn ds-btn--text" type="button" data-ds-code-expand aria-expanded="false"><span class="ds-code__expand-label">Show more</span>(chevronDown .ds-chevron)</button></div>
+ *   </figure>
+ *
+ * .ds-code-block: the code role on --ds-code-bg in a card's radius, one
+ * line per line, scrolling sideways (a thin scrollbar); give it
+ * tabindex="0" and a name only when it can scroll, so a keyboard reaches it
+ * (an inset ring, solid from the first frame). A code element inside loses
+ * the inline chip. --wrap wraps long lines instead. In .ds-prose--compact
+ * its padding is tighter. Outside prose it has no margin; in prose the
+ * prose's rhythm spaces it.
+ *
+ * .ds-code: the frame on --ds-code-bg in --ds-code-block-radius (the
+ * blocks inside give up their own corners), a hairline under the header.
+ * The header: the title (the code role, one line with an ellipsis) or a
+ * .ds-tabs ds-tabs--flush tablist of files, the language (the meta role,
+ * --ds-text-2) and the actions at its end; .ds-sm on it keeps its controls
+ * one step under the text. Lines (DS.code writes them):
+ * .ds-code__line, one per line; .ds-code--lines numbers them in a gutter
+ * (the meta role's colour, as wide as the largest number, not selectable
+ * and not copied); .ds-code__line--mark (a <mark>) tints a line and gives
+ * it a bar at its start, so it never rests on the colour;
+ * .ds-code__line--inserted and --deleted tint a diff's lines (their + and -
+ * stay). data-state="collapsed" (DS.code) folds the block to
+ * data-ds-code-max lines with a fade above .ds-code__foot, whose text
+ * button (.ds-chevron turning with aria-expanded) unfolds it; without a
+ * data-state the foot is gone.
+ *
+ * Options (src/core/options.css, docs/options.md), on the block or any
+ * ancestor; each is computed here:
+ *   density   .ds-density-*: 2px off the block's padding per step (1px in
+ *             .ds-prose--compact), so the lines and the gutter follow; the
+ *             header's tabs follow their own density
+ *   shape     .ds-shape-*: multiplies the radius of the block and the frame
+ *   size      not read: the code keeps its role; the header's controls are
+ *             .ds-sm (one step under the text)
+ *   touch     .ds-touch: the header's tabs and buttons grow to the touch
+ *             target (their own rules), so the header does
+ *   tone      not read: code states no status
+ *
+ * Hooks: --ds-code-block-radius (--ds-radius-card).
+ *
+ * Motion: the fold glides: the block's height (a named exception of the
+ * animate list, meta.json) over --ds-dur-medium on --ds-ease-out to open,
+ * --ds-dur-base on --ds-ease-in to close (0.8 of the opening), set by
+ * DS.code from the current height, so a reversal continues from where it
+ * is; the fade follows on --ds-dur-fast. A tab's block swaps in
+ * (DS.motion.enter, 'swap'), the tabs' indicator glides.
+ *
+ * Forced colours: the block and the frame keep their edges (a transparent
+ * outline); a marked line keeps its bar in Highlight; the header keeps its
+ * hairline.
+ *
+ * Print: code blocks wrap and unclip; a folded block unfolds.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar under a
+ *   code block): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.code {
+  /* A pre in prose is a code block: one look for both. The padding is
+     computed here and read by the lines (DS.code). */
+  :where(.ds-prose) pre:where(:not([class^="ds-"], [class*=" ds-"])),
+  .ds-code-block {
+    --_pad-block: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+    --_pad-inline: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+    position: relative;
+    margin-inline: 0;
+    padding: var(--_pad-block) var(--_pad-inline);
+    overflow-x: auto;
+    border-radius: calc(var(--ds-code-block-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    background: var(--ds-code-bg);
+    color: var(--ds-text);
+    font: var(--ds-font-code);
+    white-space: pre;
+    tab-size: 2;
+    hyphens: manual;
+    overflow-wrap: normal;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    /* An inset ring (the block clips anything outside): it rests on the
+       edge and snaps inward. */
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* No margin of its own, except where prose spaces its blocks. */
+  .ds-code-block:where(:not(.ds-prose > *)) {
+    margin-block: 0;
+  }
+
+  .ds-code-block:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-code-block--wrap {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* Code inside a block is just text: no inline chip. */
+  .ds-code-block code,
+  .ds-code-block :where(a) code {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+  }
+
+  /* Compact prose (a chat bubble): tighter, 1px per density step. */
+  :where(.ds-prose--compact) pre:where(:not([class^="ds-"], [class*=" ds-"])),
+  .ds-prose--compact .ds-code-block {
+    --_pad-block: calc(var(--ds-space-2) + var(--ds-density, 0) * 1px);
+    --_pad-inline: calc(var(--ds-space-3) + var(--ds-density, 0) * 1px);
+  }
+
+  /*
+   * The frame: header, blocks and foot on one surface. The blocks give up
+   * their corners to it.
+   */
+  .ds-code {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin-inline: 0;
+    border-radius: calc(var(--ds-code-block-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    background: var(--ds-code-bg);
+    overflow: clip;
+  }
+
+  .ds-code:where(:not(.ds-prose > *)) {
+    margin-block: 0;
+  }
+
+  .ds-code > .ds-code-block {
+    border-radius: 0;
+    overflow-y: hidden;
+    /* The fold glides (DS.code sets the height from where it is). */
+    transition:
+      height var(--ds-dur-medium) var(--ds-ease-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-code[data-state="collapsed"] > .ds-code-block {
+    /* The folded lines and the top padding: the cut falls on a line, under the fade. */
+    block-size: calc(var(--ds-code-max, 12) * 1lh + var(--_pad-block));
+    transition:
+      height var(--ds-dur-base) var(--ds-ease-in),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-code__head {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-width: 0;
+    padding-block: var(--ds-space-1);
+    padding-inline: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px) var(--ds-space-1);
+    border-block-end: 1px solid var(--ds-line);
+  }
+
+  /* Files as tabs: the row fills the header, its bar on the hairline. */
+  .ds-code__head:has(> .ds-tabs) {
+    padding-block: 0;
+    padding-inline-start: 0;
+  }
+
+  .ds-code__head > .ds-tabs {
+    flex: 1 1 auto;
+    min-width: 0;
+    align-self: stretch;
+  }
+
+  .ds-code__title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ds-text);
+    font: var(--ds-font-code);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .ds-code__lang {
+    flex: none;
+    margin-inline-start: auto;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    white-space: nowrap;
+  }
+
+  .ds-code__title + .ds-code__lang,
+  .ds-tabs + .ds-code__lang {
+    margin-inline-start: 0;
+  }
+
+  .ds-code__actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    margin-inline-start: auto;
+  }
+
+  /* After a row of tabs that may scroll, a hairline keeps the word apart
+     from a tab cut at the row's end. */
+  .ds-tabs + .ds-code__lang {
+    padding-inline-start: var(--ds-space-2);
+    border-inline-start: 1px solid var(--ds-line);
+  }
+
+  .ds-code__lang + .ds-code__actions {
+    margin-inline-start: 0;
+  }
+
+  /* Lines: the block's padding moves onto them, so a mark spans the width. */
+  .ds-code-block:has(> code > .ds-code__line) {
+    padding-inline: 0;
+  }
+
+  .ds-code-block > code:has(> .ds-code__line) {
+    display: block;
+    min-inline-size: 100%;
+    inline-size: max-content;
+  }
+
+  .ds-code-block--wrap > code:has(> .ds-code__line) {
+    inline-size: auto;
+  }
+
+  .ds-code__line {
+    position: relative;
+    display: block;
+    padding-inline: var(--_pad-inline, var(--ds-space-4));
+    background: none;
+    color: inherit;
+  }
+
+  /* The gutter: the number in the line's start padding, never copied. */
+  .ds-code--lines .ds-code__line {
+    --_gutter: calc(var(--ds-code-digits, 2) * 1ch + var(--ds-space-4));
+    padding-inline-start: calc(var(--_pad-inline, var(--ds-space-4)) + var(--_gutter));
+  }
+
+  .ds-code--lines .ds-code__line::before {
+    content: attr(data-line);
+    position: absolute;
+    inset-inline-start: var(--_pad-inline, var(--ds-space-4));
+    inline-size: calc(var(--ds-code-digits, 2) * 1ch);
+    color: var(--ds-text-2);
+    text-align: end;
+    user-select: none;
+  }
+
+  /* A marked line: a tint and a bar at its start (the bar carries it in
+     forced colours and for anyone who cannot tell the tint). */
+  .ds-code__line--mark {
+    border-inline-start: 2px solid var(--ds-primary);
+    padding-inline-start: calc(var(--_pad-inline, var(--ds-space-4)) - 2px);
+    background: color-mix(in srgb, var(--ds-primary) 10%, transparent);
+  }
+
+  .ds-code--lines .ds-code__line--mark {
+    padding-inline-start: calc(var(--_pad-inline, var(--ds-space-4)) + var(--_gutter) - 2px);
+  }
+
+  .ds-code--lines .ds-code__line--mark::before {
+    inset-inline-start: calc(var(--_pad-inline, var(--ds-space-4)) - 2px);
+  }
+
+  .ds-code__line--inserted {
+    background: color-mix(in srgb, var(--ds-code-inserted) 10%, transparent);
+  }
+
+  .ds-code__line--deleted {
+    background: color-mix(in srgb, var(--ds-code-deleted) 10%, transparent);
+  }
+
+  /* The foot: the button that unfolds, a fade over the folded lines. */
+  .ds-code__foot {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    padding: var(--ds-space-1);
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  .ds-code__expand-label {
+    white-space: nowrap;
+  }
+
+  .ds-code:not([data-state]) > .ds-code__foot {
+    display: none;
+  }
+
+  .ds-code__foot::before {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 100%;
+    block-size: var(--ds-space-10);
+    background: linear-gradient(to bottom, transparent, var(--ds-code-bg));
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-code[data-state="collapsed"] > .ds-code__foot::before {
+    opacity: 1;
+  }
+
+  @media (forced-colors: active) {
+    :where(.ds-prose) pre:where(:not([class^="ds-"], [class*=" ds-"])),
+    .ds-code-block,
+    .ds-code {
+      outline: 1px solid transparent;
+    }
+
+    /* The frame is the edge; a framed block's own focus ring stays. */
+    .ds-code > .ds-code-block:not(:focus-visible) {
+      outline: 0;
+    }
+
+    .ds-code__line--mark {
+      border-inline-start-color: Highlight;
+    }
+  }
+
+  @media print {
+    :where(.ds-prose) pre:where(:not([class^="ds-"], [class*=" ds-"])),
+    .ds-code-block {
+      overflow: visible;
+      white-space: pre-wrap;
+    }
+
+    .ds-code[data-state="collapsed"] > .ds-code-block {
+      block-size: auto;
+    }
+
+    .ds-code__foot {
+      display: none;
+    }
+  }
+}

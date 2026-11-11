@@ -1,0 +1,218 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Tracker: a row of status cells, one per day, run or check (uptime over
+ * 90 days, the last 30 runs of a job), a summary in words above it and the
+ * span under it. Each state has its own shape, so it reads without its
+ * colour: problems stand to the full height, the calm states stay low, and
+ * the doubtful ones are dashed.
+ *
+ *   <figure class="ds-tracker">
+ *     <figcaption class="ds-tracker__head">
+ *       <span class="ds-tracker__label">Printer 7</span>
+ *       <span class="ds-tracker__summary">99.2% uptime, 2 failures in 90 days</span>
+ *     </figcaption>
+ *     <div class="ds-tracker__cells" role="group" aria-label="Printer 7, last 90 days" data-ds-tracker>
+ *       <span class="ds-tracker__cell ds-tracker__cell--success" role="img" aria-label="Nov 3: up" data-tip="Nov 3: up"></span>
+ *       <span class="ds-tracker__cell ds-tracker__cell--error" role="img" aria-label="Nov 4: down 42 min" data-tip="Nov 4: down 42 min"></span>
+ *       ...
+ *     </div>
+ *     <div class="ds-tracker__axis"><span>90 days ago</span><span>Today</span></div>
+ *   </figure>
+ *
+ *   .ds-tracker__cell--success   low (60%), solid: up, passed
+ *   .ds-tracker__cell--info      low, dashed: maintenance, skipped
+ *   .ds-tracker__cell--warning   full height, dashed: degraded, flaky
+ *   .ds-tracker__cell--error     full height, solid: down, failed
+ *   .ds-tracker__cell--empty     a stub at the foot: no data
+ *   .ds-tracker__legend          the states named, each with a small cell
+ *
+ * The whole cell is the target of its tooltip; the shape is drawn by its
+ * background, so a low cell still answers at its full height.
+ *
+ * Options (src/core/options.css, docs/options.md), on the tracker or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: the row 4px per step (32px at md)
+ *   density   .ds-density-*: the gap between head, row and axis 1px per
+ *             step
+ *   shape     .ds-shape-*: the cells' corners times --ds-shape
+ *   tone      not read: the state classes carry the meaning, each with its
+ *             own shape and word
+ *   touch     not read: the cells are one tab stop with the arrow keys,
+ *             and a tap shows a cell's tooltip
+ *
+ * Behaviour (DS.tracker, data-ds-tracker on the row): one tab stop, the
+ * arrow keys, Home and End move between the cells; a focused cell shows
+ * its tooltip (DS.overlay.tooltips). Narrow, below 480px of the row, the
+ * gap closes to 1px so 90 cells fit a phone.
+ *
+ * Accessibility: the row is a named group of role="img" cells, each named
+ * with its date and state; the summary says what the row adds up to. A
+ * screen reader hears the summary first, then may walk the cells.
+ * Forced colours: the cells are CanvasText with their shapes; the empty
+ * stub GrayText; a focused cell its ring.
+ *
+ * Hooks: --ds-tracker-height (32px), --ds-tracker-gap (2px).
+ *
+ * No motion: a cell that changes state takes its new colour and shape at
+ * once (a live row re-renders with DS.dom.morphHtml). Its focus ring snaps
+ * as everywhere.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.tracker {
+  .ds-tracker {
+    display: grid;
+    gap: calc(var(--ds-space-2) + var(--ds-density, 0) * 1px);
+    min-width: 0;
+    margin: 0;
+  }
+
+  .ds-tracker__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    column-gap: var(--ds-space-3);
+    min-width: 0;
+  }
+
+  .ds-tracker__label {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-tracker__summary {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-tracker__cells {
+    --_h: max(calc(var(--ds-tracker-height, 32px) + var(--ds-size-step, 0) * 4px), 16px);
+    container-type: inline-size;
+    display: flex;
+    height: var(--_h);
+    min-width: 0;
+  }
+
+  .ds-tracker__cell {
+    --_fill: var(--ds-success);
+    /* How high the shape stands, and its dashes (none: solid). */
+    --_high: 60%;
+    --_dash: var(--_fill);
+    flex: 1 1 0;
+    min-width: 2px;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1) / 2);
+    background:
+      repeating-linear-gradient(to top, var(--_fill) 0 4px, var(--_dash) 4px 6px)
+      bottom / 100% var(--_high) no-repeat;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-tracker__cell:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-tracker__cell--success {
+    --_fill: var(--ds-success);
+  }
+
+  .ds-tracker__cell--info {
+    --_fill: var(--ds-info);
+    --_dash: transparent;
+  }
+
+  .ds-tracker__cell--warning {
+    --_fill: var(--ds-chart-warning);
+    --_dash: transparent;
+    --_high: 100%;
+  }
+
+  .ds-tracker__cell--error {
+    --_fill: var(--ds-chart-error);
+    --_high: 100%;
+  }
+
+  .ds-tracker__cell--empty {
+    --_fill: var(--ds-chart-track);
+    --_high: 4px;
+  }
+
+  /* The gap as a margin, so the container query below can close it. */
+  .ds-tracker__cells > .ds-tracker__cell + .ds-tracker__cell {
+    margin-inline-start: var(--ds-tracker-gap, 2px);
+  }
+
+  /* Many cells in a narrow row: the gap closes so each keeps its width. */
+  @container (max-width: 479px) {
+    .ds-tracker__cells > .ds-tracker__cell + .ds-tracker__cell {
+      margin-inline-start: min(var(--ds-tracker-gap, 2px), 1px);
+    }
+  }
+
+  .ds-tracker__axis {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--ds-space-3);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  /* The states named, each with a small cell of its own shape. */
+  .ds-tracker__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ds-space-1) var(--ds-space-4);
+    margin: 0;
+    padding: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    list-style: none;
+  }
+
+  .ds-tracker__legend > li {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+  }
+
+  .ds-tracker__legend .ds-tracker__cell {
+    flex: none;
+    width: 6px;
+    height: 16px;
+  }
+
+  @media (forced-colors: active) {
+    .ds-tracker__cell {
+      forced-color-adjust: none;
+      --_fill: CanvasText;
+    }
+
+    .ds-tracker__cell:is(.ds-tracker__cell--info, .ds-tracker__cell--warning) {
+      --_dash: Canvas;
+    }
+
+    .ds-tracker__cell--empty {
+      --_fill: GrayText;
+    }
+
+    .ds-tracker__cell:focus-visible {
+      outline-color: Highlight;
+    }
+  }
+
+  @media print {
+    .ds-tracker__cell {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+}

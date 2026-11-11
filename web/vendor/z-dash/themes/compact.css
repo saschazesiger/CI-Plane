@@ -1,0 +1,55 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Compact density for desktop consoles: 13/18 UI text and shorter
+ * controls, rows and items. Load it after ds.css and your theme:
+ *
+ *   <link rel="stylesheet" href="vendor/z-dash/themes/compact.css">
+ *
+ * In 3.0 it is the dense density (--ds-density: -2, docs/options.md) plus
+ * its type roles: every control and row computes its height from the
+ * density (buttons, fields and tabs step 8px down, menus and the drawer
+ * too). Alert, empty state, loading and progress take their block padding from
+ * the density, tighter than 2.x on purpose; status chip, tag and badge do not
+ * read it. Two hooks stay, because the density alone would leave 2.x: table
+ * rows (48px and a side padding of 20px, so two steps give 2.x's 40px rows
+ * and 16px beside the text) and the segmented switch (its comfortable track,
+ * 32px, is already what 2.x's compact theme showed, so 40px less the two
+ * steps keeps it level with a compact button instead of 24px).
+ *
+ * Under a coarse pointer (a phone, a tablet) the default density and
+ * heights come back, so a compact theme never shrinks a target below the
+ * default size on a touch screen. This is not touch density: bigger
+ * targets for a finger are opt-in through .ds-touch. Field text stays 16px
+ * on phones (--ds-font-input). The density and the heights skip a theme
+ * root that carries .ds-touch itself (an unlayered theme would beat it on
+ * that element). Being unlayered, it also beats a .ds-density-* class on
+ * the theme root: put a region's own density on the region.
+ * Type roles, options and hooks only: no scales, no motion tokens or
+ * hooks, never in @layer.
+ */
+
+.ds-theme {
+  /* ── Type: the UI roles at 13/18 (headings, reading text and meta keep theirs) ── */
+  --ds-font-body: var(--ds-weight-regular) calc(13px * var(--ds-type-scale))/calc(18px * var(--ds-type-scale)) var(--ds-font);
+  --ds-font-dense: var(--ds-weight-regular) calc(13px * var(--ds-type-scale))/calc(18px * var(--ds-type-scale)) var(--ds-font);
+  --ds-font-label: var(--ds-weight-label) calc(13px * var(--ds-type-scale))/calc(18px * var(--ds-type-scale)) var(--ds-font);
+  --ds-font-chip: var(--ds-weight-label) calc(13px * var(--ds-type-scale))/calc(18px * var(--ds-type-scale)) var(--ds-font);
+}
+
+/* ── Density, and the two hooks it needs (not where the theme root opted into touch targets) ── */
+.ds-theme:not(.ds-touch) {
+  --ds-density: -2;
+  --ds-table-row-height: 48px;
+  --ds-table-padding: 20px;
+  --ds-segmented-height: 40px;
+}
+
+/* A finger gets the default density, heights and padding back (not the larger touch targets of .ds-touch). */
+@media (pointer: coarse) {
+  .ds-theme:not(.ds-touch) {
+    --ds-density: 0;
+    --ds-table-row-height: 52px;
+    --ds-table-padding: var(--ds-space-4);
+    --ds-segmented-height: 32px;
+  }
+}

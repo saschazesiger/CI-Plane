@@ -1,0 +1,170 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Usage meter: what an assistant or agent used (tokens, and what they
+ * cost) against a budget: a title, a meter, the figures and, near or over
+ * the budget, a status with an icon and a word.
+ *
+ *   <section class="ds-usage" data-ds-usage data-ds-usage-used="182400" data-ds-usage-budget="250000"
+ *            data-ds-usage-cost="3.12" data-ds-usage-cost-budget="5" data-ds-usage-currency="USD"
+ *            aria-labelledby="usage-title">
+ *     <div class="ds-usage__head">
+ *       <h3 class="ds-usage__title" id="usage-title">Tokens this month</h3>
+ *       <span class="ds-usage__status" hidden></span>
+ *     </div>
+ *     <span class="ds-meter ds-usage__meter" role="meter" aria-labelledby="usage-title"></span>
+ *     <p class="ds-usage__figures"><span class="ds-usage__value"></span><span class="ds-usage__cost"></span></p>
+ *     <p class="ds-usage__note">Resets on 1 December.</p>
+ *   </section>
+ *
+ * Parts: __head (the __title and the __status), __meter (on a .ds-meter of
+ * chart.css: the share, its tone near and over the budget), __figures (the
+ * __value, tokens, and the __cost, both tabular, on one line that wraps),
+ * __note (optional: when it resets, what the budget covers).
+ *
+ * The status (data-state="near" or "over" on the root, written by
+ * usage.js, never colour alone): the __status shows an icon (__icon: the
+ * warning triangle in --ds-warning near, the alert circle in --ds-error
+ * over) and the word ("Near the budget", "Over budget") in --ds-text;
+ * the meter takes the warning or error chart role. Without a budget there
+ * is no share and no status: the figures alone, the meter hidden.
+ *
+ * Variant:
+ *   .ds-usage--inline  one row: the title, the meter (at most
+ *                      --ds-usage-inline-meter wide) and the figures, for
+ *                      a composer's foot or a toolbar; it wraps when the
+ *                      row is too narrow.
+ *
+ * Options (src/core/options.css, docs/options.md), on it or any ancestor:
+ *   size      .ds-xs ... .ds-xl: the meter's thickness (chart.css, 1px
+ *             per step); the type stays
+ *   density   .ds-density-*: the room between the parts, 2px per step
+ *   shape     the meter's ends (chart.css)
+ *   tone      not read: the status shows the meaning, with its word
+ *   touch     not read: nothing in it is a target
+ *
+ * Hooks: --ds-usage-gap (--ds-space-2, the room between the parts at the
+ * default density), --ds-usage-inline-meter (160px).
+ *
+ * Motion: the meter's share glides (--ds-share on --ds-ease-value over
+ * --ds-dur-glide, chart.css); the figures and the status change in place.
+ *
+ * Forced colours: the meter takes its system colours (chart.css); the icon
+ * follows the word's forced text colour (global.css) and the word stays.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.usage {
+  .ds-usage {
+    --_gap: max(0px, calc(var(--ds-usage-gap, var(--ds-space-2)) + var(--ds-density, 0) * 2px));
+    display: grid;
+    gap: var(--_gap);
+    min-width: 0;
+    margin: 0;
+    color: var(--ds-text);
+  }
+
+  .ds-usage__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--ds-space-1) var(--ds-space-3);
+    min-width: 0;
+  }
+
+  .ds-usage__title {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+  }
+
+  .ds-usage__status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+    color: var(--ds-text);
+    font: var(--ds-font-caption);
+  }
+
+  .ds-usage__status[hidden] {
+    display: none;
+  }
+
+  .ds-usage__icon {
+    flex: none;
+    align-self: center;
+    width: 16px;
+    height: 16px;
+    color: var(--ds-warning);
+  }
+
+  .ds-usage[data-state="over"] .ds-usage__icon {
+    color: var(--ds-error);
+  }
+
+  .ds-usage__meter {
+    min-width: 0;
+  }
+
+  /* Without a budget (the module hides it): the meter's display would win over the UA rule. */
+  .ds-usage__meter[hidden] {
+    display: none;
+  }
+
+  .ds-usage__figures {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--ds-space-1) var(--ds-space-3);
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A figure the page does not show takes no room. */
+  .ds-usage__value:empty,
+  .ds-usage__cost:empty {
+    display: none;
+  }
+
+  .ds-usage__note {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  /* One row: title, meter, figures. */
+  .ds-usage--inline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: var(--ds-space-3);
+  }
+
+  .ds-usage--inline .ds-usage__head {
+    flex: none;
+    justify-content: flex-start;
+  }
+
+  .ds-usage--inline .ds-usage__title {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-usage--inline .ds-usage__meter {
+    flex: 1 1 var(--ds-space-8);
+    max-width: var(--ds-usage-inline-meter, 160px);
+  }
+
+  .ds-usage--inline .ds-usage__figures {
+    flex: none;
+    justify-content: flex-start;
+  }
+
+  .ds-usage--inline .ds-usage__note {
+    flex-basis: 100%;
+  }
+}

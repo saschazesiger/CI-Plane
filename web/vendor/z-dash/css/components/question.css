@@ -1,0 +1,178 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Question card: a question an assistant or agent asks while it works,
+ * with options to choose (one or several), an answer of one's own, and
+ * Answer and Skip, in a frame. Once answered it keeps the choice in view
+ * and says it in a line.
+ *
+ *   <form class="ds-question" data-ds-question aria-labelledby="q-title">
+ *     <div class="ds-question__head">
+ *       <span class="ds-question__icon">[icon helpCircle 20]</span>
+ *       <h3 class="ds-question__title" id="q-title">Which laptops should get new batteries?</h3>
+ *     </div>
+ *     <p class="ds-question__hint">The assistant waits for your answer.</p>
+ *     <div class="ds-radios ds-question__options" role="radiogroup" aria-labelledby="q-title">
+ *       <label class="ds-radio"><input type="radio" name="q1" value="all">
+ *         <span><strong>All three</strong><small>LAPTOP-0007, -0019 and -0031</small></span></label>
+ *       ...
+ *     </div>
+ *     <div class="ds-field ds-question__other">
+ *       <label class="ds-field__label" for="q-other">Something else</label>
+ *       <input class="ds-input" id="q-other" name="other" autocomplete="off">
+ *     </div>
+ *     <p class="ds-field__hint ds-field__hint--error ds-question__error" hidden></p>
+ *     <div class="ds-question__actions">
+ *       <button class="ds-btn ds-btn--filled" type="submit">Answer</button>
+ *       <button class="ds-btn ds-btn--text" type="button" data-ds-question-skip>Skip</button>
+ *     </div>
+ *     <p class="ds-question__answer" hidden></p>
+ *   </form>
+ *
+ * Parts: __head (an optional __icon and the __title), __hint (optional:
+ * why it asks, what happens next), __options (the choices: radio cards in
+ * .ds-radios for one, checkbox cards in .ds-check-cards for several; their
+ * look is form.css's), __other (optional: a .ds-field for an answer of
+ * one's own), __error (the message of an answer without a choice, written
+ * by question.js), __actions (Answer, the one filled button, and Skip),
+ * __answer (the line once decided: a 16px __glyph and "Answered: ..." or
+ * "Skipped", written by question.js).
+ *
+ * State (data-state, written by question.js; never colour alone):
+ * waiting, answered (the check in a circle in --ds-success and the
+ * words), skipped (a crossed-out circle and "Skipped"). Once decided, the
+ * controls are disabled (the choice stays in view) and the actions go.
+ *
+ * Options (src/core/options.css, docs/options.md), on it or any ancestor:
+ *   density   .ds-density-*: the padding and the room between the parts,
+ *             2px per step (the cards, the field and the buttons follow
+ *             their own)
+ *   shape     the frame's corners times --ds-shape (the cards and the
+ *             buttons follow their own)
+ *   size      the cards, the field and the buttons follow their own; the
+ *             title keeps its role
+ *   touch     the targets of the cards, the field and the buttons
+ *   tone      not read: the state shows the meaning, with its word
+ *
+ * Hooks: --ds-question-padding (--ds-space-4, the padding at the default
+ * density), --ds-question-radius (--ds-radius-card), --ds-question-bg
+ * (--ds-surface), --ds-question-border (--ds-line).
+ *
+ * Motion: once decided the actions leave (DS.motion.leave(), .ds-leave)
+ * and the answer line fades in (ds-fade-in, --ds-dur-fast); opened again
+ * the actions enter. The error message is form.css's.
+ *
+ * Forced colours: the frame keeps its border, the glyph follows the
+ * line's forced text colour (global.css), the cards are form.css's.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.question {
+  .ds-question {
+    --_pad: max(var(--ds-space-2), calc(var(--ds-question-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px));
+    --_gap: max(var(--ds-space-1), calc(var(--ds-space-3) + var(--ds-density, 0) * 2px));
+    display: grid;
+    gap: var(--_gap);
+    min-width: 0;
+    margin: 0;
+    padding: var(--_pad);
+    border: 1px solid var(--ds-question-border, var(--ds-line));
+    border-radius: calc(var(--ds-question-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    background: var(--ds-question-bg, var(--ds-surface));
+    color: var(--ds-text);
+  }
+
+  .ds-question > * {
+    margin: 0;
+  }
+
+  .ds-question__head {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-question__icon {
+    display: inline-flex;
+    flex: none;
+    align-self: flex-start;
+    color: var(--ds-primary);
+  }
+
+  .ds-question__icon > svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .ds-question__title {
+    min-width: 0;
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-subtitle);
+    overflow-wrap: anywhere;
+  }
+
+  .ds-question__hint {
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+
+  .ds-question__options {
+    min-width: 0;
+  }
+
+  .ds-question__other {
+    min-width: 0;
+  }
+
+  .ds-question__error[hidden] {
+    display: none;
+  }
+
+  .ds-question__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2);
+  }
+
+  .ds-question__actions[hidden] {
+    display: none;
+  }
+
+  .ds-question__answer {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-2);
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+    animation: ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) backwards;
+  }
+
+  .ds-question__answer[hidden] {
+    display: none;
+  }
+
+  /* Focus lands here once decided (tabindex="-1"); a ring only for the keyboard. */
+  .ds-question__answer:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-question__glyph {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-block-start: calc((1lh - 16px) / 2);
+    color: var(--ds-text-2);
+  }
+
+  .ds-question[data-state="answered"] .ds-question__glyph {
+    color: var(--ds-success);
+  }
+}

@@ -39,9 +39,9 @@ function alertsHtml(alerts) {
     const kind = { error: 'error', warning: 'warning' }[a.level] || '';
     const glyph = { error: 'alertCircle', warning: 'alert' }[a.level] || 'info';
     const action = a.action
-      ? `<div class="ds-alert__actions"><a class="ds-btn ds-btn--text ds-btn--sm" href="${esc(a.action.href)}"${a.action.external ? ' target="_blank" rel="noopener"' : ''}>${esc(a.action.label)}${a.action.external ? icon('external', 16) : ''}</a></div>`
+      ? `<div class="ds-alert__actions"><a class="ds-btn ds-btn--text ds-sm" href="${esc(a.action.href)}"${a.action.external ? ' target="_blank" rel="noopener"' : ''}>${esc(a.action.label)}${a.action.external ? icon('external', 16) : ''}</a></div>`
       : '';
-    return `<div class="ds-alert${kind ? ` ds-alert--${kind}` : ''}" data-ds-key="${esc(a.key)}">${icon(glyph, 20)}` +
+    return `<div class="ds-alert${kind ? ` ds-tone-${kind}` : ''}" data-ds-key="${esc(a.key)}">${icon(glyph, 20)}` +
       `<div class="ds-alert__text"><p class="ds-alert__title">${esc(a.title)}</p><p>${esc(a.text)}</p></div>${action}</div>`;
   }).join('');
 }
@@ -60,7 +60,7 @@ function capacityItems(workers) {
     const cpuShare = share(c.usedCpus, c.cpus);
     const memShare = share(c.usedMemMb, c.memMb);
     const bar = (value) => {
-      const tone = value >= 0.95 ? ' ds-meter--error' : value >= 0.85 ? ' ds-meter--warning' : '';
+      const tone = value >= 0.95 ? ' ds-tone-error' : value >= 0.85 ? ' ds-tone-warning' : '';
       return `<span class="ds-meter${tone}" aria-hidden="true" style="--ds-share: ${value.toFixed(3)}"></span>`;
     };
     return `<section class="ds-card ds-card--filled" data-ds-key="cap-${w.id}" aria-labelledby="cap-${w.id}-title">` +
@@ -122,11 +122,11 @@ export default {
     return head('Overview', 'What CI-Plane does right now. Figures, meters and the activity update live.') +
       `<div class="ds-stack" id="alerts"${d.alerts.length ? '' : ' hidden'}>${alertsHtml(d.alerts)}</div>` +
       tilesHtml(d) +
-      `<section class="ds-card"><div class="ds-card__row"><h2 class="ds-card__title">Capacity</h2><a class="ds-btn ds-btn--text ds-btn--sm" href="#/workers">All workers</a></div>` +
+      `<section class="ds-card"><div class="ds-card__row"><h2 class="ds-card__title">Capacity</h2><a class="ds-btn ds-btn--text ds-sm" href="#/workers">All workers</a></div>` +
         '<p class="ds-muted">CPUs taken: what is busy on each worker right now, whatever uses it, plus what runners that have just started hold. Memory: what its runners reserve, of what it can give. A job goes where its size finds both free.</p>' +
         `<div id="capacity-slot">${capacityHtml(d.workers)}</div></section>` +
       '<div class="ds-grid-2">' +
-        `<section class="ds-card"><div class="ds-card__row"><h2 class="ds-card__title">Running and waiting</h2><a class="ds-btn ds-btn--text ds-btn--sm" href="#/jobs">All jobs</a></div>` +
+        `<section class="ds-card"><div class="ds-card__row"><h2 class="ds-card__title">Running and waiting</h2><a class="ds-btn ds-btn--text ds-sm" href="#/jobs">All jobs</a></div>` +
           `<div id="open-slot">${openHtml(d.open)}</div></section>` +
         activityCard(d) +
       '</div>';

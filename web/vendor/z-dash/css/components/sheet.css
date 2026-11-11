@@ -1,0 +1,850 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Modal side sheet (Material 3): white, rounded on its leading corners, on
+ * the overlay elevation, over a plain scrim (never blurred). The panel is
+ * opaque throughout: it slides its full width in from the edge on the
+ * spatial spring while the scrim fades (D16), and leaves faster than it
+ * came, back to the edge, accelerating, without a fade; the scrim fades out
+ * with it. At 600px and below it rises from the bottom and falls back down;
+ * there it fills the screen, so it rises on --ds-ease-out: a spring would
+ * carry its head past the top edge. A strip of its own background past its
+ * outer edge (the bleed) covers the spring's overshoot, so the scrim never
+ * shows at the screen edge. A close taken back mid-way continues from
+ * where the panel is.
+ *
+ * Native markup (preferred): showModal() makes the page inert and gives
+ * the sheet its modal semantics.
+ *
+ *   <dialog class="ds-sheet" aria-labelledby="sheet-title">
+ *     <div class="ds-sheet__backdrop" data-ds-close></div>
+ *     <section class="ds-sheet__panel"> ... (as below)
+ *
+ * Div markup (fallback), hidden until it opens:
+ *
+ *   <div class="ds-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+ *     <div class="ds-sheet__backdrop" data-ds-close></div>
+ *     <section class="ds-sheet__panel [ds-sheet__panel--wide]">
+ *       <div class="ds-sheet__head">
+ *         <div class="ds-sheet__heading">
+ *           <h2 class="ds-sheet__title" id="sheet-title">Details</h2>
+ *           <p class="ds-sheet__subtitle" aria-live="polite">12 of 240 devices</p>   (optional)
+ *         </div>
+ *         <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Close" data-ds-close>(close)</button>
+ *       </div>
+ *       <div class="ds-sheet__body" tabindex="0"> ... </div>
+ *       <div class="ds-sheet__foot">                                    (optional)
+ *         <p class="ds-meta">3 filters</p>
+ *         <button class="ds-btn ds-btn--text" type="button">Reset</button>
+ *         <button class="ds-btn ds-btn--filled" type="button" data-ds-close>Show 12 devices</button>
+ *       </div>
+ *
+ * Open and close both with DS.overlay.open(sheet, { opener }) and
+ * DS.overlay.close(sheet) (js/overlay.js), or declaratively with
+ * [data-ds-open="#id"] on a button: focus, trap, Escape, the scroll lock and
+ * data-state ("closed", then "open"; "closed" again to
+ * leave). The motion runs on transitions keyed on data-state, so a
+ * reversal continues from the current value in every engine.
+ *
+ *   .ds-sheet--closing   the exit by hand, without data-state (keyframes):
+ *                        release the trap and focus the opener first, add
+ *                        the class, and after DS.motion.settled(panel) hide
+ *                        the sheet and remove the class in the same task.
+ *                        On a native sheet it keeps the element shown and
+ *                        stacked after close() took it out of the top
+ *                        layer. During the exit the panel ignores the
+ *                        pointer and the backdrop swallows clicks, so
+ *                        nothing reaches the page under it.
+ *
+ * The hidden attribute hides the div sheet, also without .ds-base.
+ *
+ * Head: the title wraps (a long record name stays readable); in
+ * .ds-sheet__heading a .ds-sheet__subtitle under it (meta type, one line,
+ * ellipsis; empty, it takes no room). The head's buttons never shrink.
+ * Foot: the sheet's actions, at the end, wrapping, above a hairline
+ * (--ds-sheet-foot-border); a leading .ds-meta takes the start; it holds
+ * the safe area, so the body above it ends with the normal gap; empty, it
+ * takes no room. A lone .ds-btn directly in the body keeps its own width.
+ *
+ * Another record in an open sheet (previous/next, another row of the
+ * table): keep the sheet open and swap only the body, inside
+ * DS.motion.transition() with type 'forward' or 'back' for previous and
+ * next, 'fade-through' for another row:
+ *
+ *   DS.motion.transition(() => { DS.dom.morphHtml(body, html); return body; }, { type: 'forward' });
+ *
+ * The body then takes the view's motion (ds-sheet-body, motion.css) while
+ * head, panel and the page under the scrim stay still; without View
+ * Transitions the body enters with .ds-enter--swap. A refresh of the same
+ * record never calls transition(): a plain DS.dom.morphHtml(body, html),
+ * since data never replays an entrance.
+ *
+ * Container transform (opt-in): DS.overlay.open(sheet, { opener: row,
+ * container: true }) grows the row into the panel (js/overlay.js).
+ *
+ * data-scrolled on the panel while its body is scrolled: the head's
+ * hairline shows then (where scroll timelines exist it follows the body's
+ * scroll by itself). DS.overlay.open() sets it through
+ * DS.dom.watchScrolled(body) (a 1px sentinel at the top of the body, never
+ * a scroll listener); a sheet shown without DS.overlay calls it once. Do
+ * not use <header> in the head: outside main content it would be a second
+ * banner landmark.
+ *
+ * The on-screen keyboard: with DS.dom.followViewport() on the page, the
+ * panel ends above it (--ds-keyboard-inset, 0px without it) while the
+ * scrim covers the whole window.
+ *
+ * Docked panels (3.0): beside the content instead of over it, in a
+ * layout that shares the room. DS.overlay opens them as a non-modal layer.
+ *
+ *   <div class="ds-sheet__layout">
+ *     <div class="ds-sheet__main"> ... the list ... </div>
+ *     <section class="ds-sheet__panel ds-sheet__panel--push" aria-labelledby="t" hidden>   (or --inspector)
+ *       <div class="ds-sheet__resize" aria-label="Resize the details"></div>     (optional)
+ *       <div class="ds-sheet__head"> ... </div>
+ *       <div class="ds-sheet__body"> ... </div>
+ *
+ *   --push        the content narrows while the panel's width opens from 0
+ *                 (the registered --ds-sheet-reveal, 0 to 1, over
+ *                 --ds-dur-long on --ds-ease-out; back in --ds-dur-base,
+ *                 --ds-ease-exit); its parts keep their width, uncovered
+ *                 from the inline end; DS.sheet moves focus in
+ *   --inspector   the same beside a list that stays usable; focus stays in
+ *                 the list
+ * No scrim, no radius, a hairline (--ds-sheet-docked-border) instead of
+ * the shadow, --ds-sheet-docked-width (400px); it sticks in view in a
+ * taller page. The layout is a container: under 720px the panel lies over
+ * the main column with the overlay elevation, under 480px it takes its
+ * whole width.
+ *
+ * Resizing (3.0): .ds-sheet__resize, the first child of a panel (modal or
+ * docked), is a separator on its inner edge (DS.sheet writes its role,
+ * values and the width, --ds-sheet-size, a runtime property): a hit strip
+ * at least the touch target wide under .ds-touch, a pill that shows on
+ * hover, focus and while it drags, always without hover (data-resizing on the panel, which
+ * holds the docked width's transition). The modal sheet's separator sits on
+ * its left edge (physical, like its slide); at 600px and below it has none.
+ *
+ * Options: density changes the padding of head, body and foot and the height
+ * of the head; shape multiplies the radius; a size class on the sheet changes
+ * only the controls inside (its width is --ds-sheet-width, or --wide).
+ *
+ * Forced colours: the transparent outline of the panel becomes its edge;
+ * a docked panel's hairline stays; the separator's pill is CanvasText,
+ * Highlight while focused or dragged.
+ *
+ * Hook: --ds-sheet-width (560px), --ds-sheet-width-wide (720px),
+ * --ds-sheet-padding (--ds-space-6), --ds-sheet-head-height (64px),
+ * --ds-sheet-radius (--ds-radius-dialog), --ds-sheet-foot-border
+ * (1px solid --ds-line), --ds-sheet-docked-width (400px),
+ * --ds-sheet-docked-border (1px solid --ds-line).
+ *
+ * Print: an open sheet is not printed (it floats over the page).
+ *
+ * At the floor, used directly: @starting-style and allow-discrete
+ * transitions (a native sheet driven by hand, showModal() and close() of the
+ * page without DS.overlay, plays the same transitions, also on close(); the
+ * overlay property, where the engine has it, keeps it in the top layer
+ * through every exit).
+ *
+ * Progressive:
+ * - View Transitions (while DS.motion.transition() runs, data-ds-vt on
+ *   <html>, the body of an open modal sheet is named ds-sheet-body, so a
+ *   record swap moves only the body; a sheet shown inline, without
+ *   data-state, [open] or aria-modal, is never named): without them the
+ *   body enters with .ds-enter--swap.
+ * - scroll-driven animations (animation-timeline, animation-range,
+ *   scroll-timeline, timeline-scope; the head's hairline fades in over the
+ *   first --ds-space-2 of the body's scroll, on the named timeline
+ *   --ds-sheet-scroll scoped on the panel): without them data-scrolled
+ *   shows it over --ds-dur-fast.
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar on the
+ *   body): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+/*
+ * How much of a docked panel's width is open (0 closed, 1 open): registered,
+ * so the width it gives follows a transition, on --ds-ease-out (a size that
+ * pushes the content never overshoots). Internal: written by the rules below
+ * only, never inherited.
+ */
+@property --ds-sheet-reveal {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
+@layer ds.components.sheet {
+  .ds-sheet {
+    position: fixed;
+    inset: 0;
+    z-index: var(--ds-z-drawer);
+    /* Out of flow: no rhythm margin from a parent card (.ds-card > * + *). */
+    margin: 0;
+    display: flex;
+    justify-content: flex-end;
+    /* The panel ends above the on-screen keyboard (DS.dom.followViewport()
+       writes its height); the scrim still covers the whole window. */
+    padding-bottom: var(--ds-keyboard-inset, 0px);
+    /* The bleed past the panel's outer edge never makes anything scroll. */
+    overflow: clip;
+  }
+
+  /* A native <dialog> loses the UA box: it is the same full-window frame
+     as the div. */
+  dialog.ds-sheet {
+    width: auto;
+    height: auto;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0 0 var(--ds-keyboard-inset, 0px);
+    border: 0;
+    background: transparent;
+    color: inherit;
+    overflow: clip;
+  }
+
+  dialog.ds-sheet::backdrop {
+    background: transparent;
+  }
+
+  /* display: flex above outranks the UA rule that hides a closed dialog.
+     --closing keeps it shown while its exit plays outside the top layer;
+     data-state="open" keeps it shown when the page closes it natively
+     (close(), a <form method="dialog">), until the close event, a task
+     later, starts the exit from where it stands. */
+  dialog.ds-sheet:not([open]):not(.ds-sheet--closing):not([data-state="open"]) {
+    display: none;
+  }
+
+  .ds-sheet__backdrop {
+    position: absolute;
+    inset: 0;
+    background: var(--ds-scrim);
+  }
+
+  /* With viewport-fit=cover the sheet keeps clear of the notch, the status
+     bar and the home indicator, like the app frame (shell.css). Physical
+     on purpose (D9): the panel slides in from the right edge, so its
+     rounded corners and its bleed stay on the left. */
+  .ds-sheet__panel {
+    position: relative;
+    width: min(100%, var(--ds-sheet-width, 560px));
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding-top: env(safe-area-inset-top);
+    border-radius: calc(var(--ds-sheet-radius, var(--ds-radius-dialog)) * var(--ds-shape, 1)) 0 0 calc(var(--ds-sheet-radius, var(--ds-radius-dialog)) * var(--ds-shape, 1));
+    background: var(--ds-surface-overlay);
+    /* Its own ink on its own surface (a widget without .ds-base). */
+    color: var(--ds-text);
+    box-shadow: var(--ds-elev-overlay);
+    /* Invisible; forced colors paint it, so the sheet keeps its edge. */
+    outline: 1px solid transparent;
+  }
+
+  /* Bleed: the spring carries the panel a little past its resting edge
+     (about 3 % of the travel, at most 5 %: 36px of a 720px panel); this
+     strip of its own background beyond the outer edge keeps the scrim from
+     showing at the screen edge. Off screen at rest, clipped by the sheet. */
+  .ds-sheet__panel::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    width: var(--ds-space-12);
+    background: inherit;
+    pointer-events: none;
+  }
+
+  .ds-sheet__panel--wide {
+    width: min(100%, var(--ds-sheet-width-wide, 720px));
+  }
+
+  .ds-sheet[hidden] {
+    display: none;
+  }
+
+  /* Only the panel lets clicks through while it leaves; the backdrop
+     swallows them until the sheet is hidden or removed. */
+  .ds-sheet--closing .ds-sheet__panel,
+  .ds-sheet[data-state="closed"] .ds-sheet__panel {
+    pointer-events: none;
+  }
+
+  /* State-driven (DS.overlay): transitions, so a reversal continues from
+     the current value. A transition takes the timing of the state it moves
+     to. The panel only slides (opaque, no fade); the scrim fades out over
+     the panel's exit time, so both end together. */
+  .ds-sheet[data-state] .ds-sheet__backdrop {
+    animation: none;
+    transition: opacity var(--ds-dur-medium) var(--ds-ease-in-out);
+  }
+
+  .ds-sheet[data-state] .ds-sheet__panel {
+    animation: none;
+    transition: translate var(--ds-dur-long) var(--ds-ease-spatial);
+  }
+
+  .ds-sheet[data-state="closed"] .ds-sheet__backdrop {
+    opacity: 0;
+    transition: opacity var(--ds-dur-base) var(--ds-ease-in-out);
+  }
+
+  .ds-sheet[data-state="closed"] .ds-sheet__panel {
+    translate: var(--ds-distance-sheet) 0;
+    transition: translate var(--ds-dur-base) var(--ds-ease-exit);
+  }
+
+  /* Keyframes: markup driven by hand, without data-state. The full-width
+     slide of the opaque panel is the one exit without ds-fade-out: it
+     leaves the screen. */
+  .ds-sheet:not([data-state]) .ds-sheet__backdrop {
+    animation: ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) backwards;
+  }
+
+  .ds-sheet:not([data-state]) .ds-sheet__panel {
+    --ds-motion-distance: var(--ds-distance-sheet);
+    animation: ds-shift-in var(--ds-dur-long) var(--ds-ease-spatial) backwards;
+  }
+
+  .ds-sheet--closing:not([data-state]) .ds-sheet__backdrop {
+    animation: ds-fade-out var(--ds-dur-base) var(--ds-ease-in-out) forwards;
+  }
+
+  .ds-sheet--closing:not([data-state]) .ds-sheet__panel {
+    --ds-motion-distance: var(--ds-distance-sheet);
+    animation: ds-shift-out var(--ds-dur-base) var(--ds-ease-exit) forwards;
+  }
+
+  /* A native sheet driven by hand: the same transitions, keyed on [open].
+     display and overlay step at the end of the exit, so close() animates
+     and Chromium keeps the sheet in the top layer meanwhile. Under
+     DS.overlay only overlay steps: --closing keeps display, and the sheet
+     must not linger, invisible, once it is done. */
+  dialog.ds-sheet:not([data-state]) {
+    transition:
+      display var(--ds-dur-base) allow-discrete,
+      overlay var(--ds-dur-base) allow-discrete;
+  }
+
+  dialog.ds-sheet[data-state] {
+    transition: overlay var(--ds-dur-base) allow-discrete;
+  }
+
+  dialog.ds-sheet:not([data-state]) .ds-sheet__backdrop {
+    animation: none;
+    transition: opacity var(--ds-dur-medium) var(--ds-ease-in-out);
+  }
+
+  dialog.ds-sheet:not([data-state]) .ds-sheet__panel {
+    animation: none;
+    transition: translate var(--ds-dur-long) var(--ds-ease-spatial);
+  }
+
+  dialog.ds-sheet:not([data-state]):not([open]) .ds-sheet__backdrop {
+    opacity: 0;
+    transition: opacity var(--ds-dur-base) var(--ds-ease-in-out);
+  }
+
+  dialog.ds-sheet:not([data-state]):not([open]) .ds-sheet__panel {
+    translate: var(--ds-distance-sheet) 0;
+    transition: translate var(--ds-dur-base) var(--ds-ease-exit);
+  }
+
+  /* Where the sheet enters from when showModal() shows it (a rule of its
+     own, not nested). */
+  @starting-style {
+    dialog.ds-sheet[open]:not([data-state]) .ds-sheet__backdrop {
+      opacity: 0;
+    }
+
+    dialog.ds-sheet[open]:not([data-state]) .ds-sheet__panel {
+      translate: var(--ds-distance-sheet) 0;
+    }
+  }
+
+  /* Header: 64px; its hairline shows only while the body scrolls under it. */
+  .ds-sheet__head {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ds-space-3);
+    flex-shrink: 0;
+    min-height: calc(var(--ds-sheet-head-height, 64px) + var(--ds-density, 0) * 4px);
+    padding:
+      calc(var(--ds-space-3) + var(--ds-density, 0) * 2px)
+      max(var(--ds-space-3), env(safe-area-inset-right))
+      calc(var(--ds-space-3) + var(--ds-density, 0) * 2px)
+      calc(var(--ds-sheet-padding, var(--ds-space-6)) + var(--ds-density, 0) * 2px);
+  }
+
+  .ds-sheet__head::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 1px;
+    background: var(--ds-line);
+    opacity: 0;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-sheet__panel[data-scrolled] .ds-sheet__head::after {
+    opacity: 1;
+  }
+
+  /* Where scroll timelines exist, the hairline follows the body's scroll
+     position itself (over the first --ds-space-2), and data-scrolled, the
+     fallback, changes nothing. The head is the body's sibling, so the body
+     names its timeline and the panel widens the scope to the head.
+     ds-scroll-fade names both ends, so a body without overflow (an
+     inactive timeline) keeps the hairline's own opacity 0;
+     animation-timeline comes after the shorthand, which resets it. */
+  @supports (timeline-scope: none) {
+    .ds-sheet__panel {
+      timeline-scope: --ds-sheet-scroll;
+    }
+
+    .ds-sheet__body {
+      scroll-timeline: --ds-sheet-scroll block;
+    }
+
+    .ds-sheet__head::after {
+      animation: ds-scroll-fade linear both;
+      animation-timeline: --ds-sheet-scroll;
+      animation-range: 0 var(--ds-space-2);
+    }
+  }
+
+  /* The title wraps: a long record name stays readable (2.0). */
+  .ds-sheet__title {
+    margin: 0;
+    min-width: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-title);
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ds-sheet__head > .ds-btn {
+    flex-shrink: 0;
+  }
+
+  /* Title and subtitle as one block that takes the head's free width. */
+  .ds-sheet__heading {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ds-sheet__subtitle {
+    margin: 0;
+    overflow: hidden;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-sheet__subtitle:empty {
+    display: none;
+  }
+
+  .ds-sheet__body {
+    position: relative;
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    padding:
+      var(--ds-space-2)
+      max(calc(var(--ds-sheet-padding, var(--ds-space-6)) + var(--ds-density, 0) * 2px), env(safe-area-inset-right))
+      calc(var(--ds-space-8) + env(safe-area-inset-bottom))
+      calc(var(--ds-sheet-padding, var(--ds-space-6)) + var(--ds-density, 0) * 2px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ds-space-3);
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* A snackbar shown inside the sheet (toast.css) that stays until closed:
+     the body keeps room for it at its end on top of its own padding
+     (data-toast-reserve and --ds-toast-reserve, set by toast(), or by the
+     page with reserve: false), so the sheet's actions can scroll clear of
+     it. */
+  .ds-sheet__body[data-toast-reserve] {
+    padding-bottom: calc(var(--ds-space-8) + env(safe-area-inset-bottom) + var(--ds-toast-reserve, 0px));
+    scroll-padding-bottom: var(--ds-toast-reserve, 0px);
+  }
+
+  /* A lone button keeps its own width (a column would stretch it). */
+  .ds-sheet__body > .ds-btn {
+    align-self: flex-start;
+  }
+
+  /* The sheet's actions: at the end, wrapping, above a hairline. The foot
+     holds the safe area, so the body above it ends with its normal gap. */
+  .ds-sheet__foot {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--ds-space-2);
+    padding:
+      calc(var(--ds-space-3) + var(--ds-density, 0) * 2px)
+      max(calc(var(--ds-sheet-padding, var(--ds-space-6)) + var(--ds-density, 0) * 2px), env(safe-area-inset-right))
+      calc(var(--ds-space-3) + var(--ds-density, 0) * 2px + env(safe-area-inset-bottom))
+      calc(var(--ds-sheet-padding, var(--ds-space-6)) + var(--ds-density, 0) * 2px);
+    border-top: var(--ds-sheet-foot-border, 1px solid var(--ds-line));
+  }
+
+  .ds-sheet__foot > .ds-meta:first-child {
+    margin-inline-end: auto;
+  }
+
+  .ds-sheet__foot:empty {
+    display: none;
+  }
+
+  .ds-sheet__body:has(+ .ds-sheet__foot:not(:empty)) {
+    padding-bottom: var(--ds-space-3);
+  }
+
+  .ds-sheet__body[data-toast-reserve]:has(+ .ds-sheet__foot:not(:empty)) {
+    padding-bottom: calc(var(--ds-space-3) + var(--ds-toast-reserve, 0px));
+  }
+
+  /* A tab stop for scrolling: the ring only for the keyboard, inside the
+     edge so the panel does not clip it; it rests on the edge and snaps
+     inward like every inset ring (.ds-sheet__body above). */
+  .ds-sheet__body:focus {
+    outline: none;
+  }
+
+  .ds-sheet__body:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  /* Another record in an open sheet (DS.motion.transition() writes
+     data-ds-vt on <html> while it runs): the body is a group of its own and
+     takes the view's fade-through or shared axis (motion.css); head and
+     panel stay still. Named only while a transition runs, and only in an
+     open modal sheet (DS.overlay's data-state, a native sheet shown by
+     hand, a div sheet shown by hand), never while it leaves: a group
+     escapes the clip of the scroller around it, so a sheet shown inline
+     in a page would paint over the top bar, and two named bodies would
+     abort the transition. */
+  .ds-theme[data-ds-vt] .ds-sheet[data-state="open"] .ds-sheet__body,
+  .ds-theme[data-ds-vt] dialog.ds-sheet[open]:not([data-state], .ds-sheet--closing) .ds-sheet__body,
+  .ds-theme[data-ds-vt] .ds-sheet[aria-modal="true"]:not([hidden], [data-state], .ds-sheet--closing) .ds-sheet__body {
+    view-transition-name: ds-sheet-body;
+  }
+
+  /* ── Resizing (3.0) ───────────────────────────────── */
+
+  /* The panel's width: a remembered or dragged width (--ds-sheet-size,
+     written by DS.sheet) wins over the hook. */
+  .ds-sheet > .ds-sheet__panel:has(> .ds-sheet__resize) {
+    width: min(100%, var(--ds-sheet-size, var(--ds-sheet-width, 560px)));
+  }
+
+  .ds-sheet > .ds-sheet__panel--wide:has(> .ds-sheet__resize) {
+    width: min(100%, var(--ds-sheet-size, var(--ds-sheet-width-wide, 720px)));
+  }
+
+  /* The separator on the panel's inner edge: a hit strip across the
+     edge, at least the touch target under .ds-touch, with a pill in its
+     middle that shows on hover, focus and while it drags. */
+  .ds-sheet__resize {
+    --_hit: max(var(--ds-target-min, 0px), var(--ds-space-4));
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(var(--_hit) / -2);
+    z-index: var(--ds-z-raised);
+    inline-size: var(--_hit);
+    display: grid;
+    place-items: center;
+    cursor: col-resize;
+    touch-action: none;
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-sheet__resize::before {
+    content: '';
+    inline-size: var(--ds-space-1);
+    block-size: var(--ds-space-12);
+    border-radius: calc(var(--ds-space-1) / 2);
+    background: var(--ds-outline);
+    opacity: 0;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-sheet__resize:hover::before {
+      opacity: 1;
+    }
+  }
+
+  /* No hover to find it by: the pill stays, so a finger sees what to drag. */
+  @media (hover: none) {
+    .ds-sheet__resize::before {
+      opacity: 1;
+    }
+  }
+
+  .ds-sheet__resize:focus-visible::before,
+  .ds-sheet__panel[data-resizing] > .ds-sheet__resize::before {
+    opacity: 1;
+    background: var(--ds-primary);
+  }
+
+  /* The ring on the pill, solid from the first frame (inset: the strip
+     sits on the panel's edge). */
+  .ds-sheet__resize:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-sheet__panel[data-resizing] {
+    user-select: none;
+  }
+
+  /* The modal sheet slides in from the right edge: its separator sits on
+     the panel's left edge whatever the direction. */
+  .ds-sheet .ds-sheet__resize {
+    left: calc(var(--_hit) / -2);
+    right: auto;
+  }
+
+  /* ── Docked panels (3.0): push and inspector ───────── */
+
+  /* The region a docked panel shares: the page's content in
+     .ds-sheet__main, the panel at its inline end. Narrower than
+     --ds-sheet-docked-break (a container query), the panel lies over the
+     main column instead of narrowing it. */
+  .ds-sheet__layout {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    min-block-size: 0;
+    container: ds-sheet-layout / inline-size;
+  }
+
+  .ds-sheet__main {
+    flex: 1 1 0;
+    min-inline-size: 0;
+  }
+
+  /* Docked: no scrim, no radius, a hairline instead of the shadow; its
+     width opens from 0 (the content beside it narrows, on --ds-ease-out:
+     a size that pushes never overshoots) while its parts keep their
+     width and are uncovered from the inline end. It sticks in view in a
+     taller page. */
+  .ds-sheet__panel--push,
+  .ds-sheet__panel--inspector {
+    --_w: var(--ds-sheet-size, var(--ds-sheet-docked-width, 400px));
+    position: sticky;
+    inset-block-start: 0;
+    flex: none;
+    inline-size: calc(min(var(--_w), 100%) * var(--ds-sheet-reveal));
+    block-size: auto;
+    max-block-size: 100dvh;
+    padding-top: 0;
+    align-items: flex-end;
+    overflow: clip;
+    border-radius: 0;
+    border-inline-start: var(--ds-sheet-docked-border, 1px solid var(--ds-line));
+    background: var(--ds-surface);
+    box-shadow: none;
+  }
+
+  .ds-sheet__panel--push::after,
+  .ds-sheet__panel--inspector::after {
+    display: none;
+  }
+
+  .ds-sheet__panel--push > *,
+  .ds-sheet__panel--inspector > * {
+    inline-size: min(var(--_w), 100cqi);
+    max-inline-size: none;
+  }
+
+  .ds-sheet__panel--push > .ds-sheet__resize,
+  .ds-sheet__panel--inspector > .ds-sheet__resize {
+    inline-size: var(--_hit);
+  }
+
+  .ds-sheet__panel[hidden],
+  .ds-sheet__panel--push[hidden],
+  .ds-sheet__panel--inspector[hidden] {
+    display: none;
+  }
+
+  .ds-sheet__panel--push[data-state],
+  .ds-sheet__panel--inspector[data-state] {
+    transition: --ds-sheet-reveal var(--ds-dur-long) var(--ds-ease-out);
+  }
+
+  .ds-sheet__panel--push[data-state="closed"],
+  .ds-sheet__panel--inspector[data-state="closed"] {
+    --ds-sheet-reveal: 0;
+    pointer-events: none;
+    transition: --ds-sheet-reveal var(--ds-dur-base) var(--ds-ease-exit);
+  }
+
+  /* A drag follows the pointer, so the width does not glide meanwhile. */
+  .ds-sheet__panel--push[data-resizing],
+  .ds-sheet__panel--inspector[data-resizing] {
+    transition: none;
+  }
+
+  /* The separator must stay inside the clip of the panel. */
+  .ds-sheet__panel--push > .ds-sheet__resize,
+  .ds-sheet__panel--inspector > .ds-sheet__resize {
+    inset-inline-start: 0;
+  }
+
+  .ds-sheet__panel--push .ds-sheet__head,
+  .ds-sheet__panel--inspector .ds-sheet__head {
+    min-height: calc(var(--ds-sheet-head-height, 64px) - var(--ds-space-2) + var(--ds-density, 0) * 4px);
+  }
+
+  .ds-sheet__panel--push .ds-sheet__body,
+  .ds-sheet__panel--inspector .ds-sheet__body {
+    padding-bottom: var(--ds-space-6);
+  }
+
+  /* Short of room, the docked panel lies over the main column (non-modal,
+     its own elevation), the whole width on a phone. */
+  @container ds-sheet-layout (max-width: 720px) {
+    .ds-sheet__panel--push,
+    .ds-sheet__panel--inspector {
+      position: absolute;
+      inset-block: 0;
+      inset-inline-end: 0;
+      max-block-size: none;
+      z-index: var(--ds-z-raised);
+      box-shadow: var(--ds-elev-overlay);
+    }
+  }
+
+  @container ds-sheet-layout (max-width: 480px) {
+    .ds-sheet__panel--push,
+    .ds-sheet__panel--inspector {
+      --_w: 100cqi;
+      border-inline-start: 0;
+    }
+
+    .ds-sheet__panel--push > .ds-sheet__resize,
+    .ds-sheet__panel--inspector > .ds-sheet__resize {
+      display: none;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .ds-sheet__panel,
+    .ds-sheet__panel--wide,
+    .ds-sheet > .ds-sheet__panel:has(> .ds-sheet__resize) {
+      width: 100%;
+      border-radius: 0;
+    }
+
+    .ds-sheet .ds-sheet__resize {
+      display: none;
+    }
+
+    /* Phones: the sheet rises from the bottom and falls back down; the
+       bleed sits below it. As tall as the screen, it rises on
+       --ds-ease-out (every path), so the spring's overshoot never cuts
+       off its head at the top edge; the exit keeps its tokens. */
+    .ds-sheet__panel::after {
+      top: 100%;
+      inset-inline: 0;
+      bottom: auto;
+      width: auto;
+      height: var(--ds-space-12);
+    }
+
+    .ds-sheet[data-state="open"] .ds-sheet__panel {
+      transition: translate var(--ds-dur-long) var(--ds-ease-out);
+    }
+
+    .ds-sheet[data-state="closed"] .ds-sheet__panel {
+      translate: 0 var(--ds-distance-sheet);
+    }
+
+    .ds-sheet:not([data-state]) .ds-sheet__panel {
+      --ds-motion-distance: var(--ds-distance-sheet);
+      animation: ds-lift-in var(--ds-dur-long) var(--ds-ease-out) backwards;
+    }
+
+    .ds-sheet--closing:not([data-state]) .ds-sheet__panel {
+      --ds-motion-distance: var(--ds-distance-sheet);
+      animation: ds-drop-out var(--ds-dur-base) var(--ds-ease-exit) forwards;
+    }
+
+    .ds-sheet__head {
+      padding-left: max(var(--ds-space-4), env(safe-area-inset-left));
+    }
+
+    .ds-sheet__body {
+      padding-inline: max(var(--ds-space-4), env(safe-area-inset-left)) max(var(--ds-space-4), env(safe-area-inset-right));
+    }
+
+    .ds-sheet__foot {
+      padding-inline: max(var(--ds-space-4), env(safe-area-inset-left)) max(var(--ds-space-4), env(safe-area-inset-right));
+    }
+  }
+
+  @media (max-width: 600px) {
+    dialog.ds-sheet[open]:not([data-state]) .ds-sheet__panel {
+      transition: translate var(--ds-dur-long) var(--ds-ease-out);
+    }
+
+    dialog.ds-sheet:not([data-state]):not([open]) .ds-sheet__panel {
+      translate: 0 var(--ds-distance-sheet);
+    }
+  }
+
+  @media (max-width: 600px) {
+    @starting-style {
+      dialog.ds-sheet[open]:not([data-state]) .ds-sheet__panel {
+        translate: 0 var(--ds-distance-sheet);
+      }
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-sheet__resize::before {
+      background: CanvasText;
+      opacity: 1;
+    }
+
+    .ds-sheet__resize:focus-visible::before,
+    .ds-sheet__panel[data-resizing] > .ds-sheet__resize::before {
+      background: Highlight;
+    }
+  }
+
+  @media print {
+    .ds-sheet,
+    .ds-sheet__panel--push,
+    .ds-sheet__panel--inspector,
+    .ds-sheet__resize {
+      display: none;
+    }
+  }
+}

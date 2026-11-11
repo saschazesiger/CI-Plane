@@ -1,0 +1,170 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Transcript: the scrolling log of a conversation. It sticks to its end
+ * while the reader is there, shows a "Latest" pill with the count of new
+ * messages once they scrolled up, loads earlier messages at the top
+ * without moving what is on screen, and separates the days.
+ *
+ *   <div class="ds-transcript" data-ds-transcript role="region" aria-label="Conversation" tabindex="0">
+ *     <div class="ds-transcript__earlier">
+ *       <button class="ds-btn ds-btn--text" type="button" data-ds-transcript-earlier>Load earlier messages</button></div>
+ *     <div class="ds-transcript__list" role="log" aria-label="Messages">
+ *       <h3 class="ds-transcript__day">Yesterday</h3>
+ *       <article class="ds-message ...">...</article>
+ *     </div>
+ *     <div class="ds-jump"><div class="ds-presence" hidden>
+ *       <button class="ds-btn ds-btn--tonal ds-transcript__latest" type="button">(arrowDown 20)
+ *         <span>Latest</span> <span class="ds-transcript__unread"></span></button></div></div>
+ *   </div>
+ *
+ * The page gives it a block size (a flex child of a column that holds the
+ * composer, or a height); it scrolls on the block axis. The jump (.ds-jump,
+ * scroller.css) is written by the module when the markup has none.
+ *
+ * Parts:
+ *   .ds-transcript__list     the messages and days, in a column at most
+ *                            --ds-transcript-max-width wide, centred; a
+ *                            short conversation rests at the bottom, next
+ *                            to the composer
+ *   .ds-transcript__day      a day separator: its text centred between two
+ *                            lines (a heading, so a reader can jump by day)
+ *   .ds-transcript__earlier  the row of the "load earlier" button at the top
+ *   .ds-transcript__latest   the pill's button: a raised tonal pill
+ *   .ds-transcript__unread   the count of new messages in it ("3 new"),
+ *                            empty and gone while there is none
+ *
+ * Options (src/core/options.css, docs/options.md), on the transcript or
+ * any ancestor; each is computed here, in the part's own rule:
+ *   density   .ds-density-*: 4px less between messages per step
+ *             (--ds-transcript-gap), 2px less of the list's padding
+ *   size, shape, touch: reach the messages and buttons inside; the log
+ *             itself has no height, radius or target of its own
+ * There is no tone.
+ *
+ * Hooks: --ds-transcript-max-width (768px), --ds-transcript-gap (24px),
+ * --ds-transcript-pad (--ds-space-4). The computed values are private.
+ *
+ * Motion: the pill comes and goes as a .ds-presence (motion.css); "Latest"
+ * scrolls smoothly within one screen, else at once (DS.dom.followEnd()).
+ * Loading earlier messages keeps the message on screen in place.
+ *
+ * Forced colours: the focused log shows the system ring; the day lines are
+ * CanvasText; the unread count keeps an edge.
+ *
+ * Print: the log shows all of its content; the pill and the load row go.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.transcript {
+  /* overflow-anchor: none, since the module keeps the message on screen in
+     place itself (the engines' own anchoring stops at the top, where
+     earlier messages come in). */
+  .ds-transcript {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overflow-anchor: none;
+    overscroll-behavior: contain;
+  }
+
+  /* The tab stop that scrolls: an inset ring, solid from the first frame,
+     that snaps from the edge inward. */
+  .ds-transcript[tabindex] {
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-transcript[tabindex]:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-transcript__list {
+    --_pad: max(0px, calc(var(--ds-transcript-pad, var(--ds-space-4)) + var(--ds-density, 0) * 2px));
+    display: flex;
+    flex-direction: column;
+    gap: max(var(--ds-space-2), calc(var(--ds-transcript-gap, 24px) + var(--ds-density, 0) * 4px));
+    box-sizing: border-box;
+    inline-size: 100%;
+    max-inline-size: var(--ds-transcript-max-width, 768px);
+    margin-block-start: auto;
+    margin-inline: auto;
+    padding: var(--_pad);
+  }
+
+  .ds-transcript__day {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-3);
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-weight: var(--ds-weight-label);
+    text-align: center;
+  }
+
+  .ds-transcript__day::before,
+  .ds-transcript__day::after {
+    content: '';
+    flex: 1 1 0;
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  .ds-transcript__earlier {
+    display: flex;
+    justify-content: center;
+    padding-block: var(--ds-space-2) 0;
+  }
+
+  .ds-transcript__earlier[hidden] {
+    display: none;
+  }
+
+  .ds-transcript__latest {
+    box-shadow: var(--ds-elev-2);
+  }
+
+  .ds-transcript__unread {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 20px;
+    padding-inline: var(--ds-space-2);
+    border: 1px solid transparent;
+    border-radius: calc(var(--ds-radius-action) * var(--ds-shape, 1));
+    background: var(--ds-primary);
+    color: var(--ds-on-primary);
+    font: var(--ds-font-caption);
+    font-weight: var(--ds-weight-label);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-transcript__unread:empty {
+    display: none;
+  }
+
+  @media (forced-colors: active) {
+    .ds-transcript__day::before,
+    .ds-transcript__day::after {
+      border-color: CanvasText;
+    }
+
+    .ds-transcript__unread {
+      border-color: CanvasText;
+    }
+  }
+
+  @media print {
+    .ds-transcript {
+      overflow: visible;
+    }
+
+    .ds-transcript__earlier {
+      display: none;
+    }
+  }
+}

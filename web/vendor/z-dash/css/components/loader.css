@@ -1,0 +1,93 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Shape loader: the Material 3 Expressive loading indicator and the block
+ * loader of the system (.ds-boot, .ds-loading). A shape morphs through the
+ * seven M3 shapes (soft burst, cookie-9, pentagon, pill, sunny, cookie-4,
+ * oval; ds-loader-morph), every step landing on the spatial spring, while
+ * it turns once per round (ds-loader-turn, linear); one round takes
+ * --ds-loop-loader. Like every loader it fades in only after
+ * --ds-delay-loader, so fast loads never show it.
+ *
+ *   <span class="ds-loader" aria-hidden="true"></span>
+ *   <div class="ds-boot" role="status"><span class="ds-loader" aria-hidden="true"></span>Starting ...</div>
+ *   <div class="ds-loading" role="status"><span class="ds-loader ds-sm" aria-hidden="true"></span>Loading ...</div>
+ *
+ *   .ds-loader              48px container at md, the shape 38/48 of it
+ *   .ds-loader--contained   the shape on a --ds-accent disc
+ *
+ * Options (docs/options.md), computed here into --_s:
+ *   size      .ds-xs ... .ds-xl on the loader or any ancestor: 24px per step
+ *             (16, 24, 48, 72, 96px), so .ds-sm is the loading line's 24px
+ *   density, shape, target-min, tone: not read. It morphs through its own
+ *             shapes, it is no target and it says nothing but "wait".
+ *
+ * Hooks: --ds-loader-size (48px, the md base), --ds-loader-color
+ * (--ds-primary).
+ *
+ * The loader is decoration: aria-hidden, and the surrounding role="status"
+ * carries the text. Inside .ds-boot, .ds-loading and .ds-skeleton the
+ * container waits its own delay, so loading.css drops the loader's fade
+ * there (the delays never stack). The loops run on ::before, so .ds-enter on the
+ * loader itself replaces only its fade.
+ *
+ * At most a few per view: the polygon morph repaints every frame. Inline
+ * spots (buttons, chips, status chips, table cells) keep the arc spinner
+ * (spinner.css).
+ *
+ * Print: the shape is not printed (its label is).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.loader {
+  .ds-loader {
+    --_s: max(16px, calc(var(--ds-loader-size, 48px) + var(--ds-size-step, 0) * 24px));
+    display: inline-grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: var(--_s);
+    height: var(--_s);
+    border-radius: 50%;
+    animation: ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) var(--ds-delay-loader) backwards;
+  }
+
+  /* The shape: 64-vertex polygons, so every morph is a straight blend. */
+  .ds-loader::before {
+    content: '';
+    width: calc(100% * 38 / 48);
+    height: calc(100% * 38 / 48);
+    background: var(--ds-loader-color, var(--ds-primary));
+    animation:
+      ds-loader-morph var(--ds-loop-loader) var(--ds-ease-spatial) infinite,
+      ds-loader-turn var(--ds-loop-loader) linear infinite;
+  }
+
+  .ds-loader--contained {
+    background: var(--ds-accent);
+  }
+
+  /* Forced colors drop the fills: the shape in the system highlight, the
+     disc of the contained loader as an edge. */
+  @media (forced-colors: active) {
+    .ds-loader {
+      forced-color-adjust: none;
+    }
+
+    .ds-loader::before {
+      background: Highlight;
+    }
+
+    .ds-loader--contained {
+      background: Canvas;
+      outline: 1px solid CanvasText;
+    }
+  }
+
+  /* Print: a frozen shape says nothing on paper; the label stays. */
+  @media print {
+    .ds-loader {
+      display: none;
+    }
+  }
+}

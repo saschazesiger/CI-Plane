@@ -1,0 +1,338 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Terminal frame: the chrome around a terminal emulator the page brings
+ * (xterm.js or its own): a head with the title, the connection status and
+ * the page's actions, the screen the emulator mounts into, and a key bar
+ * with the keys a soft keyboard lacks. terminal.js renders the status and
+ * the key bar; the emulator, the connection and what a key does are the
+ * page's.
+ *
+ *   <div class="ds-terminal" data-ds-terminal data-ds-terminal-status="connected" aria-label="Shell on device 42">
+ *     <div class="ds-terminal__head">
+ *       <span class="ds-terminal__title">ada@device-42: ~</span>
+ *       <span class="ds-terminal__actions"> the page's quiet icon buttons </span>
+ *     </div>
+ *     <div class="ds-terminal__screen"> the emulator mounts here </div>
+ *   </div>
+ *
+ * What terminal.js renders (the page writes none of it):
+ *   <span class="ds-status ds-terminal__status ds-tone-success" role="status">(plug)<span>Connected</span></span>
+ *     before the actions; connecting: .ds-status--running with its spinner;
+ *     disconnected: the neutral chip with a broken link
+ *   <div class="ds-terminal__keys" role="toolbar" aria-label="Terminal keys">
+ *     <button class="ds-btn ds-btn--outlined ds-terminal__key" data-ds-terminal-key="esc" tabindex="0">Esc</button>
+ *     ... Ctrl and Alt with aria-pressed; the arrows .ds-btn--icon with an aria-label
+ *   </div>
+ *
+ * The script writes on the frame data-bar ("auto", "always", "off") and
+ * data-status (connecting, connected, disconnected). The key bar shows
+ * with data-bar="always", and with "auto" (the default) under a coarse
+ * pointer only: a phone or a tablet, where the soft keyboard has no Esc,
+ * Tab, Ctrl or arrows.
+ *
+ * Variant:
+ *   --fill    the frame takes its container's height and the screen the
+ *             rest of it (a terminal page), instead of
+ *             --ds-terminal-height
+ *
+ * Plain output: a page without an emulator (a replay, a read-only session)
+ * writes a <pre> into the screen; spans with data-fg (black, red, green,
+ * yellow, blue, magenta, cyan, white) take the ANSI colours and data-sgr
+ * "bold" or "dim" the weight. DS.terminal.theme(el) reads the same colours
+ * for an emulator (xterm.js's ITheme), so both show the theme's roles.
+ *
+ * Options (src/core/options.css, docs/options.md), on the frame or any
+ * ancestor; each is computed here:
+ *   size      .ds-xs ... .ds-xl: 8px per step on the head's height; the
+ *             keys are buttons and follow their own rule; the screen keeps
+ *             its type (--ds-terminal-font): the emulator sets its cells
+ *   density   .ds-density-*: 4px per step off the head, 2px off the
+ *             padding of the screen and the bar
+ *   shape     .ds-shape-*: the frame's corners (the keys are pills by the
+ *             button's rule)
+ *   touch     .ds-touch: the keys reach the touch target (the button's
+ *             rule); the head's actions are the page's buttons
+ *   not tone: the status chip carries its own, always with its icon and
+ *             word
+ *
+ * Narrow (the frame under 20rem, a container query): the status word
+ * hides (the chip keeps its icon and is still read), the title ellipsizes,
+ * the key bar scrolls sideways.
+ *
+ * Accessibility: the frame is a group named by its aria-label, else by
+ * the title; the status chip is a polite live region; the key bar is a
+ * toolbar with one tab stop (arrow keys, Home, End), whose keys never take
+ * the focus from the screen; Ctrl and Alt are toggle buttons
+ * (aria-pressed). The screen shows a focus ring while the emulator inside
+ * has the focus.
+ *
+ * Forced colours: the frame and the head keep their lines (CanvasText);
+ * the colours of the output go, the status keeps its icon and word, a
+ * held modifier is Highlight (the button's toggle).
+ *
+ * Hooks: --ds-terminal-height (360px), --ds-terminal-bg (--ds-code-bg),
+ * --ds-terminal-fg (--ds-text), --ds-terminal-cursor (--ds-primary),
+ * --ds-terminal-selection (--ds-primary-container), --ds-terminal-radius
+ * (--ds-radius-card), --ds-terminal-font (--ds-font-code) and the eight
+ * ANSI colours --ds-terminal-black ... -white (defaults: roles).
+ *
+ * Motion: the status chip's colour glides (.ds-status); the keys press as
+ * buttons; nothing else moves.
+ *
+ * Print: the head and the screen print; the key bar does not.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin scrollbar on the key bar):
+ *   without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.terminal {
+  .ds-terminal {
+    --_bg: var(--ds-terminal-bg, var(--ds-code-bg));
+    --_fg: var(--ds-terminal-fg, var(--ds-text));
+    --_cursor: var(--ds-terminal-cursor, var(--ds-primary));
+    --_selection: var(--ds-terminal-selection, var(--ds-primary-container));
+    --_on-selection: var(--ds-on-primary-container);
+    --_black: var(--ds-terminal-black, var(--ds-text-2));
+    --_red: var(--ds-terminal-red, var(--ds-error));
+    --_green: var(--ds-terminal-green, var(--ds-success));
+    --_yellow: var(--ds-terminal-yellow, var(--ds-warning));
+    --_blue: var(--ds-terminal-blue, var(--ds-primary));
+    --_magenta: var(--ds-terminal-magenta, color-mix(in oklab, var(--ds-error) 50%, var(--ds-primary)));
+    --_cyan: var(--ds-terminal-cyan, color-mix(in oklab, var(--ds-info) 50%, var(--ds-success)));
+    --_white: var(--ds-terminal-white, var(--ds-text));
+    --_radius: calc(var(--ds-terminal-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    border: 1px solid var(--ds-line);
+    border-radius: var(--_radius);
+    background: var(--_bg);
+    color: var(--_fg);
+    overflow: clip;
+  }
+
+  .ds-terminal--fill {
+    block-size: 100%;
+  }
+
+  /* ── The head ────────────────────────────────────── */
+
+  .ds-terminal__head {
+    --_h: calc(48px + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2) var(--ds-space-3);
+    min-block-size: var(--_h);
+    padding-inline: var(--ds-space-4) var(--ds-space-2);
+    border-block-end: 1px solid var(--ds-line);
+    background: var(--ds-surface);
+    color: var(--ds-text);
+  }
+
+  .ds-terminal__title {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    overflow: hidden;
+    font: var(--ds-terminal-font, var(--ds-font-code));
+    font-weight: var(--ds-weight-label);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-terminal__status {
+    flex: none;
+  }
+
+  .ds-terminal__actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-1);
+    margin-inline-start: auto;
+  }
+
+  .ds-terminal__title + .ds-terminal__actions,
+  .ds-terminal__status + .ds-terminal__actions {
+    margin-inline-start: 0;
+  }
+
+  /* ── The screen ──────────────────────────────────── */
+
+  .ds-terminal__screen {
+    position: relative;
+    flex: 1 1 auto;
+    block-size: var(--ds-terminal-height, 360px);
+    min-block-size: 0;
+    padding-block: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px);
+    padding-inline: var(--ds-space-3);
+    overflow: hidden;
+    background: var(--_bg);
+    color: var(--_fg);
+    font: var(--ds-terminal-font, var(--ds-font-code));
+    caret-color: var(--_cursor);
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-terminal--fill > .ds-terminal__screen {
+    flex: 1 1 0;
+    block-size: auto;
+  }
+
+  /* The emulator inside has the focus (its own text area, or the screen itself). */
+  .ds-terminal__screen:focus-visible,
+  .ds-terminal__screen:has(:focus-visible) {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-terminal__screen ::selection {
+    background: var(--_selection);
+    color: var(--_on-selection);
+  }
+
+  /* Plain output: a <pre> the page writes, its spans coloured like ANSI. */
+  .ds-terminal__screen > pre {
+    block-size: 100%;
+    margin: 0;
+    overflow: auto;
+    font: inherit;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .ds-terminal__screen [data-fg="black"] {
+    color: var(--_black);
+  }
+
+  .ds-terminal__screen [data-fg="red"] {
+    color: var(--_red);
+  }
+
+  .ds-terminal__screen [data-fg="green"] {
+    color: var(--_green);
+  }
+
+  .ds-terminal__screen [data-fg="yellow"] {
+    color: var(--_yellow);
+  }
+
+  .ds-terminal__screen [data-fg="blue"] {
+    color: var(--_blue);
+  }
+
+  .ds-terminal__screen [data-fg="magenta"] {
+    color: var(--_magenta);
+  }
+
+  .ds-terminal__screen [data-fg="cyan"] {
+    color: var(--_cyan);
+  }
+
+  .ds-terminal__screen [data-fg="white"] {
+    color: var(--_white);
+  }
+
+  .ds-terminal__screen [data-sgr~="bold"] {
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-terminal__screen [data-sgr~="dim"] {
+    color: var(--ds-text-2);
+  }
+
+  /* What DS.terminal.theme() reads its colours with: no box, never seen. */
+  .ds-terminal__probe {
+    position: absolute;
+    inline-size: 0;
+    block-size: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  /* ── The key bar ─────────────────────────────────── */
+
+  .ds-terminal__keys {
+    position: relative;
+    display: none;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-2);
+    padding-block: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px);
+    padding-inline: var(--ds-space-3);
+    overflow-x: auto;
+    border-block-start: 1px solid var(--ds-line);
+    background: var(--ds-surface);
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+  }
+
+  .ds-terminal[data-bar="always"] > .ds-terminal__keys {
+    display: flex;
+  }
+
+  .ds-terminal__keys[hidden] {
+    display: none;
+  }
+
+  .ds-terminal__key {
+    flex: none;
+  }
+
+  /* Keys, not actions: a narrower side padding (the button's hook), so more fit on a phone. */
+  .ds-terminal__key:not(.ds-btn--icon) {
+    --ds-btn-padding-x: var(--ds-space-3);
+  }
+
+  @media (pointer: coarse) {
+    .ds-terminal[data-bar="auto"] > .ds-terminal__keys {
+      display: flex;
+    }
+
+    .ds-terminal[data-bar="auto"] > .ds-terminal__keys[hidden] {
+      display: none;
+    }
+  }
+
+  /* ── Narrow ──────────────────────────────────────── */
+
+  @container (max-width: 20rem) {
+    .ds-terminal__head {
+      padding-inline-start: var(--ds-space-3);
+    }
+
+    /* The chip keeps its icon; its word is still read. */
+    .ds-terminal__status > span:last-child {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-terminal,
+    .ds-terminal__head,
+    .ds-terminal__keys {
+      border-color: CanvasText;
+    }
+  }
+
+  @media print {
+    .ds-terminal__keys {
+      display: none;
+    }
+
+    .ds-terminal__screen {
+      block-size: auto;
+    }
+  }
+}

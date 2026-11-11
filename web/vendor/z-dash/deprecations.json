@@ -1,0 +1,644 @@
+{
+  "version": "3.0.1",
+  "names": [
+    {
+      "kind": "token",
+      "name": "--ds-ease",
+      "pattern": "(?<![\\w-])--ds-ease(?![\\w-])",
+      "replacement": "--ds-ease-emphasized",
+      "deprecated": "1.0.0",
+      "removed": "2.0.0",
+      "note": "Same value (the linear() path where supported). MOTION_FALLBACKS['--ds-ease'] is gone too."
+    },
+    {
+      "kind": "role",
+      "name": "--ds-spinner-sm-track",
+      "pattern": "(?<![\\w-])--ds-spinner-sm-track(?![\\w-])",
+      "replacement": null,
+      "deprecated": "1.0.0",
+      "removed": "2.0.0",
+      "note": "It had no effect since 1.0: delete it from the theme."
+    },
+    {
+      "kind": "token",
+      "name": "--ds-state-pulse",
+      "pattern": "(?<![\\w-])--ds-state-pulse(?![\\w-])",
+      "replacement": null,
+      "deprecated": "1.6.2",
+      "removed": "2.0.0",
+      "note": "Read only by ds-pulse; a placeholder is a .ds-skeleton (ds-skeleton-wave)."
+    },
+    {
+      "kind": "token",
+      "name": "--ds-loop-pulse",
+      "pattern": "(?<![\\w-])--ds-loop-pulse(?![\\w-])",
+      "replacement": "--ds-loop-skeleton",
+      "deprecated": "1.4.0",
+      "removed": "2.0.0",
+      "note": "A placeholder is a .ds-skeleton, whose wave runs on --ds-loop-skeleton."
+    },
+    {
+      "kind": "keyframes",
+      "name": "ds-pulse",
+      "pattern": "(?<![\\w-])ds-pulse(?![\\w-])",
+      "replacement": ".ds-skeleton",
+      "deprecated": "1.4.0",
+      "removed": "2.0.0",
+      "note": "One wave across the bones (ds-skeleton-wave); an animation that names ds-pulse plays nothing."
+    },
+    {
+      "kind": "keyframes",
+      "name": "ds-indeterminate",
+      "pattern": "(?<![\\w-])ds-indeterminate(?![\\w-])",
+      "replacement": ".ds-progress--indeterminate",
+      "deprecated": "1.4.0",
+      "removed": "2.0.0",
+      "note": "Or .ds-loadbar: both run ds-progress-head and ds-progress-tail on --ds-loop-indeterminate."
+    },
+    {
+      "kind": "keyframes",
+      "name": "ds-sink-out",
+      "pattern": "(?<![\\w-])ds-sink-out(?![\\w-])",
+      "replacement": "ds-fade-out, ds-drop-out",
+      "deprecated": "1.0.0",
+      "removed": "2.0.0",
+      "note": "Two animation entries, or .ds-leave--sink, or DS.motion.leave(el, 'sink')."
+    },
+    {
+      "kind": "keyframes",
+      "name": "ds-scale-out",
+      "pattern": "(?<![\\w-])ds-scale-out(?![\\w-])",
+      "replacement": "ds-fade-out, ds-shrink-out",
+      "deprecated": "1.0.0",
+      "removed": "2.0.0",
+      "note": "Two animation entries, or .ds-leave--scale, or DS.motion.leave(el, 'scale')."
+    },
+    {
+      "kind": "keyframes",
+      "name": "ds-slide-out",
+      "pattern": "(?<![\\w-])ds-slide-out(?![\\w-])",
+      "replacement": "ds-fade-out, ds-shift-out",
+      "deprecated": "1.0.0",
+      "removed": "2.0.0",
+      "note": "Two animation entries, or .ds-leave--slide, or DS.motion.leave(el, 'slide')."
+    },
+    {
+      "kind": "export",
+      "name": "DS.motion.easeOutCubic",
+      "pattern": "(?<![\\w$])easeOutCubic(?![\\w$])",
+      "replacement": null,
+      "deprecated": "1.0.0",
+      "removed": "2.0.0",
+      "note": "Remove every call and import: an import of it from js/motion.js stops the module from loading. countUp() runs on --ds-ease-value."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-btn__swap",
+      "pattern": "(?<![\\w-])ds-btn__swap(?![\\w-])",
+      "replacement": ".ds-btn__faces",
+      "deprecated": "1.1.0",
+      "removed": "2.0.0",
+      "note": ".ds-btn__faces with .ds-btn__face, .ds-btn__face--busy and .ds-btn__face--done, driven by DS.motion.busy()."
+    },
+    {
+      "kind": "attribute",
+      "name": "data-open on .ds-combo",
+      "pattern": "(?<![\\w-])ds-combo(?![\\w-])[^<>\\n]*?(?<![\\w-])data-open(?![\\w-])",
+      "replacement": "aria-expanded=\"true\" on .ds-combo__input",
+      "deprecated": "1.3.0",
+      "removed": "2.0.0",
+      "note": "DS.overlay.open(list, { opener: field }) sets aria-expanded on the field, which turns the chevron."
+    },
+    {
+      "kind": "markup",
+      "name": "the live region .ds-toasts[role] / .ds-toasts[aria-live]",
+      "pattern": "<[^<>]*?(?:(?<![\\w-])ds-toasts(?![\\w-])[^<>]*?(?<![\\w-])(?:role|aria-live)=|(?<![\\w-])(?:role|aria-live)=[^<>]*?(?<![\\w-])ds-toasts(?![\\w-]))",
+      "replacement": "<div class=\"ds-toasts\"></div>",
+      "deprecated": "1.3.0",
+      "removed": "2.0.0",
+      "note": "DS.overlay.toast() announces through its own two announcers and strips role and aria-live from an old region on first use; never role=\"alert\" on a message."
+    },
+    {
+      "kind": "markup",
+      "name": "the hand recipe that moves snackbars into a side sheet",
+      "pattern": null,
+      "replacement": "DS.overlay.open(sheet) and DS.overlay.toast()",
+      "deprecated": "1.3.0",
+      "removed": "2.0.0",
+      "note": "A page no longer sets --ds-toast-shift or --ds-toast-shift-y, nor closes snackbars with setTimeout: DS.overlay moves the region into an open sheet and glides the messages (both properties stay, written by DS.overlay only), and toast() times them."
+    },
+    {
+      "kind": "markup",
+      "name": "the hand data-scrolled recipe",
+      "pattern": "(?:setAttribute|toggleAttribute)\\(\\s*['\"`]data-scrolled['\"`]|\\.dataset\\.scrolled\\s*=(?!=)",
+      "replacement": "DS.dom.watchScrolled(view)",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "The 1.x App frame recipe: a page's own IntersectionObserver on a sentinel writes data-scrolled. Delete the observer, the sentinel and the page's own watchScrolled function, and call DS.dom.watchScrolled(view) once; DS.overlay.open() watches sheet and dialog bodies itself."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-view--leaving",
+      "pattern": "(?<![\\w-])ds-view--leaving(?![\\w-])",
+      "replacement": "DS.motion.transition()",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "With it goes the manual swap recipe (settled() on the content, then enter(newContent, 'swap'))."
+    },
+    {
+      "kind": "option",
+      "name": "settleLoader(startedAt, now)",
+      "pattern": "(?<![\\w$])settleLoader\\(\\s*[^,()]+,\\s*(?:\\d|now\\b|Date\\.now\\(\\)|performance\\.now\\(\\))",
+      "replacement": "settleLoader(startedAt, { now })",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "A number as the second argument; the pattern finds a literal, a variable named now and the two clocks."
+    },
+    {
+      "kind": "keyframes",
+      "name": "ds-fill-x",
+      "pattern": "(?<![\\w-])ds-fill-x(?![\\w-])",
+      "replacement": "ds-fill-share",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "A mark scaled to its share squashes its round end; --ds-share clips it. Use .ds-enter--fill."
+    },
+    {
+      "kind": "keyframes",
+      "name": "ds-fill-y",
+      "pattern": "(?<![\\w-])ds-fill-y(?![\\w-])",
+      "replacement": "ds-fill-share",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "A mark scaled to its share squashes its round end; --ds-share clips it. Use .ds-enter--fill."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-enter--fill-x",
+      "pattern": "(?<![\\w-])ds-enter--fill-x(?![\\w-])",
+      "replacement": ".ds-enter--fill",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "The mark sets --ds-share instead of its own scaleX()."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-enter--fill-y",
+      "pattern": "(?<![\\w-])ds-enter--fill-y(?![\\w-])",
+      "replacement": ".ds-enter--fill",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "The mark sets --ds-share instead of its own scaleY()."
+    },
+    {
+      "kind": "option",
+      "name": "enter(el, 'fill-x')",
+      "pattern": "(?<![\\w-])['\\\"]fill-x['\\\"]",
+      "replacement": "enter(el, 'fill')",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "The 'fill-x' variant of DS.motion.enter() and enterAll(); the mark sets --ds-share."
+    },
+    {
+      "kind": "option",
+      "name": "enter(el, 'fill-y')",
+      "pattern": "(?<![\\w-])['\\\"]fill-y['\\\"]",
+      "replacement": "enter(el, 'fill')",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "The 'fill-y' variant of DS.motion.enter() and enterAll(); the mark sets --ds-share."
+    },
+    {
+      "kind": "keyframes",
+      "name": "ds-edge-fade",
+      "pattern": "(?<![\\w-])ds-edge-fade(?![\\w-])",
+      "replacement": "ds-scroll-edge-start, ds-scroll-edge-end",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "Internal and unused: the card table wrappers fade through the scroll-edge numbers and --ds-scroll-fade."
+    },
+    {
+      "kind": "token",
+      "name": "--ds-table-fade-start",
+      "pattern": "(?<![\\w-])--ds-table-fade-start(?![\\w-])",
+      "replacement": "--ds-scroll-edge-start",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "Internal and unused; the length of every fade is --ds-scroll-fade."
+    },
+    {
+      "kind": "token",
+      "name": "--ds-table-fade-end",
+      "pattern": "(?<![\\w-])--ds-table-fade-end(?![\\w-])",
+      "replacement": "--ds-scroll-edge-end",
+      "deprecated": "2.0.0",
+      "removed": null,
+      "note": "Internal and unused; the length of every fade is --ds-scroll-fade."
+    },
+    {
+      "kind": "export",
+      "name": "detach()",
+      "pattern": "(?<![\\w$-])detach\\(\\s*\\)",
+      "replacement": "destroy()",
+      "deprecated": "2.0.0",
+      "removed": "3.0.0",
+      "note": "The detach method of the handle that DS.ripple.attach() returns; the pattern finds any detach() call."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-btn--primary",
+      "pattern": "(?<![\\w-])ds-btn--primary(?![\\w-])",
+      "replacement": ".ds-btn--filled",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "The variant names of 3.0 are shared by every component (filled, tonal, outlined, text ...). Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-btn--sm",
+      "pattern": "(?<![\\w-])ds-btn--sm(?![\\w-])",
+      "replacement": ".ds-sm",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Sizes are option classes on the button or any ancestor (.ds-xs ... .ds-xl, docs/options.md). The alias keeps the fixed 2.x height (32px) and padding until 3.0 ships; .ds-sm is 32px at the default density and follows the density (24px under compact), and a small text button pads 8px instead of 12px."
+    },
+    {
+      "kind": "hook",
+      "name": "--ds-btn-sm-height",
+      "pattern": "(?<![\\w-])--ds-btn-sm-height(?![\\w-])",
+      "replacement": "--ds-btn-height",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Read only by the deprecated .ds-btn--sm. .ds-sm takes --ds-btn-height (the md base) less one 8px size step."
+    },
+    {
+      "kind": "hook",
+      "name": "--ds-btn-sm-icon-size",
+      "pattern": "(?<![\\w-])--ds-btn-sm-icon-size(?![\\w-])",
+      "replacement": "--ds-btn-icon-size",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Read by the deprecated .ds-btn--sm.ds-btn--icon (and the room a drawer row keeps for it). .ds-sm takes --ds-btn-icon-size less one 8px size step."
+    },
+    {
+      "kind": "export",
+      "name": "createIndicator()",
+      "pattern": "(?<![\\w$-])createIndicator(?![\\w$-])",
+      "replacement": "DS.indicator.create()",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "The constructor of DS.indicator, named as every behaviour module names it. Same options and handle; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-dialog--wide",
+      "pattern": "(?<![\\w-])ds-dialog--wide(?![\\w-])",
+      "replacement": ".ds-dialog--lg",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "The dialog's sizes are --sm, the default, --lg and --xl. The same width (560px)."
+    },
+    {
+      "kind": "hook",
+      "name": "--ds-dialog-width-wide",
+      "pattern": "(?<![\\w-])--ds-dialog-width-wide(?![\\w-])",
+      "replacement": "--ds-dialog-width-lg",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Read after --ds-dialog-width-lg until 3.0 ships."
+    },
+    {
+      "kind": "attribute",
+      "name": "data-close",
+      "pattern": "(?<![\\w-])data-close(?![\\w-])",
+      "replacement": "data-ds-close",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Every behaviour attribute carries the data-ds- prefix. The same behaviour inside an overlay; with a value, data-ds-close also closes that overlay from outside."
+    },
+    {
+      "kind": "markup",
+      "name": "the event ds-close",
+      "pattern": "['\"`]ds-close['\"`]",
+      "replacement": "ds:close",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Every event of the system is ds:<event>. Both fire until 3.0 ships, with the same detail.reason."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-check--sm",
+      "pattern": "(?<![\\w-])ds-check--sm(?![\\w-])",
+      "replacement": ".ds-sm",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Sizes are option classes on the row or any ancestor (.ds-xs ... .ds-xl, docs/options.md). The alias keeps the fixed 2.x height (32px) and the quieter ink until 3.0 ships; .ds-sm is 32px at the default density and follows the density; the ink is the page's to choose."
+    },
+    {
+      "kind": "hook",
+      "name": "--ds-check-sm-height",
+      "pattern": "(?<![\\w-])--ds-check-sm-height(?![\\w-])",
+      "replacement": "--ds-check-height",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Read only by the deprecated .ds-check--sm. .ds-sm takes --ds-check-height (the md base) less one 8px size step."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-input-group__affix",
+      "pattern": "(?<![\\w-])ds-input-group__affix(?![\\w-])",
+      "replacement": ".ds-input-group__suffix",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "One slot per place: .ds-input-group__prefix before the input, .ds-input-group__suffix after it (a migration maps to the suffix; change a leading one to the prefix). Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-alert--success",
+      "pattern": "(?<![\\w-])ds-alert--success(?![\\w-])",
+      "replacement": ".ds-tone-success",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes on the element (.ds-tone-*, docs/options.md), shared by every component that shows meaning. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-alert--warning",
+      "pattern": "(?<![\\w-])ds-alert--warning(?![\\w-])",
+      "replacement": ".ds-tone-warning",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes on the element (.ds-tone-*, docs/options.md), shared by every component that shows meaning. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-alert--error",
+      "pattern": "(?<![\\w-])ds-alert--error(?![\\w-])",
+      "replacement": ".ds-tone-error",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes on the element (.ds-tone-*, docs/options.md), shared by every component that shows meaning. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-badge--neutral",
+      "pattern": "(?<![\\w-])ds-badge--neutral(?![\\w-])",
+      "replacement": ".ds-tone-neutral",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes on the element (.ds-tone-*, docs/options.md), shared by every component that shows meaning. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-badge--ok",
+      "pattern": "(?<![\\w-])ds-badge--ok(?![\\w-])",
+      "replacement": ".ds-tone-success",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes on the element (.ds-tone-*, docs/options.md), shared by every component that shows meaning. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-badge--warning",
+      "pattern": "(?<![\\w-])ds-badge--warning(?![\\w-])",
+      "replacement": ".ds-tone-warning",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes on the element (.ds-tone-*, docs/options.md), shared by every component that shows meaning. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-badge--error",
+      "pattern": "(?<![\\w-])ds-badge--error(?![\\w-])",
+      "replacement": ".ds-tone-error",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes on the element (.ds-tone-*, docs/options.md), shared by every component that shows meaning. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-status--ok",
+      "pattern": "(?<![\\w-])ds-status--ok(?![\\w-])",
+      "replacement": ".ds-tone-success",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes on the element (.ds-tone-*, docs/options.md), shared by every component that shows meaning. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-status--warning",
+      "pattern": "(?<![\\w-])ds-status--warning(?![\\w-])",
+      "replacement": ".ds-tone-warning",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes on the element (.ds-tone-*, docs/options.md), shared by every component that shows meaning. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-status--error",
+      "pattern": "(?<![\\w-])ds-status--error(?![\\w-])",
+      "replacement": ".ds-tone-error",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes on the element (.ds-tone-*, docs/options.md), shared by every component that shows meaning. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-tag--neutral",
+      "pattern": "(?<![\\w-])ds-tag--neutral(?![\\w-])",
+      "replacement": ".ds-tone-neutral",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes on the element (.ds-tone-*, docs/options.md), shared by every component that shows meaning. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-spinner--sm",
+      "pattern": "(?<![\\w-])ds-spinner--sm(?![\\w-])",
+      "replacement": ".ds-spinner--ink",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "The text colour on a faint ring is .ds-spinner--ink; the size is the option .ds-sm (docs/options.md), so write both for the same 12px. The alias keeps its fixed 12px until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-loader--sm",
+      "pattern": "(?<![\\w-])ds-loader--sm(?![\\w-])",
+      "replacement": ".ds-sm",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Sizes are option classes on the loader or any ancestor (.ds-xs ... .ds-xl, docs/options.md). .ds-sm is the same 24px."
+    },
+    {
+      "kind": "hook",
+      "name": "--ds-loader-sm-size",
+      "pattern": "(?<![\\w-])--ds-loader-sm-size(?![\\w-])",
+      "replacement": "--ds-loader-size",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Read only by the deprecated .ds-loader--sm. .ds-sm takes --ds-loader-size (the md base) less one 24px size step."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-table--dense",
+      "pattern": "(?<![\\w-])ds-table--dense(?![\\w-])",
+      "replacement": ".ds-density-tight",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Density is an option in 3.0: .ds-density-tight on the table or any ancestor gives the 40px rows (with a 36px head, which .ds-density-compact and -dense leave higher). An alias with its fixed 40px head and rows until 3.0 ships."
+    },
+    {
+      "kind": "hook",
+      "name": "--ds-table-dense-row-height",
+      "pattern": "(?<![\\w-])--ds-table-dense-row-height(?![\\w-])",
+      "replacement": "--ds-table-row-height",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Goes with .ds-table--dense: --ds-table-row-height is the base that size and density apply to."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-kv-list__icon--ok",
+      "pattern": "(?<![\\w-])ds-kv-list__icon--ok(?![\\w-])",
+      "replacement": ".ds-tone-success",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes of every component (.ds-tone-*, docs/options.md), read here from the class on the element itself. Same colour; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-kv-list__icon--warning",
+      "pattern": "(?<![\\w-])ds-kv-list__icon--warning(?![\\w-])",
+      "replacement": ".ds-tone-warning",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes of every component (.ds-tone-*, docs/options.md), read here from the class on the element itself. Same colour; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-kv-list__icon--error",
+      "pattern": "(?<![\\w-])ds-kv-list__icon--error(?![\\w-])",
+      "replacement": ".ds-tone-error",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes of every component (.ds-tone-*, docs/options.md), read here from the class on the element itself. Same colour; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-meter--neutral",
+      "pattern": "(?<![\\w-])ds-meter--neutral(?![\\w-])",
+      "replacement": ".ds-tone-neutral",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes of every component (.ds-tone-*, docs/options.md), read here from the class on the element itself. Same colour; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-meter--warning",
+      "pattern": "(?<![\\w-])ds-meter--warning(?![\\w-])",
+      "replacement": ".ds-tone-warning",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes of every component (.ds-tone-*, docs/options.md), read here from the class on the element itself. Same colour; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-meter--error",
+      "pattern": "(?<![\\w-])ds-meter--error(?![\\w-])",
+      "replacement": ".ds-tone-error",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes of every component (.ds-tone-*, docs/options.md), read here from the class on the element itself. Same colour; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-columns__col--warning",
+      "pattern": "(?<![\\w-])ds-columns__col--warning(?![\\w-])",
+      "replacement": ".ds-tone-warning",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes of every component (.ds-tone-*, docs/options.md), read here from the class on the element itself. Same colour; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-columns__col--error",
+      "pattern": "(?<![\\w-])ds-columns__col--error(?![\\w-])",
+      "replacement": ".ds-tone-error",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes of every component (.ds-tone-*, docs/options.md), read here from the class on the element itself. Same colour; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-legend__key--neutral",
+      "pattern": "(?<![\\w-])ds-legend__key--neutral(?![\\w-])",
+      "replacement": ".ds-tone-neutral",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes of every component (.ds-tone-*, docs/options.md), read here from the class on the element itself. Same colour; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-legend__key--warning",
+      "pattern": "(?<![\\w-])ds-legend__key--warning(?![\\w-])",
+      "replacement": ".ds-tone-warning",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes of every component (.ds-tone-*, docs/options.md), read here from the class on the element itself. Same colour; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-legend__key--error",
+      "pattern": "(?<![\\w-])ds-legend__key--error(?![\\w-])",
+      "replacement": ".ds-tone-error",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Tones are option classes of every component (.ds-tone-*, docs/options.md), read here from the class on the element itself. Same colour; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-subsection",
+      "pattern": "(?<![\\w-])ds-subsection(?![\\w-])",
+      "replacement": ".ds-card__section",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "A part of a card is .ds-card__<part>, like every part in 3.0. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-more",
+      "pattern": "(?<![\\w-])ds-more(?![\\w-])",
+      "replacement": ".ds-card__more",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "A part of a card is .ds-card__<part>, like every part in 3.0. Same look; an alias until 3.0 ships."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-avatar--sm",
+      "pattern": "(?<![\\w-])ds-avatar--sm(?![\\w-])",
+      "replacement": ".ds-sm",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Sizes are option classes on the avatar or any ancestor (.ds-xs ... .ds-xl, docs/options.md). The alias keeps the fixed 2.x disc (24px, the caption role) until 3.0 ships; .ds-sm is 24px too, in the size's type role."
+    },
+    {
+      "kind": "class",
+      "name": ".ds-avatar--lg",
+      "pattern": "(?<![\\w-])ds-avatar--lg(?![\\w-])",
+      "replacement": ".ds-lg",
+      "deprecated": "3.0.0",
+      "removed": "3.0.0",
+      "note": "Sizes are option classes on the avatar or any ancestor (.ds-xs ... .ds-xl, docs/options.md). The alias keeps the fixed 2.x disc (40px, the subtitle role) until 3.0 ships; .ds-lg is the same."
+    },
+    {
+      "kind": "export",
+      "name": "DashboardStyle",
+      "pattern": "(?<![\\w$])DashboardStyle(?:Api|Registry)?(?![\\w$])",
+      "replacement": "ZDash",
+      "deprecated": "3.0.0",
+      "removed": null,
+      "note": "The project was renamed from Dashboard-Style to Z-Dash in 3.0: the page-wide registry is globalThis.ZDash (ZDash.versions, ZDash.runtime), the types ZDashApi and ZDashRegistry. Both globals hold the same object and the old type names stay as aliases."
+    }
+  ]
+}

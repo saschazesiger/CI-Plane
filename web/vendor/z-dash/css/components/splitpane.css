@@ -1,0 +1,322 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Split pane: two or three panes side by side (or stacked), with a divider
+ * between each pair that resizes them: the WAI-ARIA window splitter
+ * (js: DS.splitpane). Each pane scrolls on its own.
+ *
+ *   <div class="ds-splitpane" data-ds-splitpane data-ds-splitpane-store="devices">
+ *     <section class="ds-splitpane__pane" id="device-list" aria-label="Devices" data-ds-splitpane-collapsible
+ *              style="--ds-splitpane-size: 320px; --ds-splitpane-min: 240px; --ds-splitpane-max: 50%"> ... </section>
+ *     <div class="ds-splitpane__divider" role="separator" tabindex="0" aria-controls="device-list" aria-label="Resize the device list"></div>
+ *     <section class="ds-splitpane__pane ds-splitpane__pane--fill" aria-label="Details">
+ *       <div class="ds-splitpane__body"> ... </div>
+ *     </section>
+ *   </div>
+ *
+ * Panes:
+ *   .ds-splitpane__pane        a pane with a size of its own: the start size
+ *                              in --ds-splitpane-size (any length or
+ *                              percentage of the split pane; default 50%),
+ *                              its limits in --ds-splitpane-min (0) and
+ *                              --ds-splitpane-max (100%), set on the pane
+ *   .ds-splitpane__pane--fill  the pane that takes the rest (one per split
+ *                              pane; without one, the last pane does)
+ *   .ds-splitpane__body        padded content of a pane (a pane itself has
+ *                              no padding, so it can collapse to nothing);
+ *                              a .ds-list right in a pane loses its frame
+ *                              and runs to the pane's edges
+ * The three are registered and do not inherit, so a split pane inside a
+ * pane starts from the defaults. Three panes: give the outer two a size and
+ * the middle one --fill (a list, the work area, an inspector).
+ *
+ * Dividers: .ds-splitpane__divider, between two panes, a hairline
+ * (--ds-splitpane-line, --ds-line) with a grip in its middle
+ * (--ds-splitpane-grip, --ds-outline) and a hit area wider than the line
+ * (--ds-splitpane-hit, 12px; under .ds-touch half the touch target, 24px),
+ * laid over the panes' edges. It resizes the pane named by aria-controls,
+ * else the neighbour that does not fill. DS.splitpane writes role,
+ * aria-orientation, aria-valuenow, -min and -max (the pane's share of the
+ * split pane, in percent) and aria-valuetext while collapsed.
+ *
+ * Variants:
+ *   .ds-splitpane              no frame: the split pane fills its place
+ *                              (the content panel, a card's body)
+ *   .ds-splitpane--outlined    the hairline frame and the card radius
+ *                              (--ds-splitpane-radius, --ds-radius-card,
+ *                              times --ds-shape) on --ds-surface: a split
+ *                              view inside a page
+ *   .ds-splitpane--stacked     the panes one above the other, the divider
+ *                              across (it moves with ArrowUp and ArrowDown)
+ *
+ * Narrow: data-ds-splitpane-stack="<px>" stacks the panes while the split
+ * pane is narrower than that (a phone): DS.splitpane measures it and writes
+ * data-state="stacked", which lays it out as --stacked (the sizes and the
+ * limits then apply to the heights, the divider moves with ArrowUp and
+ * ArrowDown).
+ *
+ * Height: --ds-splitpane-height (100%: it fills a parent of a set height;
+ * set a length where the parent grows with its content).
+ *
+ * Behaviour (DS.splitpane, docs: splitpane.md): drag a divider (pointer,
+ * touch, pen); with the focus on it ArrowLeft and ArrowRight (stacked:
+ * ArrowUp and ArrowDown) move it by data-ds-splitpane-step px (16; Shift:
+ * four times that), Home and End to the pane's smallest and largest size,
+ * Enter collapses and restores a pane marked data-ds-splitpane-collapsible
+ * (so does a double click; dragging it below half its minimum snaps it
+ * shut), Escape during a drag puts it back. data-ds-splitpane-store="<key>" remembers the sizes
+ * and what is collapsed (DS.store). A button with
+ * data-ds-splitpane-toggle="<pane id>" collapses and restores that pane and
+ * carries aria-expanded.
+ *
+ * State (written by DS.splitpane): the split pane has data-state="stacked"
+ * while it is narrower than data-ds-splitpane-stack; a pane collapses to nothing with
+ * data-state="collapsed" (inert, its minimum lifted) and comes back through
+ * data-state="expanding"; a divider being dragged has data-state="dragging"
+ * (the line and the grip turn --ds-primary, the cursor stays on the whole
+ * split pane, nothing selects).
+ *
+ * Options (src/core/options.css, docs/options.md), computed here:
+ *   size      .ds-xs ... .ds-xl: the grip's length, 8px per step (32px at md)
+ *   density   .ds-density-*: the padding of .ds-splitpane__body, 2px per
+ *             step; the panes and the divider stay
+ *   shape     .ds-shape-*: the frame of --outlined and the grip's ends
+ *   touch     .ds-touch: the hit area at least half the touch target wide,
+ *             the grip at least the touch target long
+ *   tone      not read: a divider says nothing
+ *
+ * Motion: collapsing and restoring a pane glides its size
+ * (--ds-splitpane-size, registered) over --ds-dur-medium on --ds-ease-out
+ * (a size that pushes layout never overshoots), and continues from where it
+ * is when it reverses; a drag and the keys move it at once. The line and the
+ * grip change colour over --ds-dur-fast. Focus: a ring around the grip, solid
+ * from the first frame, snapping from offset + width to the offset.
+ *
+ * Forced colours: the line and the grip in CanvasText, Highlight while
+ * dragged; the ring takes the system colour.
+ *
+ * Hooks: --ds-splitpane-size, --ds-splitpane-min, --ds-splitpane-max (on a
+ * pane), --ds-splitpane-height, --ds-splitpane-line, --ds-splitpane-grip,
+ * --ds-splitpane-hit, --ds-splitpane-radius, --ds-splitpane-padding. --_hit,
+ * --_grip, --_radius are private.
+ *
+ * No progressive features.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+/* The size and the limits of a pane: lengths that glide (a collapse) and
+   stop at the pane (a split pane inside it starts from the defaults). */
+@property --ds-splitpane-size {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 50%;
+}
+
+@property --ds-splitpane-min {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --ds-splitpane-max {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 100%;
+}
+
+@layer ds.components.splitpane {
+  .ds-splitpane {
+    display: flex;
+    min-inline-size: 0;
+    min-block-size: 0;
+    block-size: var(--ds-splitpane-height, 100%);
+    overflow: hidden;
+  }
+
+  :is(.ds-splitpane--stacked, .ds-splitpane[data-state="stacked"]) {
+    flex-direction: column;
+  }
+
+  .ds-splitpane--outlined {
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-splitpane-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    background: var(--ds-surface);
+  }
+
+  .ds-splitpane__pane {
+    position: relative;
+    flex: 0 1 var(--ds-splitpane-size, 50%);
+    min-inline-size: var(--ds-splitpane-min, 0px);
+    max-inline-size: var(--ds-splitpane-max, 100%);
+    min-block-size: 0;
+    overflow: auto;
+  }
+
+  :is(.ds-splitpane--stacked, .ds-splitpane[data-state="stacked"]) > .ds-splitpane__pane {
+    min-inline-size: 0;
+    max-inline-size: none;
+    min-block-size: var(--ds-splitpane-min, 0px);
+    max-block-size: var(--ds-splitpane-max, 100%);
+  }
+
+  /* The pane that takes the rest: marked, or the last one. */
+  .ds-splitpane__pane--fill,
+  .ds-splitpane:not(:has(> .ds-splitpane__pane--fill)) > .ds-splitpane__pane:last-child {
+    flex: 1 1 0;
+    max-inline-size: none;
+  }
+
+  :is(.ds-splitpane--stacked, .ds-splitpane[data-state="stacked"]) > .ds-splitpane__pane--fill,
+  :is(.ds-splitpane--stacked, .ds-splitpane[data-state="stacked"]):not(:has(> .ds-splitpane__pane--fill)) > .ds-splitpane__pane:last-child {
+    max-block-size: none;
+  }
+
+  /* Collapsed, and on its way back: no minimum, so the size glides from
+     nothing (the minimum would jump it there at once). */
+  .ds-splitpane__pane:is([data-state="collapsed"], [data-state="expanding"]) {
+    min-inline-size: 0;
+    min-block-size: 0;
+    overflow: hidden;
+    transition: --ds-splitpane-size var(--ds-dur-medium) var(--ds-ease-out);
+  }
+
+  /* A list that fills a pane runs to its edges: the pane is its frame. */
+  .ds-splitpane__pane > .ds-list {
+    border: 0;
+    border-radius: 0;
+  }
+
+  .ds-splitpane__body {
+    padding: calc(var(--ds-splitpane-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px);
+  }
+
+  .ds-splitpane__divider {
+    /* Half the touch target under .ds-touch: the hit area lies over both
+       panes' edges, the grip (below) carries the full target. */
+    --_hit: max(var(--ds-splitpane-hit, 12px), calc(var(--ds-target-min, 0px) / 2));
+    --_grip: max(calc(32px + var(--ds-size-step, 0) * 8px), var(--ds-target-min, 0px));
+    position: relative;
+    z-index: var(--ds-z-raised);
+    flex: 0 0 1px;
+    align-self: stretch;
+    background: var(--ds-splitpane-line, var(--ds-line));
+    cursor: col-resize;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
+    transition: background-color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  :is(.ds-splitpane--stacked, .ds-splitpane[data-state="stacked"]) > .ds-splitpane__divider {
+    cursor: row-resize;
+  }
+
+  /* The hit area, centred on the line. */
+  .ds-splitpane__divider::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 50%;
+    inline-size: var(--_hit);
+    translate: -50% 0;
+  }
+
+  :is(.ds-splitpane--stacked, .ds-splitpane[data-state="stacked"]) > .ds-splitpane__divider::before {
+    inset-block: auto;
+    inset-inline: 0;
+    inset-block-start: 50%;
+    inline-size: auto;
+    block-size: var(--_hit);
+    translate: 0 -50%;
+  }
+
+  /* The grip: a short pill on the line, where the focus ring sits. */
+  .ds-splitpane__divider::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    inline-size: 4px;
+    block-size: min(var(--_grip), 100%);
+    translate: -50% -50%;
+    border-radius: calc(var(--ds-radius-action) * var(--ds-shape, 1));
+    background: var(--ds-splitpane-grip, var(--ds-outline));
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  :is(.ds-splitpane--stacked, .ds-splitpane[data-state="stacked"]) > .ds-splitpane__divider::after {
+    inline-size: min(var(--_grip), 100%);
+    block-size: 4px;
+  }
+
+  .ds-splitpane__divider:focus-visible::after {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  @media (hover: hover) {
+    .ds-splitpane__divider:hover {
+      background: var(--ds-outline);
+    }
+
+    .ds-splitpane__divider:hover::after {
+      background: var(--ds-text-2);
+    }
+  }
+
+  .ds-splitpane__divider[data-state="dragging"],
+  .ds-splitpane__divider[data-state="dragging"]::after {
+    background: var(--ds-primary);
+  }
+
+  /* While a divider is dragged: its cursor everywhere on the split pane,
+     no text selected, and frames in a pane (a preview) keep no pointer. */
+  .ds-splitpane:has(> .ds-splitpane__divider[data-state="dragging"]) {
+    cursor: col-resize;
+    user-select: none;
+  }
+
+  :is(.ds-splitpane--stacked, .ds-splitpane[data-state="stacked"]):has(> .ds-splitpane__divider[data-state="dragging"]) {
+    cursor: row-resize;
+  }
+
+  .ds-splitpane:has(> .ds-splitpane__divider[data-state="dragging"]) > .ds-splitpane__pane {
+    pointer-events: none;
+  }
+
+  @media (forced-colors: active) {
+    .ds-splitpane__divider,
+    .ds-splitpane__divider::after {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+
+    .ds-splitpane__divider[data-state="dragging"],
+    .ds-splitpane__divider[data-state="dragging"]::after {
+      background: Highlight;
+    }
+
+    .ds-splitpane__divider:focus-visible::after {
+      outline-color: CanvasText;
+    }
+  }
+
+  @media print {
+    .ds-splitpane {
+      block-size: auto;
+    }
+
+    .ds-splitpane__pane {
+      overflow: visible;
+    }
+
+    .ds-splitpane__divider::after {
+      content: none;
+    }
+  }
+}

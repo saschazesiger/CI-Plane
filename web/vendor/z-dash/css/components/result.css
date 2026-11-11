@@ -1,0 +1,207 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Result page: the whole page, or a whole panel, says how a request ended
+ * when there is nothing else to show: done, not allowed (403), not found
+ * (404), failed (500), down for maintenance, offline. A disc with the
+ * cause's icon (or a picture), the code, a title that says what happened,
+ * one line of what to do, the way out, and a reference for support.
+ *
+ *   <main class="ds-result ds-result--not-found" aria-labelledby="result-title">
+ *     <span class="ds-result__disc" aria-hidden="true">(mapPin 32)</span>
+ *     <p class="ds-result__code">404</p>
+ *     <h1 class="ds-result__title" id="result-title">Page not found</h1>
+ *     <p class="ds-result__text">The address may be mistyped, or the page has moved.</p>
+ *     <div class="ds-result__actions">
+ *       <a class="ds-btn ds-btn--filled" href="/">Go to the overview</a>
+ *       <a class="ds-btn ds-btn--text" href="/search">Search</a>
+ *     </div>
+ *     <p class="ds-result__meta">Reference 9F2C-118A</p>
+ *   </main>
+ *
+ * Causes (the disc's colours; the icon, words and actions are the page's,
+ * docs/components.md suggests them per cause):
+ *   --success      done: the success container
+ *   --forbidden    403, not allowed: neutral
+ *   --not-found    404: the accent tint
+ *   --error        500, it failed: the error container
+ *   --maintenance  down on purpose, back soon: the warning container
+ *   --offline      no connection: the warning container
+ *   .ds-tone-*     any other meaning, from the class on .ds-result itself
+ * The icon and the words always say it, never the colour alone; the code
+ * is a figure for support, never the only word.
+ *
+ * Parts: .ds-result__media (a picture in place of the disc, at most
+ * --ds-result-media-size high), .ds-result__code (the status code, in the
+ * display type, quiet), .ds-result__title, .ds-result__text,
+ * .ds-result__actions (one filled button at most, and a text button),
+ * .ds-result__meta (a reference, a time: caption type, selectable).
+ *
+ * Options (src/core/options.css, docs/options.md), on it or any ancestor;
+ * each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: the disc 8px per step (80px at md) and
+ *             the block padding 8px per step; the type stays
+ *   density   .ds-density-*: the block padding 4px per step, the gaps 1px
+ *   shape     .ds-shape-*: the disc's radius times --ds-shape (round at
+ *             the default, never rounder than half its size)
+ *   tone      above
+ *   touch     only its buttons read it
+ *
+ * In a phone's width the actions stack, full width. No motion of its own:
+ * a result that replaces content after a request comes in with .ds-reveal
+ * (docs/motion.md).
+ *
+ * Accessibility: one h1 (the title; a result inside a panel takes the
+ * panel's heading level), the landmark or panel named by it. After a
+ * request in a single-page app, focus goes to the title (tabindex="-1")
+ * so the result is read. Forced colours: the disc keeps an outline (its
+ * fill is dropped).
+ *
+ * Hooks: --ds-result-disc-size (80px), --ds-result-media-size (200px),
+ * --ds-result-padding (--ds-space-12).
+ *
+ * Progressive:
+ * - text-wrap: pretty (the text avoids a lone last word): without it the
+ *   line wraps as usual.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.result {
+  .ds-result {
+    --_disc-bg: var(--ds-accent);
+    --_disc-ink: var(--ds-on-accent-icon);
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: calc(var(--ds-space-2) + var(--ds-density, 0) * 1px);
+    max-width: 560px;
+    min-height: min(100%, 100svh);
+    margin: 0 auto;
+    padding: calc(var(--ds-result-padding, var(--ds-space-12)) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px) var(--ds-space-4);
+    text-align: center;
+  }
+
+  .ds-result__disc {
+    --_d: calc(var(--ds-result-disc-size, 80px) + var(--ds-size-step, 0) * 8px);
+    display: grid;
+    place-items: center;
+    width: var(--_d);
+    height: var(--_d);
+    margin-bottom: var(--ds-space-3);
+    border-radius: min(calc(min(var(--ds-radius-action), calc(var(--_d) / 2)) * var(--ds-shape, 1)), calc(var(--_d) / 2));
+    outline: 1px solid transparent;
+    background: var(--_disc-bg);
+    color: var(--_disc-ink);
+  }
+
+  .ds-result__media {
+    display: grid;
+    place-items: center;
+    max-width: 100%;
+    height: var(--ds-result-media-size, 200px);
+    margin-bottom: var(--ds-space-3);
+    color: var(--ds-text-2);
+  }
+
+  .ds-result__media > :is(img, svg) {
+    display: block;
+    max-width: 100%;
+    height: 100%;
+  }
+
+  .ds-result__code {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-headline);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-result__title {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-display);
+    text-wrap: balance;
+  }
+
+  /* Focused after a request, so it is read; it shows no ring of its own
+     (it is no control), the page's skip target style aside. */
+  .ds-result__title:focus {
+    outline: none;
+  }
+
+  .ds-result__text {
+    max-width: var(--ds-measure);
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    text-wrap: pretty;
+  }
+
+  .ds-result__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--ds-space-2);
+    margin-top: var(--ds-space-4);
+  }
+
+  .ds-result__meta {
+    margin: var(--ds-space-4) 0 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    font-variant-numeric: tabular-nums;
+    user-select: text;
+  }
+
+  .ds-result--success {
+    --_disc-bg: var(--ds-success-container);
+    --_disc-ink: var(--ds-on-success-container);
+  }
+
+  .ds-result--forbidden {
+    --_disc-bg: var(--ds-surface-high);
+    --_disc-ink: var(--ds-text-2);
+  }
+
+  .ds-result--not-found {
+    --_disc-bg: var(--ds-accent);
+    --_disc-ink: var(--ds-on-accent-icon);
+  }
+
+  .ds-result--error {
+    --_disc-bg: var(--ds-error-container);
+    --_disc-ink: var(--ds-on-error-container);
+  }
+
+  .ds-result--maintenance,
+  .ds-result--offline {
+    --_disc-bg: var(--ds-warning-container);
+    --_disc-ink: var(--ds-on-warning-container);
+  }
+
+  /* A tone from the class on the result itself; it wins over a cause. */
+  .ds-result:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --_disc-bg: var(--ds-tone-container);
+    --_disc-ink: var(--ds-on-tone-container);
+  }
+
+  /* A phone: the actions stack, full width, the filled one first. */
+  @container (max-width: 480px) {
+    .ds-result__actions {
+      flex-direction: column;
+      justify-self: stretch;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .ds-result__actions {
+      flex-direction: column;
+      justify-self: stretch;
+    }
+
+    .ds-result__title {
+      font: var(--ds-font-headline);
+    }
+  }
+}

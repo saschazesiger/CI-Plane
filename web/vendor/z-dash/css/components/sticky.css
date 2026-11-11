@@ -1,0 +1,194 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Sticky: a head, a foot or a side that stays in view while its scroller
+ * moves, with a raised edge (a hairline and a shadow towards the content)
+ * once content passes under it.
+ *
+ *   <div class="x-list" style="overflow: auto">           any scroller (or the page)
+ *     <header class="ds-sticky ds-sticky--head">Tickets, filters</header>
+ *     ...rows...
+ *     <footer class="ds-sticky ds-sticky--foot">12 selected, actions</footer>
+ *   </div>
+ *   <aside class="ds-sticky ds-sticky--side">table of contents</aside>
+ *   <th class="ds-sticky ds-sticky--start">LAPTOP-0042</th>   (a sideways scroller's first column)
+ *
+ *   .ds-sticky--head    sticks to the top (block start)
+ *   .ds-sticky--foot    sticks to the bottom (block end)
+ *   .ds-sticky--start   sticks to the inline start of a sideways scroller
+ *   .ds-sticky--end     sticks to the inline end
+ *   .ds-sticky--side    a side column that stays at the top beside long
+ *                       content: no fill and no edge (nothing passes
+ *                       under it), it keeps its own height in a flex or
+ *                       grid row (align-self: start)
+ *   .ds-sticky--flat    never raises an edge
+ *
+ * The raised edge. A ::after layer under the content of the sticky box
+ * (its stacking context) carries the hairline on the edge that faces the
+ * content and the shadow beyond it, at opacity 0 until content passes
+ * under the box:
+ * - with scroll-driven animations it follows its scroller's scroll
+ *   timeline: the head and the start column raise it over the first
+ *   --ds-space-2 of scroll, the foot and the end column lower it over the
+ *   last --ds-space-2;
+ * - else (the fallback) attributes the page attaches through DS.dom show
+ *   it, over --ds-dur-fast: data-scrolled from
+ *   DS.dom.watchScrolled(scroller, head) on the head itself, or on its
+ *   scroller when the head is a child of it (watchScrolled(scroller)); the
+ *   data-ds-overflow-end, data-ds-overflow-start attributes of
+ *   DS.dom.scrollEdges(scroller, { axis: 'block' }) (foot) or
+ *   DS.dom.scrollEdges(scroller) (start and end) on any scroller around
+ *   it.
+ * Both read the scroller, not the box: a head that sits lower in its
+ * scroller raises its edge from the first scrolled pixel, before it
+ * sticks (put a head first in its scroller).
+ *
+ * The box is opaque (--ds-sticky-bg, the surface) and above the content
+ * that scrolls under it (--ds-z-sticky). Keyboard focus that moves under a
+ * head or a foot scrolls clear of it: give the scroller
+ * scroll-padding-block (the head's height) where it holds focusable rows.
+ *
+ * Options: none read; the box is a frame for its content, whose controls
+ * compute their own size, density and touch.
+ *
+ * Hooks: --ds-sticky-offset (0px: the distance from the scroller's edge,
+ * a top bar's height inside a page that scrolls under one), --ds-sticky-bg
+ * (--ds-surface), --ds-sticky-line (--ds-line), --ds-sticky-shadow
+ * (--ds-elev-1).
+ *
+ * Forced colours: the shadow goes, the hairline stays (a border); the
+ * box is Canvas.
+ *
+ * Print: nothing sticks on paper; the box prints where it stands, with no
+ * edge.
+ *
+ * Progressive:
+ * - scroll-driven animations (animation-timeline: scroll(), animation-range;
+ *   the edge follows the scroller's scroll timeline): without them the
+ *   data-scrolled and data-ds-overflow-* attributes of DS.dom show it over
+ *   --ds-dur-fast, or none shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.sticky {
+  .ds-sticky {
+    position: sticky;
+    z-index: var(--ds-z-sticky);
+    background: var(--ds-sticky-bg, var(--ds-surface));
+  }
+
+  .ds-sticky--head {
+    inset-block-start: var(--ds-sticky-offset, 0px);
+  }
+
+  .ds-sticky--foot {
+    inset-block-end: var(--ds-sticky-offset, 0px);
+  }
+
+  .ds-sticky--start {
+    inset-inline-start: var(--ds-sticky-offset, 0px);
+  }
+
+  .ds-sticky--end {
+    inset-inline-end: var(--ds-sticky-offset, 0px);
+  }
+
+  .ds-sticky--side {
+    inset-block-start: var(--ds-sticky-offset, 0px);
+    align-self: start;
+    background: none;
+  }
+
+  /* The edge: under the box's content, above its fill (the box is a
+     stacking context: sticky with a z-index). Opacity only. At the weight
+     of one class, so the placement rules below set the edge's side. */
+  .ds-sticky:where(.ds-sticky--head, .ds-sticky--foot, .ds-sticky--start, .ds-sticky--end)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border: 0 solid var(--ds-sticky-line, var(--ds-line));
+    box-shadow: var(--ds-sticky-shadow, var(--ds-elev-1));
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-sticky--head::after {
+    border-block-end-width: 1px;
+  }
+
+  .ds-sticky--foot::after {
+    border-block-start-width: 1px;
+  }
+
+  .ds-sticky--start::after {
+    border-inline-end-width: 1px;
+  }
+
+  .ds-sticky--end::after {
+    border-inline-start-width: 1px;
+  }
+
+  .ds-sticky--head[data-scrolled]::after,
+  [data-scrolled] > .ds-sticky--head::after,
+  [data-ds-overflow-end] .ds-sticky--foot::after,
+  [data-ds-overflow-start] .ds-sticky--start::after,
+  [data-ds-overflow-end] .ds-sticky--end::after {
+    opacity: 1;
+  }
+
+  .ds-sticky--flat::after {
+    display: none;
+  }
+
+  /* The scroller's own scroll timeline (the table's pinned columns do the
+     same): the head and the start column raise their edge over the first
+     --ds-space-2 of scroll, the foot and the end column lower theirs over
+     the last. Both ends of ds-scroll-fade are named, so a scroller that
+     does not scroll (an inactive timeline) leaves the edge at its own
+     opacity 0. The shorthand first (it resets animation-timeline). */
+  @supports (animation-timeline: scroll()) {
+    .ds-sticky--head::after {
+      animation: ds-scroll-fade linear both;
+      animation-timeline: scroll(nearest block);
+      animation-range: 0 var(--ds-space-2);
+    }
+
+    .ds-sticky--foot::after {
+      animation: ds-scroll-fade linear both reverse;
+      animation-timeline: scroll(nearest block);
+      animation-range: calc(100% - var(--ds-space-2)) 100%;
+    }
+
+    .ds-sticky--start::after {
+      animation: ds-scroll-fade linear both;
+      animation-timeline: scroll(nearest inline);
+      animation-range: 0 var(--ds-space-2);
+    }
+
+    .ds-sticky--end::after {
+      animation: ds-scroll-fade linear both reverse;
+      animation-timeline: scroll(nearest inline);
+      animation-range: calc(100% - var(--ds-space-2)) 100%;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-sticky::after {
+      box-shadow: none;
+    }
+  }
+
+  /* Paper: nothing sticks, and nothing passes under the box. */
+  @media print {
+    .ds-sticky {
+      position: static;
+    }
+
+    .ds-sticky::after {
+      display: none;
+    }
+  }
+}

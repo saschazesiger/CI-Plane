@@ -1,0 +1,45 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Unsaved-changes guard (3.0): dirty tracking of a form, wired to the Save
+ * bar, the browser's question before the page unloads, Ctrl+S (Command+S
+ * on Apple systems) and a guarded in-app navigation. DS.unsaved
+ * (unsaved.js) does the work; the look is the Save bar's and Form's.
+ *
+ *   <form class="ds-form" data-ds-unsaved data-ds-unsaved-savebar="#device-bar">
+ *     <div class="ds-field">           (takes Form's .ds-field--changed while its control differs)
+ *       <label class="ds-field__label" for="name">Name <span class="ds-field__changed ds-sr">(changed)</span></label>
+ *       <input class="ds-input" id="name" name="name" value="LAPTOP-0042"></div> ... </form>
+ *   <div class="ds-savebar" id="device-bar">
+ *     <div class="ds-savebar__bar ds-presence" role="region" aria-label="Unsaved changes" hidden>
+ *       <p class="ds-savebar__text ds-unsaved__count" data-ds-unsaved-count></p>        (written: "2 unsaved changes")
+ *       <div class="ds-savebar__actions">
+ *         <button class="ds-btn ds-btn--text" type="button" data-ds-unsaved-discard>Discard</button>
+ *         <button class="ds-btn ds-btn--filled" type="button" data-ds-unsaved-save>(Button's faces)</button>
+ *   <nav data-ds-unsaved-link> (links that ask before they leave unsaved changes) </nav>
+ *
+ * The count (.ds-unsaved__count, on the element of data-ds-unsaved-count)
+ * keeps its width while it changes (tabular figures).
+ *
+ * Options (src/core/options.css, docs/options.md): the guard draws
+ * nothing of its own. Size, density, shape and touch are the Save bar's,
+ * Form's and Button's, each computed in their rules; tone: none (a changed
+ * field shows a dot and the word "(changed)", never colour alone).
+ *
+ * Hooks: none; the changed dot is --ds-field-changed-color (Form).
+ *
+ * Motion: the Save bar's (.ds-presence: rises on the spring, leaves
+ * faster) and Form's changed dot (in on --ds-dur-fast, out on
+ * --ds-dur-instant); a save runs the button's busy and done faces
+ * (DS.motion.busy).
+ *
+ * Forced colours: the parts are the Save bar's, Form's and Button's.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.unsaved {
+  .ds-unsaved__count {
+    font-variant-numeric: tabular-nums;
+  }
+}

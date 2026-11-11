@@ -1,0 +1,270 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Facet filter panel: the filters of a list beside it, one facet per field
+ * (checkboxes or radios with counts, a range of two fields), a search inside
+ * a long facet, "Show all" after a limit, the applied filters as chips and
+ * Clear all (js/facets.js). When the layout cannot hold the panel beside
+ * the results it folds away behind a "Filters" button, which opens it in a
+ * side sheet (on phones from the bottom):
+ *
+ *   <div class="ds-facets-layout">
+ *     <section class="ds-facets" role="complementary" data-ds-facets data-ds-facets-sheet="#facets-sheet" aria-labelledby="facets-title">
+ *       <div class="ds-facets__head"><h2 class="ds-facets__title" id="facets-title">Filters</h2>
+ *         <button class="ds-btn ds-btn--text ds-facets__clear" type="button">Clear all</button></div>
+ *       <div class="ds-facets__applied" hidden><div class="ds-chips ds-facets__chips" role="group" aria-label="Applied filters"></div></div>
+ *       <fieldset class="ds-facet"><legend class="ds-facet__title">Status</legend>
+ *         <div class="ds-facet__options">
+ *           <label class="ds-check"><input type="checkbox" name="status" value="online"><span>Online</span><span class="ds-check__count">24</span></label> ...
+ *         </div></fieldset>
+ *       <fieldset class="ds-facet" data-ds-facet-limit="4"><legend class="ds-facet__title">Owner</legend>
+ *         <div class="ds-search ds-facet__search">(search)<input class="ds-input" type="search" aria-label="Search owners" placeholder="Search owners"></div>
+ *         <div class="ds-facet__options"> ... </div>
+ *         <p class="ds-facet__empty" hidden></p>
+ *         <button class="ds-btn ds-btn--text ds-facet__more" type="button" hidden></button></fieldset>
+ *       <fieldset class="ds-facet"><legend class="ds-facet__title">Storage (GB)</legend>
+ *         <div class="ds-facet__range"><div class="ds-field">(min: data-ds-filter-bound="min")</div>
+ *           <span class="ds-facet__dash" aria-hidden="true">–</span><div class="ds-field">(max)</div></div></fieldset>
+ *     </section>
+ *     <div class="ds-facets-layout__main">
+ *       <button class="ds-btn ds-facets__toggle" type="button" aria-haspopup="dialog">(filter 20)Filters<span class="ds-badge ds-facets__badge" hidden></span></button>
+ *       <div class="ds-facets__applied" hidden>(chips, Clear all: optional, shown while folded)</div>
+ *       <p class="ds-facets__count">48 results</p> ... the list ...
+ *     </div>
+ *   </div>
+ *   <dialog class="ds-sheet" id="facets-sheet" aria-labelledby="facets-sheet-title"> ... head ...
+ *     <div class="ds-sheet__body" tabindex="0"></div>       (the panel moves in here)
+ *     <div class="ds-sheet__foot"><button class="ds-btn ds-btn--filled ds-facets__results" type="button" data-ds-close>Show 48 results</button></div>
+ *   </dialog>
+ *
+ * The layout: the panel --ds-facets-width (280px) wide beside the main
+ * part, which keeps at least --ds-facets-main-min (50%) of the row. Where
+ * the row cannot hold both, the panel wraps above the main part (without
+ * the script, which keeps it usable); the script then writes data-folded
+ * on the layout instead: the panel hides and .ds-facets__toggle shows
+ * (with a badge of the applied filters), and a .ds-facets__applied in the
+ * main part (optional) shows the applied chips, which stay removable
+ * without the sheet; unfolded it hides (the panel has its own). A facet's rows stack at full
+ * width, the count at the end; a checked row's label takes the label
+ * weight, so the choice shows by more than the check. Rows the system hides
+ * (beyond the limit, or not matching the facet's search) take the hidden
+ * attribute. --ds-facet-max-height (264px) lets a long facet scroll on its
+ * own instead (.ds-facet--scroll). In the sheet the panel's title hides
+ * (the sheet has one).
+ *
+ * Options (src/core/options.css, docs/options.md), on the layout, the
+ * panel or any ancestor:
+ *   size, shape, touch  reach the rows, fields, buttons and chips, which
+ *                       compute them; the gaps step 4px per size step
+ *   density             the gaps between facets 2px per step; and the
+ *                       rows' heights (4px per step, form.css)
+ * The titles keep the label role; there is no tone: a filter shows no
+ * meaning of its own.
+ *
+ * Forced colours: the rows, fields, buttons and chips keep their own
+ * models; the hairlines between facets are borders (CanvasText's line).
+ *
+ * Hooks: --ds-facets-width (280px), --ds-facets-main-min (50%),
+ * --ds-facets-gap (24px), --ds-facet-max-height (264px, .ds-facet--scroll).
+ * The computed --_gap and --_spread are private: never set them.
+ *
+ * Progressive:
+ * - scrollbar-color (a thin, quiet scrollbar in .ds-facet--scroll): without
+ *   it the platform's scrollbar.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.facets {
+  .ds-facets-layout {
+    --_gap: max(var(--ds-space-3), calc(var(--ds-facets-gap, var(--ds-space-6)) + var(--ds-size-step, 0) * 4px + var(--ds-density, 0) * 2px));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--_gap);
+    min-width: 0;
+  }
+
+  .ds-facets-layout > .ds-facets {
+    flex: 1 1 var(--ds-facets-width, 280px);
+  }
+
+  .ds-facets-layout__main {
+    flex: 999 1 0;
+    min-width: min(100%, var(--ds-facets-main-min, 50%));
+  }
+
+  .ds-facets-layout[data-folded] > .ds-facets {
+    display: none;
+  }
+
+  .ds-facets__toggle {
+    display: none;
+  }
+
+  .ds-facets-layout[data-folded] .ds-facets__toggle {
+    display: inline-flex;
+  }
+
+  /* The applied row beside the list: only while the panel is folded away. */
+  .ds-facets-layout:not([data-folded]) > .ds-facets-layout__main .ds-facets__applied {
+    display: none;
+  }
+
+  .ds-facets {
+    --_gap: max(var(--ds-space-2), calc(var(--ds-space-4) + var(--ds-size-step, 0) * 4px + var(--ds-density, 0) * 2px));
+    display: grid;
+    gap: var(--_gap);
+    min-width: 0;
+  }
+
+  .ds-facets__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-facets__title {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-subtitle);
+  }
+
+  /* In the sheet its own title says it. */
+  .ds-sheet__body > .ds-facets .ds-facets__title {
+    display: none;
+  }
+
+  .ds-sheet__body > .ds-facets .ds-facets__head {
+    justify-content: flex-end;
+  }
+
+  .ds-facets__applied {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-facets__chips {
+    min-width: 0;
+  }
+
+  .ds-facets__clear {
+    flex: none;
+  }
+
+  .ds-facet__search {
+    min-width: 0;
+  }
+
+  .ds-facets__count {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-facets__count:empty {
+    display: none;
+  }
+
+  .ds-facets__results {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* One facet: a fieldset with its legend, on a hairline after the one before. */
+  .ds-facet {
+    display: grid;
+    gap: var(--ds-space-2);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .ds-facet + .ds-facet {
+    padding-block-start: var(--_gap);
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  /* Floated, the legend is no rendered legend in the fieldset's border (the
+     hairline would run beside it) but an item of the grid, which ignores
+     the float itself. */
+  .ds-facet__title {
+    float: inline-start;
+    margin: 0;
+    padding: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+  }
+
+  .ds-facet__options {
+    display: grid;
+    grid-auto-rows: max-content;
+    min-width: 0;
+  }
+
+  /* A long facet that scrolls on its own: the padding keeps the halo of
+     every box inside the box (half the halo beyond the box, as form.css
+     computes both), and the negative margin keeps the rows in line. */
+  .ds-facet--scroll .ds-facet__options {
+    --_spread: max(var(--ds-space-2), calc((max(var(--ds-target-min, 0px), calc(var(--ds-check-target, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px)) - var(--ds-check-size, 18px) - var(--ds-size-step, 0) * 2px) / 2));
+    position: relative;
+    max-height: var(--ds-facet-max-height, 264px);
+    overflow-y: auto;
+    margin-inline: calc(var(--_spread) * -1);
+    padding-inline: var(--_spread);
+    scrollbar-color: var(--ds-line-2) transparent;
+  }
+
+  .ds-facet__options > .ds-check {
+    display: flex;
+  }
+
+  .ds-facet__options > .ds-check[hidden],
+  .ds-facet__empty[hidden],
+  .ds-facet__more[hidden],
+  .ds-facets__applied[hidden],
+  .ds-facets__badge[hidden] {
+    display: none;
+  }
+
+  .ds-facet__options > .ds-check:has(> input:checked) {
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-facet__empty {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-facet__more {
+    justify-self: start;
+  }
+
+  .ds-facet__range {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-facet__range > .ds-field {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .ds-facet__dash {
+    flex: none;
+    /* On the fields' middle line: half a field's height above the bottom. */
+    margin-block-end: max(0px, calc((max(var(--ds-target-min, 0px), calc(var(--ds-input-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px)) - 1lh) / 2));
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+}

@@ -14,7 +14,7 @@ import (
 
 // The pages below play GitHub's part in the demo: the browser is sent
 // there to "create" and "install" an app, and comes back the way it would
-// from github.com. They are built from Dashboard-Style like the interface.
+// from github.com. They are built from Z-Dash like the interface.
 
 var page = template.Must(template.New("page").Parse(`<!doctype html>
 <html lang="en" class="ds-theme ds-base">
@@ -22,10 +22,10 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · GitHub (demo)</title>
-<link rel="stylesheet" href="/vendor/dashboard-style/fonts/fonts.css">
-<link rel="stylesheet" href="/vendor/dashboard-style/ds.css">
+<link rel="stylesheet" href="/vendor/z-dash/fonts/fonts.css">
+<link rel="stylesheet" href="/vendor/z-dash/ds.min.css">
 <link rel="stylesheet" href="/theme.css">
-<link rel="stylesheet" href="/vendor/dashboard-style/themes/dark.css" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="/vendor/z-dash/themes/dark.css" media="(prefers-color-scheme: dark)">
 </head>
 <body class="ds-auth">
 <div class="ds-auth__alert"><div class="ds-alert" role="status"><span class="ds-alert__text"><strong>Demo:</strong> this page plays GitHub's part. Nothing is sent to github.com.</span></div></div>
@@ -34,7 +34,7 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 <p class="ds-muted">{{.Lead}}</p>
 {{if .Facts}}<ul class="ds-kv-list">{{range .Facts}}<li><span>{{.K}}</span><strong>{{.V}}</strong></li>{{end}}</ul>{{end}}
 {{if .Choices}}<div class="ds-radios" role="radiogroup" aria-label="Repository access">{{range $i, $c := .Choices}}<label class="ds-radio"><input type="radio" name="access" value="{{$i}}"{{if eq $i 0}} checked{{end}}><span><strong>{{$c.K}}</strong><small>{{$c.V}}</small></span></label>{{end}}</div>{{end}}
-<div class="ds-form-actions"><a class="ds-btn ds-btn--primary" href="{{.Go}}">{{.GoLabel}}</a><a class="ds-btn ds-btn--text" href="/">Cancel</a></div>
+<div class="ds-form-actions"><a class="ds-btn ds-btn--filled" href="{{.Go}}">{{.GoLabel}}</a><a class="ds-btn ds-btn--text" href="/">Cancel</a></div>
 </section>
 </body>
 </html>`))

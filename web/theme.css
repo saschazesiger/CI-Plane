@@ -1,6 +1,6 @@
 /*
  * The CI-Plane theme: tokens only, loaded after ds.css and unlayered, so it
- * wins over the defaults of Dashboard-Style. It sets the brand roles (an
+ * wins over the defaults of Z-Dash. It sets the brand roles (an
  * indigo accent) and their dark tones, and the project's own tokens (--cp-*)
  * that app.css reads. Never motion tokens, never a component's look.
  */

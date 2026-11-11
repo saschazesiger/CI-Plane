@@ -1,0 +1,277 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Popover: an anchored, non-modal panel next to the control that opened it
+ * (a filter form, a share box, a preview), on the popover elevation, with an
+ * optional arrow at its anchor. It never traps focus and never dims the page:
+ * a pointerdown outside it, Escape and focus leaving it close it.
+ *
+ *   <button class="ds-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="share"
+ *           data-ds-popover="#share" [data-ds-popover-placement="bottom | top | start | end"]
+ *           [data-ds-popover-align="start | center | end"] [data-ds-popover-trigger="click | hover"]>Share</button>
+ *   <div class="ds-popover [ds-popover--arrow] [ds-popover--tip]" id="share" role="dialog" aria-labelledby="share-t" hidden
+ *        data-state="open | closed" [data-placement="top | start | end"] [popover]>
+ *     <div class="ds-popover__head">
+ *       <h2 class="ds-popover__title" id="share-t">Share</h2>
+ *       <button class="ds-btn ds-btn--quiet ds-btn--icon ds-popover__close" type="button" aria-label="Close" data-ds-close>(x)</button>
+ *     </div>
+ *     <div class="ds-popover__body">…</div>
+ *     <div class="ds-popover__foot">…buttons…</div>
+ *   </div>
+ *
+ *   DS.popover.open(el, { opener, placement, align, focus });   DS.popover.close(el);
+ *
+ * Variants: .ds-popover--arrow points at the anchor (a square turned by 45°,
+ * on the edge that faces it, at --ds-popover-arrow from the box's start);
+ * .ds-popover--tip is the help card of a toggletip, a rich tooltip and a
+ * hover card: narrower (--ds-popover-tip-width), tighter, its title in the
+ * label role and its text in the meta role.
+ *
+ * Parts: __head (the title and an optional close button), __title, __body
+ * (the part that scrolls when the room on its side is short), __foot (the
+ * actions, at the end), __close (pulls the close button into the head's
+ * corner).
+ *
+ * Options: density steps the padding of every part (2px per step); shape
+ * multiplies the radius (--ds-popover-radius); size and tone change nothing:
+ * a popover holds the page's own content, which carries its own size.
+ *
+ * Placement (js/popover.js, through js/position.js): on the side asked for
+ * (bottom by default, aligned with the anchor's start edge; flipped to the
+ * other side when it does not fit there and that side has more room, kept
+ * --ds-space-2 inside the viewport, never taller than the room on its side,
+ * so its body scrolls), in the top layer as popover="manual", at the script
+ * coordinates --ds-popover-x and --ds-popover-y; data-placement says the side
+ * when it is not the bottom one, and follows scrolling and resizing.
+ *
+ * Motion: as a menu, it grows out of its anchor: it fades in over
+ * --ds-dur-fast while it grows from --ds-scale-popup at the anchor
+ * (--ds-motion-origin, the arrow's tip) and its clip opens from the anchor's
+ * edge, both over --ds-dur-medium on the spring; it leaves with a fade
+ * (--ds-dur-instant). Transitions keyed on data-state (DS.overlay), so a
+ * popover closed mid-way turns back from where it is; without data-state (a
+ * page that drops hidden by hand) ds-fade-in and ds-clip-in play once.
+ *
+ * Forced colours: its transparent outline becomes its edge; the arrow, which
+ * forced colours would paint as a Canvas square without an edge, goes.
+ *
+ * Hooks: --ds-popover-width (360px), --ds-popover-tip-width (320px),
+ * --ds-popover-tip-padding (--ds-space-3),
+ * --ds-popover-padding (--ds-space-4), --ds-popover-radius (--ds-radius-md).
+ *
+ * Print: an open popover is not printed.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin scrollbar in a long body):
+ *   without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.popover {
+  /* Fixed, so no scrolling or clipping box cuts it off; inset, margin, border
+     and overflow double as the reset of the UA box of a popover. Physical on
+     purpose: --ds-popover-x is a script coordinate from the left. */
+  .ds-popover {
+    --_pad: calc(var(--ds-popover-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px);
+    position: fixed;
+    inset: var(--ds-popover-y, 0px) auto auto var(--ds-popover-x, 0px);
+    z-index: var(--ds-z-popover);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    width: max-content;
+    min-width: 0;
+    max-width: min(var(--ds-popover-width, 360px), calc(100vw - 2 * var(--ds-space-2)));
+    max-height: calc(100vh - 2 * var(--ds-space-2));
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: calc(var(--ds-popover-radius, var(--ds-radius-md)) * var(--ds-shape, 1));
+    background: var(--ds-surface-popover);
+    color: var(--ds-text);
+    font: var(--ds-font-body);
+    text-align: start;
+    box-shadow: var(--ds-elev-popover);
+    /* Invisible; forced colors paint it, so the popover keeps an edge. It
+       also stands for the ring when focus is on the panel itself (nothing
+       inside takes it): the panel is the context, not a control. */
+    outline: 1px solid transparent;
+    /* Grows at its anchor (originFrom() writes the origin); its clip rests
+       --ds-space-6 beyond the box, room for the shadow and the arrow. */
+    transform-origin: var(--ds-motion-origin, 0% 0%);
+    clip-path: inset(calc(-1 * var(--ds-space-6)));
+  }
+
+  .ds-popover[data-placement="top"] {
+    transform-origin: var(--ds-motion-origin, 0% 100%);
+  }
+
+  /* Shown by hand (no data-state): the reveal plays once. */
+  .ds-popover:not([data-state]) {
+    animation:
+      ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) backwards,
+      ds-clip-in var(--ds-dur-medium) var(--ds-ease-spatial) backwards;
+  }
+
+  /* Driven by DS.overlay: transitions keyed on data-state, so a popover
+     closed mid-way continues from where it is. */
+  .ds-popover[data-state] {
+    animation: none;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-medium) var(--ds-ease-spatial),
+      clip-path var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  /* The exit only fades, in --ds-dur-instant; scale and clip go back to
+     their start once it is invisible. Closed, it takes no pointer. */
+  .ds-popover[data-state="closed"] {
+    opacity: 0;
+    scale: var(--ds-motion-scale, var(--ds-scale-popup));
+    clip-path: var(--ds-clip-from, inset(0 0 100% 0));
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in-out),
+      scale 0ms var(--ds-ease-in-out) var(--ds-dur-instant),
+      clip-path 0ms var(--ds-ease-in-out) var(--ds-dur-instant);
+  }
+
+  .ds-popover[hidden] {
+    display: none;
+  }
+
+  .ds-popover__head {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--ds-space-2);
+    padding: var(--_pad) var(--_pad) 0;
+  }
+
+  .ds-popover__title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-subtitle);
+    overflow-wrap: anywhere;
+  }
+
+  /* The close button sits in the head's corner: its own box overlaps the
+     padding, so its glyph lines up with the text below. */
+  .ds-popover__close {
+    flex-shrink: 0;
+    margin-block: calc(-1 * var(--ds-space-2));
+    margin-inline-end: calc(-1 * var(--ds-space-2));
+  }
+
+  /* The part that scrolls when the popover is capped by the room on its side. */
+  .ds-popover__body {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: var(--_pad);
+    overflow: auto;
+    overscroll-behavior: contain;
+    color: var(--ds-text-2);
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+  }
+
+  .ds-popover__head + .ds-popover__body {
+    padding-block-start: var(--ds-space-2);
+  }
+
+  .ds-popover__body > :first-child {
+    margin-block-start: 0;
+  }
+
+  .ds-popover__body > :last-child {
+    margin-block-end: 0;
+  }
+
+  .ds-popover__foot {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--ds-space-2);
+    padding: 0 var(--_pad) var(--_pad);
+  }
+
+  .ds-popover__head:last-child {
+    padding-block-end: var(--_pad);
+  }
+
+  /* The help card: a toggletip, a rich tooltip, a hover card. */
+  .ds-popover--tip {
+    --_pad: calc(var(--ds-popover-tip-padding, var(--ds-space-3)) + var(--ds-density, 0) * 2px);
+    max-width: min(var(--ds-popover-tip-width, 320px), calc(100vw - 2 * var(--ds-space-2)));
+    font: var(--ds-font-meta);
+  }
+
+  .ds-popover--tip .ds-popover__title {
+    font: var(--ds-font-label);
+  }
+
+  .ds-popover--tip .ds-popover__head + .ds-popover__body {
+    padding-block-start: var(--ds-space-1);
+  }
+
+  .ds-popover--tip .ds-popover__foot {
+    justify-content: flex-start;
+  }
+
+  /*
+   * The arrow: a square turned by 45° that straddles the edge facing the
+   * anchor, in the panel's own surface; its centre is --ds-popover-arrow
+   * (written by the script) from the box's start along that edge. Physical on
+   * purpose on the block sides: the script coordinate runs from the left.
+   */
+  .ds-popover--arrow::before {
+    content: '';
+    position: absolute;
+    top: calc(var(--ds-space-3) / -2);
+    left: calc(var(--ds-popover-arrow, var(--ds-space-6)) - var(--ds-space-3) / 2);
+    width: var(--ds-space-3);
+    height: var(--ds-space-3);
+    background: inherit;
+    rotate: 45deg;
+    pointer-events: none;
+  }
+
+  .ds-popover--arrow[data-placement="top"]::before {
+    top: auto;
+    bottom: calc(var(--ds-space-3) / -2);
+  }
+
+  .ds-popover--arrow:is([data-placement="start"], [data-placement="end"])::before {
+    top: calc(var(--ds-popover-arrow, var(--ds-space-6)) - var(--ds-space-3) / 2);
+    bottom: auto;
+    left: auto;
+  }
+
+  /* Beside its anchor: the arrow on the edge that faces it. */
+  .ds-popover--arrow[data-placement="start"]::before {
+    inset-inline-end: calc(var(--ds-space-3) / -2);
+  }
+
+  .ds-popover--arrow[data-placement="end"]::before {
+    inset-inline-start: calc(var(--ds-space-3) / -2);
+  }
+
+  @media (forced-colors: active) {
+    .ds-popover--arrow::before {
+      display: none;
+    }
+  }
+
+  @media print {
+    .ds-popover {
+      display: none;
+    }
+  }
+}

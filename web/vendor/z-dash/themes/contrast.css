@@ -1,0 +1,57 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * More contrast: quieter text, hairlines and outlines step up towards the
+ * text colour, focus rings widen, link underlines turn solid and the tint
+ * gets stronger. Load it last, for users who ask for more contrast:
+ *
+ *   <link rel="stylesheet" href="vendor/z-dash/themes/contrast.css"
+ *         media="(prefers-contrast: more)">
+ *
+ * Every value is mixed from the text and surface roles of the theme in
+ * use, so it works on the default palette, on a brand theme and on
+ * themes/dark.css alike; the syntax colours, which keep their hues, are
+ * light-dark() pairs that follow the scheme in use. Roles only: no scales, no motion tokens or hooks,
+ * never in @layer. Forced colours (Windows contrast themes) are a separate
+ * mode that every component handles by itself.
+ */
+
+.ds-theme {
+  /* ── Text: secondary text reads as text ── */
+  --ds-text-2: var(--ds-text);
+  --ds-text-3: color-mix(in srgb, var(--ds-text) 80%, var(--ds-surface));
+
+  /* ── Lines: every edge at least 3:1, field borders stronger ── */
+  --ds-outline: color-mix(in srgb, var(--ds-text) 80%, var(--ds-surface));
+  --ds-line: var(--ds-outline);
+  --ds-line-2: color-mix(in srgb, var(--ds-text) 70%, var(--ds-surface));
+
+  /* ── Focus and links ── */
+  --ds-focus-width: 3px;
+  --ds-link-underline: currentColor;
+
+  /* ── A stronger tint and primary container, with the text colour on them ── */
+  --ds-accent: color-mix(in srgb, var(--ds-primary) 35%, var(--ds-surface));
+  --ds-on-accent: var(--ds-text);
+  --ds-primary-container: color-mix(in srgb, var(--ds-primary) 35%, var(--ds-surface));
+  --ds-on-primary-container: var(--ds-text);
+
+  /* ── Syntax colours at 7:1 on the code ground ──
+     The one place with colours of their own: a hue cannot be mixed from
+     the text and the surface, and a role cannot mix itself. Each is a
+     light-dark() pair, so it follows the scheme of the theme in use
+     (--ds-color-scheme) and works over themes/dark.css as well. */
+  --ds-code-keyword: light-dark(#6a1b9a, #e8d0ff);
+  --ds-code-string: light-dark(#0b5221, #a8e6b8);
+  --ds-code-number: light-dark(#7a3300, #ffd2b3);
+  --ds-code-comment: light-dark(#45494d, #c4c7c5);
+  --ds-code-function: light-dark(#0842a0, #d3e3fd);
+  --ds-code-type: light-dark(#004f51, #9cf0f0);
+  --ds-code-property: light-dark(#7d0f45, #ffd5e5);
+  --ds-code-meta: light-dark(#36447a, #dde1ff);
+  --ds-code-inserted: light-dark(#0b5221, #a8e6b8);
+  --ds-code-deleted: light-dark(#8c1d18, #ffdad6);
+
+  /* ── No shimmer over the words: the text alone says the state ── */
+  --ds-shimmer-glint: var(--ds-text);
+  --ds-shimmer-peak: transparent;
+}

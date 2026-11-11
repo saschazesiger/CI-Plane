@@ -136,7 +136,7 @@ function show(next, route, params, data, error) {
 function failedHtml(next, error) {
   const title = typeof next.title === 'function' ? next.title(null, ctx.params) : next.title;
   return head(title, '') + alertHtml('error', 'This page could not be loaded', esc(error.message),
-    '<button class="ds-btn ds-btn--text ds-btn--sm" type="button" data-act="retry">Try again</button>');
+    '<button class="ds-btn ds-btn--text ds-sm" type="button" data-act="retry">Try again</button>');
 }
 
 /* ── Live updates ─────────────────────────────────────────────────── */
@@ -224,7 +224,7 @@ function closeSheet() {
   if (sheet.open) DS.overlay.close(sheet);
 }
 
-sheet.addEventListener('ds-close', (event) => {
+sheet.addEventListener('ds:close', (event) => {
   if (event.target !== sheet) return;
   const owner = ctx.sheetOwner;
   if (owner && owner.sheetClosed) owner.sheetClosed();
@@ -378,7 +378,7 @@ DS.icons.fill(document);
 for (const element of $$('[data-icon-done]')) element.insertAdjacentHTML('afterbegin', DS.icons.icon(DS.icons.check, 16));
 DS.ripple.attach(document);
 DS.overlay.tooltips(document);
-DS.indicator.createIndicator(nav, { active: '[aria-current="page"]', className: 'ds-drawer__indicator' });
+DS.indicator.create(nav, { active: '[aria-current="page"]', className: 'ds-drawer__indicator' });
 DS.dom.scrollEdges(nav, { axis: 'block' });
 DS.dom.watchScrolled(view);
 DS.dom.followViewport();
@@ -406,7 +406,7 @@ async function start() {
     boot.hidden = true;
     auth.hidden = false;
     DS.dom.morphHtml($('#auth-alert'), alertHtml('error', 'CI-Plane does not answer', esc(error.message),
-      '<a class="ds-btn ds-btn--text ds-btn--sm" href="">Try again</a>'));
+      '<a class="ds-btn ds-btn--text ds-sm" href="">Try again</a>'));
     return;
   }
   if (!session.signedIn && !session.needsPassword) {

@@ -1,0 +1,116 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Search field: the filled search pill of form.css (.ds-search) with a
+ * clear button, the shortcut hint, a result count and a list of recent
+ * searches. form.css draws the pill, the icon and the key; this file places
+ * the clear button, keeps room for it and for a key of any width, and sets
+ * the count and the list's rows.
+ *
+ *   <div class="ds-search" data-ds-search data-ds-search-recent="devices" data-ds-search-count="dev-count">
+ *     (search icon 20)
+ *     <input class="ds-input" id="q" type="search" aria-label="Search devices" placeholder="Search devices" data-ds-hotkey="/">
+ *     <kbd class="ds-kbd ds-search__key" aria-hidden="true"></kbd>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon ds-search__clear" type="button" hidden>(close 18)</button>
+ *     (written by DS.search: <div class="ds-combo__popup ds-search__popup"> <ul class="ds-combo__list" role="listbox">
+ *        <li class="ds-combo__option">(history 18 .ds-search__history)<span class="ds-combo__name">laptop</span></li> ...
+ *      <div class="ds-search__foot"><button class="ds-btn ds-btn--text ds-search__forget">Clear recent searches</button></div></div>)
+ *   </div>
+ *   <span class="ds-search__count" id="dev-count"></span>   (anywhere: beside the search, in a toolbar)
+ *
+ * Behaviour (clear, the key's text, the count and its announcement, the
+ * recent searches) is DS.search (search.js); --ds-search-key-room is the
+ * key's measured width, written there.
+ *
+ * Options (src/core/options.css, docs/options.md), from the pill of
+ * form.css and computed here for the clear button:
+ *   size      .ds-xs ... .ds-xl: the pill 8px per step; the clear button
+ *             8px per step too, always 8px lower than the pill
+ *   density   .ds-density-*: 4px per step on the pill and the button
+ *   shape     .ds-shape-*: the pill; the clear button is an action, a pill
+ *             at the default and square at 0 (D11)
+ *   touch     .ds-touch: pill and clear button at least --ds-touch-target;
+ *             the key is never shown on a touch screen (form.css)
+ * No tone. The count is words ("12 results", "No results").
+ *
+ * Hooks: --ds-search-clear-size (32px: the clear button at md and
+ * comfortable, which size and density steps apply to). The list takes the
+ * combobox's hooks (--ds-combo-radius, --ds-combo-option-height).
+ *
+ * Forced colours: the clear button is a system button; the list is the
+ * combobox's (a transparent outline that becomes its edge, the active row
+ * in Highlight); the foot's rule is CanvasText.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.search {
+  /* A key of any width ("Ctrl+K" as well as "/"): the room DS.search measured. */
+  .ds-search > .ds-input:has(~ .ds-search__key) {
+    padding-inline-end: calc(var(--ds-search-key-room, var(--ds-space-5)) + var(--ds-space-3) + var(--ds-space-2));
+  }
+
+  /* The clear button's room, whichever is wider: it or the key (they never show together). */
+  .ds-search > .ds-input:has(~ .ds-search__clear) {
+    --_clear: max(var(--ds-target-min, 0px), calc(var(--ds-search-clear-size, 32px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    padding-inline-end: max(calc(var(--_clear) + 2 * var(--ds-space-1)), calc(var(--ds-search-key-room, 0px) + var(--ds-space-3) + var(--ds-space-2)));
+  }
+
+  /* The system's clear button replaces the engine's own. */
+  .ds-search:has(> .ds-search__clear) > .ds-input::-webkit-search-cancel-button {
+    display: none;
+  }
+
+  /* An icon button 8px lower than the pill at every size and density (the
+     icon button's own model follows size only), never under the touch
+     minimum, at the pill's end. */
+  .ds-search__clear {
+    --ds-btn-icon-size: calc(var(--ds-search-clear-size, 32px) + var(--ds-density, 0) * 4px);
+    position: absolute;
+    inset-inline-end: var(--ds-space-1);
+  }
+
+  .ds-search__clear[hidden] {
+    display: none;
+  }
+
+  .ds-search__count {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* The list of recent searches: a combobox list under the pill, a row is
+     the history icon and the words. */
+  .ds-search__popup .ds-combo__option {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--ds-space-3);
+  }
+
+  .ds-search__history {
+    color: var(--ds-text-2);
+  }
+
+  .ds-search__foot {
+    display: flex;
+    padding: var(--ds-space-1) var(--ds-space-2);
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  /* The one action of the foot, at its end. */
+  .ds-search__forget {
+    margin-inline-start: auto;
+  }
+
+  @media (forced-colors: active) {
+    .ds-search__foot {
+      border-block-start-color: CanvasText;
+    }
+
+    .ds-search__history {
+      color: inherit;
+    }
+  }
+}

@@ -56,7 +56,7 @@ function rowHtml(j) {
 function chipsHtml(counts) {
   return CHIPS.map(([value, label]) =>
     `<label class="ds-chip"><input class="ds-chip__input" type="checkbox" name="state" value="${value}"${state.states.has(value) ? ' checked' : ''}>` +
-    `<span class="ds-chip__body">${icon('check', 18, 'ds-chip__check')}<span>${label}</span> <span class="ds-badge ds-badge--neutral" data-count="${value}">${counts[value] || ''}</span></span></label>`).join('');
+    `<span class="ds-chip__body">${icon('check', 18, 'ds-chip__check')}<span>${label}</span> <span class="ds-badge ds-tone-neutral" data-count="${value}">${counts[value] || ''}</span></span></label>`).join('');
 }
 
 function rangeText(total) {
@@ -175,7 +175,7 @@ function sheetHtml(d) {
     note = alertHtml('', 'Runs elsewhere', esc(j.reason));
   }
   return '<div class="ds-stack">' +
-    `<div class="cp-row">${jobChip(j)}${j.htmlUrl ? `<a class="ds-btn ds-btn--sm" href="${esc(j.htmlUrl)}" target="_blank" rel="noopener">Open on GitHub${icon('external', 16)}</a>` : ''}</div>` +
+    `<div class="cp-row">${jobChip(j)}${j.htmlUrl ? `<a class="ds-btn ds-sm" href="${esc(j.htmlUrl)}" target="_blank" rel="noopener">Open on GitHub${icon('external', 16)}</a>` : ''}</div>` +
     note +
     `<dl class="ds-facts ds-facts--rows">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` +
     '<h3 class="ds-card__subtitle">Timeline</h3>' +

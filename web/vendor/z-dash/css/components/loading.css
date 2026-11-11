@@ -1,0 +1,438 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Loading states. Nothing shows for fast loads: every indicator fades in
+ * only after --ds-delay-loader (the same delay as LOADER_DELAY_MS in
+ * js/motion.js, whose settleLoader() keeps a visible one up long enough).
+ * Their loops always run at their token speed (--ds-loop-* in tokens.css).
+ * A block that waits shows the shape loader (loader.css); inline spots
+ * keep the arc spinner (spinner.css).
+ *
+ *   <div class="ds-boot" role="status"><span class="ds-loader" aria-hidden="true"></span>Starting ...</div>
+ *                                                     app start, after --ds-delay-boot
+ *   <div class="ds-loading" role="status"><span class="ds-loader ds-sm" aria-hidden="true"></span>Loading ...
+ *     <p class="ds-loading__detail">812 of 2,030 rows</p></div>   detail lines under the text (2.0)
+ *   <div class="ds-skeleton" role="status"> <span class="ds-sr">Loading ...</span>
+ *     <span class="ds-loadbar" aria-hidden="true"><span class="ds-loadbar__bar"></span></span>
+ *     <span class="ds-skeleton__line ds-skeleton__line--heading"></span> ...
+ *     <span class="ds-skeleton__line ds-skeleton__line--lead"></span>
+ *     <p class="ds-skeleton__note">Loading 3 of 12 reports</p>      a progress line (2.0); hidden while empty
+ *     <div class="ds-skeleton__card"> <span class="ds-skeleton__line ds-skeleton__line--title"></span> ...
+ *
+ *   .ds-skeleton__line  a body line; --heading (a page title), --lead (its
+ *                       lead), --title (a card title), --mid (a middle-length
+ *                       line), --short (a last line), --label (a field's label)
+ *
+ * The presets are bones in documented markup (docs/components.md), each a
+ * .ds-skeleton or inside one:
+ *   text, heading  .ds-skeleton__line and its modifiers
+ *   avatar         .ds-skeleton__avatar   a round bone, 40px at md
+ *   media          .ds-skeleton__media    a block bone, --ds-skeleton-media-ratio
+ *   list row       .ds-skeleton__row      avatar, .ds-skeleton__lines, a meta bone
+ *   table          .ds-skeleton__table    .ds-skeleton__cells rows (--head first)
+ *   card           .ds-skeleton__card     lines in a card outline
+ *   form           .ds-skeleton__form     --label lines and .ds-skeleton__field bones
+ *   .ds-skeleton--pulse   the bones breathe in place instead of the wave
+ *
+ * Options (docs/options.md), read here:
+ *   size      .ds-xs ... .ds-xl on a bone or any ancestor: 2px per step on a
+ *             line, 8px on an avatar, a field and a row; the loader in a
+ *             .ds-loading follows its own steps
+ *   density   any container: the padding and the gaps of the blocks (2px per
+ *             step: under the compact theme, density -2, the line's padding is
+ *             12px and a card's 20px, on purpose), a field and a table row 4px
+ *             per step: their owners' formula on their owners' hooks
+ *             (--ds-input-height, --ds-table-row-height, --ds-table-head-height),
+ *             so a bone never jumps when the real control replaces it
+ *   shape     a bone's radius and a card's corners times --ds-shape; an
+ *             avatar stays round
+ *   tone, target-min: not read. Nothing here is a target or says more than
+ *             "wait".
+ *
+ * The older markup with a .ds-spinner in .ds-boot or .ds-loading keeps
+ * working; the spinner is the inline variant (a row in a list, a cell).
+ *
+ * Hooks: --ds-skeleton-radius (the bones' corners; default
+ * --ds-radius-action, the heading line --ds-radius-sm, a media bone
+ * --ds-radius-card), --ds-skeleton-media-ratio (16 / 9).
+ *
+ * Skeleton: one synchronised, calm diagonal wave across the whole surface.
+ * The surface runs ds-skeleton-wave once its own entrance is over (its
+ * delay is --ds-delay-loader plus --ds-dur-medium) and animates one
+ * registered value, --ds-skeleton-x; every bone clips itself to its shape
+ * (clip-path with its radius) and carries the band as a fixed ::after,
+ * placed in the viewport and moved by `translate` to that position (2.0),
+ * so the bones show a single continuous band. The band has a compositor
+ * layer of its own (will-change: translate): the wave moves it without
+ * repainting the bones or the view (before 2.0 a fixed background was
+ * repainted with the whole view on every step). A bone outside a
+ * .ds-skeleton runs the wave itself. Fallback: under a transformed
+ * ancestor (a sheet mid-slide, an element running .ds-enter) the band is
+ * placed in that ancestor instead of the viewport; the bones stay in sync
+ * in time and share the band within it.
+ *
+ * Loading bar: the two-segment indeterminate choreography of M3
+ * (ds-progress-head, ds-progress-tail on --ds-loop-indeterminate), flat
+ * (at the panel edge a wave would be clipped). In a skeleton it shares the
+ * skeleton's delay; on its own it fades in after --ds-delay-loader. It
+ * reaches the panel edges through the read-only padding properties of
+ * .ds-content (--ds-content-pad-top, --ds-content-pad-x; page.css) and,
+ * inside a .ds-page, the page's centring (100cqw of .ds-content), and the
+ * view's scroll hairline hides while it is there (shell.css). Place it (or
+ * its skeleton) directly in .ds-content or .ds-page, with no other size
+ * container in between.
+ *
+ * Refresh pattern: put .ds-stale on the content and insert a loading bar
+ * above it; when the data arrives,
+ *   await DS.motion.settleLoader(startedAt, { element: loadbar });
+ *   await DS.motion.leave(loadbar);       (fades it out and removes it)
+ * then render the fresh content and remove .ds-stale. The bar's segments
+ * (and a skeleton's wave) keep moving while it fades out: .ds-leave keeps
+ * their loops (motion.css).
+ *
+ * Pulse (.ds-skeleton--pulse): for a surface that should not sweep (a small
+ * card among finished ones, a long table). Each bone shows the highlight
+ * through its own ::after, whose opacity breathes on the ds-fade-in keyframe
+ * running infinite and alternate, on --ds-loop-skeleton and --ds-ease-in-out,
+ * after the same delay. Opacity only: no repaint.
+ *
+ * Print: the band and the loading bar are left out.
+ *
+ * Runtime property --ds-skeleton-x (registered, tokens.css): the band's
+ * position; it rests at -150vw (off screen) whenever the wave does not
+ * run, so an exit that replaces the wave never shows a band.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.loading {
+  /* App start: appears only when the start takes a moment. */
+  .ds-boot {
+    min-height: 100svh;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: var(--ds-space-5);
+    animation: ds-fade-in var(--ds-dur-slow) var(--ds-ease-in-out) var(--ds-delay-boot) backwards;
+  }
+
+  /* Small loading line (side sheets, "load more"): the loader, then the
+     text, in one row as in 1.x (inline markup in the text or a trailing
+     button stays on it). */
+  .ds-loading {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-3);
+    padding: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px) 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    animation: ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) var(--ds-delay-loader) backwards;
+  }
+
+  /* Page placeholder: the outline of the page, one wave passing over it
+     after its entrance. The wave holds its start (off screen) during the
+     delay. */
+  .ds-skeleton {
+    /* At rest (an exit or entrance that replaces the wave) the band stays
+       off screen, as at the start of the sweep. */
+    --ds-skeleton-x: -150vw;
+    display: grid;
+    gap: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+    animation:
+      ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) var(--ds-delay-loader) backwards,
+      ds-skeleton-wave var(--ds-loop-skeleton) linear calc(var(--ds-delay-loader) + var(--ds-dur-medium)) infinite backwards;
+  }
+
+  /* The container already waits: no second delay on a loader in it. */
+  .ds-boot .ds-loader,
+  .ds-loading .ds-loader,
+  .ds-skeleton .ds-loader {
+    animation: none;
+  }
+
+  /* With detail lines (2.0) it becomes two columns: the lines sit under the
+     text in its column, aligned with it whatever the loader's size. Keep
+     the text one run there (or one element): each piece is a cell. */
+  .ds-loading:has(> .ds-loading__detail) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: var(--ds-space-1);
+  }
+
+  .ds-loading__detail {
+    grid-column: 2;
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  /* A progress line under the lead bone (2.0), inside the role="status"
+     skeleton, so it is announced. */
+  .ds-skeleton__note {
+    margin: calc(-1 * var(--ds-space-2)) 0 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-skeleton__note:empty {
+    display: none;
+  }
+
+  .ds-skeleton__card {
+    display: grid;
+    gap: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px);
+    padding: calc(var(--ds-space-6) + var(--ds-density, 0) * 2px);
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-radius-card) * var(--ds-shape, 1));
+  }
+
+  /* A bone: the band is two viewports wide and fixed to the viewport, so
+     every bone shows its own slice of the same band. The bone clips the
+     band to its rounded shape; the band moves on its own layer, so the
+     wave repaints nothing. */
+  .ds-skeleton__line,
+  .ds-skeleton__field {
+    --_r: var(--ds-skeleton-radius, var(--ds-radius-action));
+    --_bone: min(calc(min(var(--_r), calc(var(--_h) / 2)) * var(--ds-shape, 1)), calc(var(--_h) / 2));
+  }
+
+  .ds-skeleton__line {
+    --_line: 12px;
+    --_h: calc(var(--_line) + var(--ds-size-step, 0) * 2px);
+    display: block;
+    width: 100%;
+    height: var(--_h);
+  }
+
+  /* A field: the height of the control it stands for. */
+  .ds-skeleton__field {
+    --_h: max(var(--ds-target-min, 0px), calc(var(--ds-input-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    --_r: var(--ds-skeleton-radius, var(--ds-radius-sm));
+    display: block;
+    width: 100%;
+    height: var(--_h);
+  }
+
+  .ds-skeleton__avatar {
+    --_h: calc(40px + var(--ds-size-step, 0) * 8px);
+    --_bone: 50%;
+    display: block;
+    flex-shrink: 0;
+    width: var(--_h);
+    height: var(--_h);
+  }
+
+  .ds-skeleton__media {
+    --_bone: calc(var(--ds-skeleton-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    display: block;
+    width: 100%;
+    aspect-ratio: var(--ds-skeleton-media-ratio, 16 / 9);
+  }
+
+  .ds-skeleton__line,
+  .ds-skeleton__field,
+  .ds-skeleton__avatar,
+  .ds-skeleton__media {
+    border-radius: var(--_bone);
+    background-color: var(--ds-surface-highest);
+    clip-path: inset(0 round var(--_bone));
+  }
+
+  .ds-skeleton__line::after,
+  .ds-skeleton__field::after,
+  .ds-skeleton__avatar::after,
+  .ds-skeleton__media::after {
+    content: '';
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: 200vw;
+    background-image: linear-gradient(105deg, transparent 40%, var(--ds-skeleton-highlight) 50%, transparent 60%);
+    translate: var(--ds-skeleton-x) 0;
+    will-change: translate;
+    pointer-events: none;
+  }
+
+  .ds-skeleton__line:not(.ds-skeleton *),
+  .ds-skeleton__field:not(.ds-skeleton *),
+  .ds-skeleton__avatar:not(.ds-skeleton *),
+  .ds-skeleton__media:not(.ds-skeleton *) {
+    --ds-skeleton-x: -150vw;
+    animation: ds-skeleton-wave var(--ds-loop-skeleton) linear infinite;
+  }
+
+  .ds-skeleton__line--heading { --_line: 28px; --_r: var(--ds-skeleton-radius, var(--ds-radius-sm)); width: 28%; }
+  .ds-skeleton__line--lead { width: 56%; margin-bottom: var(--ds-space-2); }
+  .ds-skeleton__line--title { --_line: 16px; width: 24%; }
+  .ds-skeleton__line--short { width: 44%; }
+  .ds-skeleton__line--mid { width: 70%; }
+  .ds-skeleton__line--label { width: 24%; }
+
+  /* A list row: avatar, two lines, a meta bone at the end. */
+  .ds-skeleton__row {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-3);
+    min-height: calc(64px + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+  }
+
+  .ds-skeleton__lines {
+    display: grid;
+    flex: 1;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-skeleton__row > .ds-skeleton__line {
+    flex: 0 0 auto;
+    width: 64px;
+  }
+
+  /* A table: rows of equal cells, a hairline under each; --head first. */
+  .ds-skeleton__table {
+    display: grid;
+  }
+
+  .ds-skeleton__cells {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: var(--ds-space-4);
+    min-height: max(var(--ds-target-min, 0px), calc(var(--ds-table-row-height, 52px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    border-bottom: 1px solid var(--ds-line);
+  }
+
+  .ds-skeleton__cells--head {
+    min-height: max(var(--ds-target-min, 0px), calc(var(--ds-table-head-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+  }
+
+  .ds-skeleton__form {
+    display: grid;
+    gap: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px);
+  }
+
+  .ds-skeleton__form > .ds-skeleton__field:not(:last-child) {
+    margin-bottom: var(--ds-space-3);
+  }
+
+  /* Pulse: the surface keeps its entrance and has no wave; each bone shows
+     the highlight, its opacity breathing (a compositor animation, no
+     repaint). The bone's clip keeps it in shape. */
+  .ds-skeleton--pulse {
+    animation: ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) var(--ds-delay-loader) backwards;
+  }
+
+  .ds-skeleton--pulse :is(.ds-skeleton__line, .ds-skeleton__field, .ds-skeleton__avatar, .ds-skeleton__media)::after {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    background-image: none;
+    background-color: var(--ds-skeleton-highlight);
+    translate: none;
+    will-change: opacity;
+    animation: ds-fade-in var(--ds-loop-skeleton) var(--ds-ease-in-out) var(--ds-delay-loader) infinite alternate backwards;
+  }
+
+  .ds-skeleton--pulse :is(.ds-skeleton__line, .ds-skeleton__field, .ds-skeleton__avatar, .ds-skeleton__media) {
+    position: relative;
+  }
+
+  /*
+   * Page loading bar: 4px at the top edge of the content panel, sticky
+   * while the panel scrolls. The track animates the edges of both segments
+   * (registered, inheriting); segment 1 is the bar, segment 2 the ::after,
+   * each the full width clipped between its tail and its head.
+   */
+  .ds-loadbar {
+    position: sticky;
+    top: 0;
+    z-index: var(--ds-z-raised);
+    display: block;
+    height: 4px;
+    overflow: hidden;
+    margin: calc(-1 * var(--ds-content-pad-top, var(--ds-space-6))) calc(-1 * var(--ds-content-pad-x, var(--ds-space-8))) var(--ds-space-5);
+    background: var(--ds-accent);
+    animation:
+      ds-progress-head var(--ds-loop-indeterminate) linear infinite,
+      ds-progress-tail var(--ds-loop-indeterminate) linear infinite;
+  }
+
+  /* On its own (a refresh), the bar waits the loader delay; in a skeleton
+     the skeleton waits, and only the loops run here. */
+  .ds-loadbar:not(.ds-skeleton > .ds-loadbar) {
+    animation:
+      ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) var(--ds-delay-loader) backwards,
+      ds-progress-head var(--ds-loop-indeterminate) linear infinite,
+      ds-progress-tail var(--ds-loop-indeterminate) linear infinite;
+  }
+
+  @media (max-width: 720px) {
+    .ds-loadbar {
+      margin-bottom: var(--ds-space-4);
+    }
+  }
+
+  .ds-loadbar__bar,
+  .ds-loadbar::after {
+    position: absolute;
+    inset: 0;
+    display: block;
+    background: var(--ds-primary);
+  }
+
+  .ds-loadbar__bar {
+    clip-path: inset(0 calc(100% - var(--ds-progress-head-1)) 0 var(--ds-progress-tail-1) round calc(var(--ds-radius-action) * var(--ds-shape, 1)));
+  }
+
+  .ds-loadbar::after {
+    content: '';
+    clip-path: inset(0 calc(100% - var(--ds-progress-head-2)) 0 var(--ds-progress-tail-2) round calc(var(--ds-radius-action) * var(--ds-shape, 1)));
+  }
+
+  /* Forced colors turn every fill into Canvas, which would hide the bones
+     and the bar: edges for the bones and the track, the system highlight
+     for both segments. */
+  @media (forced-colors: active) {
+    .ds-skeleton__line,
+    .ds-skeleton__field,
+    .ds-skeleton__avatar,
+    .ds-skeleton__media {
+      outline: 1px solid CanvasText;
+      clip-path: none;
+    }
+
+    .ds-skeleton__line::after,
+    .ds-skeleton__field::after,
+    .ds-skeleton__avatar::after,
+    .ds-skeleton__media::after {
+      content: none;
+    }
+
+    .ds-loadbar {
+      outline: 1px solid CanvasText;
+    }
+
+    .ds-loadbar__bar,
+    .ds-loadbar::after {
+      forced-color-adjust: none;
+      background: Highlight;
+    }
+  }
+
+  /* Print: a fixed box repeats on every printed page, so the band goes;
+     the moving loading bar says nothing on paper. */
+  @media print {
+    .ds-skeleton__line::after,
+    .ds-skeleton__field::after,
+    .ds-skeleton__avatar::after,
+    .ds-skeleton__media::after {
+      content: none;
+    }
+
+    .ds-loadbar {
+      display: none;
+    }
+  }
+}

@@ -1,0 +1,347 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Picker: the popover every date and time picker opens from its button (a
+ * modal dialog: the WAI-ARIA date picker dialog), and its parts: the panes
+ * side by side, the presets beside them, the foot with its actions.
+ * DS.picker (picker.js) places, opens and closes it through DS.overlay.
+ *
+ *   <div class="ds-picker" data-ds-picker>
+ *     <button class="ds-btn" type="button" data-ds-picker-toggle aria-haspopup="dialog" aria-expanded="false">Filters</button>
+ *     <div class="ds-picker__popover" role="dialog" aria-modal="true" aria-label="Filters" hidden
+ *          data-state="open | closed" [data-placement="top"]>
+ *       <div class="ds-picker__panes">
+ *         <div class="ds-picker__presets" role="group" aria-label="Presets">
+ *           <button class="ds-picker__preset" type="button" [aria-current="true"]>Last 7 days</button> ...
+ *         </div>
+ *         <div class="ds-picker__pane">(a calendar, a list ...)</div>
+ *       </div>
+ *       <p class="ds-picker__heading">Recently used</p>
+ *       <div class="ds-picker__foot">
+ *         <button class="ds-btn ds-btn--text" type="button">Today</button>
+ *         <span class="ds-picker__spacer"></span>
+ *         <button class="ds-btn ds-btn--filled" type="button">Apply</button>
+ *       </div>
+ *     </div>
+ *   </div>
+ *
+ * Presets: .ds-picker__preset is a row button in the body type; the one in
+ * force carries aria-current="true" (the tint and the label weight, so not
+ * by colour alone). It is an action: a state layer (hover, press in
+ * --ds-dur-micro), the ripple, an inset focus ring that snaps in.
+ *
+ * Placement API: --ds-picker-x and --ds-picker-y (left and top, px,
+ * written by DS.position.place() through DS.picker): fixed, and while open
+ * in the top layer (popover="manual", which DS.picker sets), so no
+ * scrolling, clipping or transformed box cuts it off or covers it.
+ *
+ * Options (src/core/options.css, docs/options.md), on the picker or any
+ * ancestor; each is computed here:
+ *   size      .ds-xs ... .ds-xl: a preset row 8px per step from
+ *             --ds-picker-preset-height (40px); the content follows its
+ *             own components (a calendar's days, a list's rows)
+ *   density   .ds-density-*: a preset row 4px per step, the popover's
+ *             padding 2px per step
+ *   shape     .ds-shape-*: multiplies the popover's radius and a preset's
+ *   touch     .ds-touch: a preset at least --ds-touch-target high
+ *   tone      none
+ *
+ * Motion (as a menu): it fades in over --ds-dur-fast while its clip opens
+ * from the button's edge (--ds-clip-from) and it grows from
+ * --ds-scale-popup at the button (--ds-motion-origin), both over
+ * --ds-dur-medium on the spring; it leaves with a fade (--ds-dur-instant).
+ * Transitions keyed on data-state (DS.overlay), so a picker closed mid-way
+ * turns back from where it is; shown by hand (no data-state) it plays
+ * ds-fade-in and ds-clip-in once.
+ *
+ * Narrow (600px or less): panes and presets stack, the presets wrap into a
+ * row of their own.
+ *
+ * Forced colours: the popover keeps an edge (its transparent outline), the
+ * preset in force is SelectedItem / SelectedItemText, a focused one keeps
+ * its ring.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin scrollbar on a scrolling
+ *   pane): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.picker {
+  .ds-picker {
+    position: relative;
+    display: inline-block;
+    max-inline-size: 100%;
+    vertical-align: middle;
+  }
+
+  .ds-picker--block {
+    display: block;
+  }
+
+  /* Fixed, so no scrolling or clipping box cuts it off. Physical on purpose:
+     --ds-picker-x is a script coordinate from the left. */
+  .ds-picker__popover {
+    position: fixed;
+    inset: var(--ds-picker-y, 0px) auto auto var(--ds-picker-x, 0px);
+    z-index: var(--ds-z-popover);
+    box-sizing: border-box;
+    inline-size: max-content;
+    max-inline-size: calc(100vw - 2 * var(--ds-space-2));
+    max-block-size: calc(100vh - 2 * var(--ds-space-2));
+    margin: 0;
+    padding: calc(var(--ds-picker-padding, var(--ds-space-3)) + var(--ds-density, 0) * 2px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 0;
+    border-radius: calc(var(--ds-picker-radius, var(--ds-radius-lg)) * var(--ds-shape, 1));
+    background: var(--ds-surface-popover);
+    color: var(--ds-text);
+    box-shadow: var(--ds-elev-popover);
+    /* Invisible; forced colours paint it, so the popover keeps an edge. */
+    outline: 1px solid transparent;
+    transform-origin: var(--ds-motion-origin, 0% 0%);
+    clip-path: inset(calc(-1 * var(--ds-space-6)));
+  }
+
+  .ds-picker__popover[data-placement="top"] {
+    transform-origin: var(--ds-motion-origin, 0% 100%);
+  }
+
+  /* Shown by hand (no data-state): the reveal plays once. */
+  .ds-picker__popover:not([data-state]) {
+    animation:
+      ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) backwards,
+      ds-clip-in var(--ds-dur-medium) var(--ds-ease-spatial) backwards;
+  }
+
+  /* Driven by DS.overlay: transitions keyed on data-state. */
+  .ds-picker__popover[data-state] {
+    animation: none;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-medium) var(--ds-ease-spatial),
+      clip-path var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  /* The exit only fades; scale and clip go back to their start once it is
+     invisible. Closed, it takes no pointer. */
+  .ds-picker__popover[data-state="closed"] {
+    opacity: 0;
+    scale: var(--ds-motion-scale, var(--ds-scale-popup));
+    clip-path: var(--ds-clip-from, inset(0 0 100% 0));
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in-out),
+      scale 0ms var(--ds-ease-in-out) var(--ds-dur-instant),
+      clip-path 0ms var(--ds-ease-in-out) var(--ds-dur-instant);
+  }
+
+  .ds-picker__popover[hidden] {
+    display: none;
+  }
+
+  /* Panes side by side: presets, a calendar, a list. */
+  .ds-picker__panes {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-4);
+  }
+
+  .ds-picker__pane {
+    position: relative;
+    min-inline-size: 0;
+  }
+
+  /* A pane that scrolls inside the popover's height (a list of times). */
+  .ds-picker__pane--scroll {
+    align-self: stretch;
+    max-block-size: var(--ds-picker-pane-height, 320px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+  }
+
+  .ds-picker__presets {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 160px;
+    padding-inline-end: var(--ds-space-3);
+    border-inline-end: 1px solid var(--ds-line);
+  }
+
+  .ds-picker__heading {
+    margin: var(--ds-space-3) 0 var(--ds-space-1);
+    padding-inline: var(--ds-space-3);
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+  }
+
+  .ds-picker__presets > .ds-picker__heading:first-child {
+    margin-block-start: 0;
+  }
+
+  .ds-picker__preset {
+    --_h: calc(var(--ds-picker-preset-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    --_radius: min(calc(min(var(--ds-radius-action), calc(var(--_box) / 2)) * var(--ds-shape, 1)), calc(var(--_box) / 2));
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    inline-size: 100%;
+    min-block-size: var(--_box);
+    margin: 0;
+    padding: 0 var(--ds-space-3);
+    border: 0;
+    border-radius: var(--_radius);
+    background: transparent;
+    color: var(--ds-text);
+    font: var(--ds-size-font, var(--ds-font-body));
+    text-align: start;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    /* An inset ring: the list is tight; it rests on the edge and snaps in. */
+    outline-offset: 0;
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-picker__preset::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-picker__preset:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-picker__preset:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-picker__preset:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  .ds-picker__preset:active::before,
+  .ds-picker__preset.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-picker__preset:active:not(:disabled, [aria-disabled="true"], [aria-busy="true"]),
+  .ds-picker__preset.ds-pressed:not(:disabled, [aria-disabled="true"], [aria-busy="true"]) {
+    border-radius: min(calc(var(--ds-radius-action-pressed) * var(--ds-shape, 1)), var(--_radius));
+    transition: border-radius var(--ds-dur-micro) var(--ds-ease-out);
+  }
+
+  /* With DS.ripple.attach() the ripple brings the press. */
+  :where(.ds-ripples) .ds-picker__preset:where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *, :disabled, [aria-disabled="true"])):is(:active, .ds-pressed)::before {
+    opacity: 0;
+  }
+
+  @media (hover: hover) {
+    :where(.ds-ripples) .ds-picker__preset:where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *, :disabled, [aria-disabled="true"])):is(:active, .ds-pressed)::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  /* The preset in force: the tint and the label's weight. */
+  .ds-picker__preset[aria-current="true"] {
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-picker__preset:is(:disabled, [aria-disabled="true"]) {
+    color: var(--ds-disabled-ink);
+    cursor: default;
+  }
+
+  .ds-picker__preset:is(:disabled, [aria-disabled="true"])::before {
+    opacity: 0;
+  }
+
+  /* Secondary text at a preset's end (a range, a shortcut). */
+  .ds-picker__meta {
+    margin-inline-start: auto;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-picker__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin-block-start: var(--ds-space-3);
+    padding-block-start: var(--ds-space-3);
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  .ds-picker__spacer {
+    flex: 1;
+  }
+
+  @media (max-width: 600px) {
+    .ds-picker__panes {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .ds-picker__presets {
+      flex-direction: row;
+      flex-wrap: wrap;
+      min-inline-size: 0;
+      padding-inline-end: 0;
+      padding-block-end: var(--ds-space-3);
+      border-inline-end: 0;
+      border-block-end: 1px solid var(--ds-line);
+    }
+
+    .ds-picker__presets > .ds-picker__heading {
+      flex-basis: 100%;
+    }
+
+    .ds-picker__presets > .ds-picker__preset {
+      inline-size: auto;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-picker__preset[aria-current="true"] {
+      forced-color-adjust: none;
+      background: SelectedItem;
+      color: SelectedItemText;
+    }
+
+    .ds-picker__preset[aria-current="true"]:focus-visible {
+      outline-color: CanvasText;
+    }
+
+    .ds-picker__preset:is(:disabled, [aria-disabled="true"]) {
+      color: GrayText;
+    }
+  }
+}

@@ -18,7 +18,7 @@ file. Read [docs/how-it-works.md](docs/how-it-works.md) for the design before ch
 | `internal/cloudflare/` | tunnel and Access: implements `api.Cloudflare` |
 | `internal/api/` | HTTP API, login, live updates; `services.go` holds the contracts |
 | `internal/demo/` | demo mode on the simulator |
-| `web/` | the interface; `web/vendor/dashboard-style/` is a verified copy, never edit it |
+| `web/` | the interface; `web/vendor/z-dash/` is a verified copy of Z-Dash 3, never edit it |
 
 ## Rules
 
@@ -28,9 +28,10 @@ file. Read [docs/how-it-works.md](docs/how-it-works.md) for the design before ch
 - **Only touch what is ours.** On a worker, CI-Plane creates and removes only Docker objects whose name starts with
   `ci-plane-` and that carry a `ci-plane.*` label. On GitHub, only runners named `ci-plane-*`.
 - **Errors are for the person in front of the interface.** Say what happened and what to do, in plain English.
-- **Interface: Dashboard-Style only.** Use its components (`ds-*`) and `DS.*` helpers as documented in
-  <https://github.com/saschazesiger/Dashboard-Style> (`docs/components.md`, `docs/patterns.md`, `docs/rules.md`,
-  `example/`). No framework, no bundler, no other CSS library. Project CSS is a theme (tokens) plus layout glue.
+- **Interface: Z-Dash only** (formerly Dashboard-Style). Use its components (`ds-*`), option classes (`ds-tone-*`,
+  `ds-sm`, `ds-density-*`) and `DS.*` helpers as documented in <https://github.com/saschazesiger/Z-Dash>
+  (`docs/components.md`, `docs/options.md`, `docs/patterns.md`, `docs/rules.md`, `example/`). The page loads the
+  minified build (`ds.min.css`, `ds.min.js`); `web/web.go` embeds only those files of the copy. No framework, no bundler, no other CSS library. Project CSS is a theme (tokens) plus layout glue.
 - **Few dependencies.** Standard library, `golang.org/x/crypto`, `modernc.org/sqlite`. Anything else needs a reason.
 - **Secrets** go through `internal/secret` and never into logs, events or command lines.
 - Text and documentation are English. Comments say why, not what.
@@ -41,6 +42,7 @@ file. Read [docs/how-it-works.md](docs/how-it-works.md) for the design before ch
 go build ./... && go vet ./...
 go test ./...                      # the engine tests take about half a minute
 go test -race ./internal/engine/   # slower, run before changing the engine
-sh web/vendor/dashboard-style/tools/verify.sh web/vendor/dashboard-style
+sh web/vendor/z-dash/tools/verify.sh web/vendor/z-dash
+node web/vendor/z-dash/tools/check-project.mjs --config web/ds-check.json   # needs Node 22
 CI_PLANE_DEMO=1 go run ./cmd/ci-plane   # the interface on simulated workers, http://localhost:8080
 ```

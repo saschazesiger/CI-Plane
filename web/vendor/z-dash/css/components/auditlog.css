@@ -1,0 +1,255 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Audit log (3.0): who did what, when, and what changed, grouped by day.
+ * Built from the timeline (.ds-timeline--activity, day headings, the
+ * activity sentence with its avatar marker) and a description list of the
+ * changed fields, old to new; a filter bar above it. DS.auditlog
+ * (auditlog.js) draws it from the page's records and filters it by the
+ * page's own controls; a page that renders on the server writes the same
+ * markup itself.
+ *
+ *   <section class="ds-auditlog" aria-label="Audit log" data-ds-auditlog>
+ *     <div class="ds-auditlog__filters" role="group" aria-label="Filter the log">
+ *       [a .ds-search field, selects, .ds-chips, each data-ds-auditlog-filter="<name>"]
+ *       <p class="ds-auditlog__count">12 of 48 events</p>
+ *     </div>
+ *     <ol class="ds-timeline ds-timeline--activity" role="list" aria-label="Events">
+ *       <li class="ds-timeline__group" role="presentation"><h3 class="ds-timeline__day">Today</h3></li>
+ *       <li class="ds-timeline__item ds-timeline__item--icon" data-ds-key="e81">
+ *         <span class="ds-timeline__marker" aria-hidden="true">AL</span>
+ *         <div class="ds-timeline__head">
+ *           <p class="ds-timeline__title"><strong>Ada Lovelace</strong> changed <a href="/devices/42">LAPTOP-0042</a></p>
+ *           <time class="ds-timeline__time" datetime="2026-10-12T14:05:00.000Z">14:05</time>
+ *         </div>
+ *         <p class="ds-auditlog__source">Web · 10.20.4.17</p>
+ *         <dl class="ds-auditlog__diff">
+ *           <div class="ds-auditlog__change"><dt>Owner</dt>
+ *             <dd class="ds-auditlog__old"><span class="ds-sr">Before: </span><del>Grace Hopper</del></dd>
+ *             <dd class="ds-auditlog__new"><span class="ds-sr">After: </span><ins>Ada Lovelace</ins></dd></div>
+ *         </dl>
+ *       </li>
+ *     </ol>
+ *     <div class="ds-empty" data-ds-auditlog-empty hidden> ... </div>
+ *   </section>
+ *
+ * Parts: .ds-auditlog__filters (a wrapping bar for the page's chips,
+ * selects and search; .ds-auditlog__count at its end in the meta font);
+ * .ds-auditlog__source (where the change came from: a channel, an
+ * address, in the meta font; a leading 16px icon sits on its line);
+ * .ds-auditlog__diff, one .ds-auditlog__change per field: the field (dt),
+ * the old value (.ds-auditlog__old, struck through, a quiet error tint)
+ * and the new one (.ds-auditlog__new, underlined, a quiet success tint),
+ * an arrow between (drawn by the row, with no text for a reader); a value
+ * that was not set is .ds-auditlog__none (in words: "Not set"). Never
+ * colour alone: the strike, the underline and the .ds-sr words "Before:"
+ * and "After:" say which is which. Past `limit` entries (200) DS.auditlog
+ * writes a .ds-btn.ds-auditlog__more under the list that draws the next
+ * ones. Under 520px of the log's width the
+ * field goes above its values, the old above the new. A hidden part (the
+ * list with nothing to show, the empty state while there is) takes no
+ * room, also without .ds-base.
+ *
+ * Options (src/core/options.css, docs/options.md), on the log or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      the timeline's (marker, title); a change row's block padding
+ *             2px per step, the values in the body font at every size
+ *   density   .ds-density-*: a change row's block padding 2px per step,
+ *             the filter bar's gap 2px per step
+ *   shape     .ds-shape-*: multiplies the radius of the diff and the tints
+ *   tone      none of its own: an entry's status is a .ds-status in its
+ *             head line (an icon and a word)
+ *
+ * Hooks: --ds-auditlog-field-width (10rem), --ds-auditlog-old-bg
+ * (--ds-error-container), --ds-auditlog-new-bg (--ds-success-container),
+ * --ds-auditlog-diff-radius (--ds-radius-sm).
+ *
+ * Forced colours: the tints give way; the strike and the underline stay,
+ * and the values keep a transparent border that becomes their edge.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.auditlog {
+  .ds-auditlog {
+    container: ds-auditlog / inline-size;
+    display: grid;
+    gap: var(--ds-space-4);
+    min-width: 0;
+  }
+
+  /* What DS.auditlog hides: the list without entries, the empty state
+     while there are some (both have a display of their own). */
+  .ds-auditlog > [hidden] {
+    display: none;
+  }
+
+  .ds-auditlog__filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: max(var(--ds-space-1), calc(var(--ds-space-2) + var(--ds-density, 0) * 2px));
+    margin: 0;
+  }
+
+  /* The search takes the room the other filters leave. */
+  .ds-auditlog__filters > .ds-search {
+    flex: 1 1 14rem;
+  }
+
+  /* A select or a date field takes its own width, not the row's. */
+  .ds-auditlog__filters > .ds-input {
+    flex: 0 1 auto;
+    inline-size: auto;
+    min-inline-size: 0;
+  }
+
+  .ds-auditlog__count {
+    margin-block: 0;
+    margin-inline: auto 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-auditlog__source {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-1);
+    margin: var(--ds-space-1) 0 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-auditlog__source > svg {
+    flex: none;
+  }
+
+  /* The changed fields: field, old, arrow, new. */
+  .ds-auditlog__diff {
+    display: grid;
+    grid-template-columns: minmax(0, var(--ds-auditlog-field-width, 10rem)) fit-content(40%) auto minmax(0, 1fr);
+    margin: var(--ds-space-2) 0 0;
+    max-width: var(--ds-measure);
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-auditlog-diff-radius, var(--ds-radius-sm)) * var(--ds-shape, 1));
+    font: var(--ds-font-body);
+  }
+
+  .ds-auditlog__change {
+    --_pad: max(var(--ds-space-1), calc(var(--ds-space-2) + var(--ds-size-step, 0) * 2px + var(--ds-density, 0) * 2px));
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    align-items: baseline;
+    column-gap: var(--ds-space-2);
+    padding: var(--_pad) var(--ds-space-3);
+    border-top: 1px solid var(--ds-line);
+  }
+
+  .ds-auditlog__change:first-child {
+    border-top: 0;
+  }
+
+  .ds-auditlog__change > dt {
+    color: var(--ds-text-2);
+    overflow-wrap: anywhere;
+  }
+
+  .ds-auditlog__old,
+  .ds-auditlog__new {
+    justify-self: start;
+    margin: 0;
+    padding: 0 var(--ds-space-1);
+    border: 1px solid transparent;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    overflow-wrap: anywhere;
+  }
+
+  .ds-auditlog__old {
+    background: var(--ds-auditlog-old-bg, var(--ds-error-container));
+    color: var(--ds-on-error-container);
+  }
+
+  .ds-auditlog__new {
+    background: var(--ds-auditlog-new-bg, var(--ds-success-container));
+    color: var(--ds-on-success-container);
+  }
+
+  .ds-auditlog__old :is(del, s) {
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+  }
+
+  /* The underline of the new value has the links' geometry. */
+  .ds-auditlog__new ins {
+    text-decoration: underline;
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+    text-underline-offset: var(--ds-link-underline-offset);
+  }
+
+  /* The arrow between old and new: drawn, not read (the words say it). */
+  .ds-auditlog__change::after {
+    content: '→' / '';
+    grid-row: 1;
+    grid-column: 3;
+    color: var(--ds-text-2);
+  }
+
+  .ds-auditlog__change > .ds-auditlog__new {
+    grid-row: 1;
+    grid-column: 4;
+  }
+
+  /* A value that was not set: in words, quietly, and without the tint (it
+     is neither what went nor what came). */
+  .ds-auditlog__old:has(> .ds-auditlog__none),
+  .ds-auditlog__new:has(> .ds-auditlog__none) {
+    background: transparent;
+  }
+
+  /* A value that was not set: in words, quietly. */
+  .ds-auditlog__none {
+    color: var(--ds-text-2);
+    font-style: italic;
+  }
+
+  /* The button that draws the next entries past the limit: under the
+     list, at the start of the timeline's column. */
+  .ds-auditlog__more {
+    justify-self: start;
+  }
+
+  /* Narrow: the field above its values, the old above the new. */
+  @container ds-auditlog (max-width: 520px) {
+    .ds-auditlog__diff {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ds-auditlog__change {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: var(--ds-space-1);
+    }
+
+    .ds-auditlog__change > .ds-auditlog__new {
+      grid-row: auto;
+      grid-column: auto;
+    }
+
+    .ds-auditlog__change::after {
+      display: none;
+    }
+
+    .ds-auditlog__count {
+      flex-basis: 100%;
+      margin-inline-start: 0;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-auditlog__old,
+    .ds-auditlog__new {
+      border-color: CanvasText;
+    }
+  }
+}

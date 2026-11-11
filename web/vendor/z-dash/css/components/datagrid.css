@@ -1,0 +1,482 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Data grid (3.0): the parts js/datagrid.js (DS.datagrid) renders into a table.
+ * The table's look stays table.css's (heights, hairlines, options, sticky
+ * rows, pinned columns, selection, expandable rows, stacked rows); this
+ * sheet adds only what the grid's options bring, so a plain table stays
+ * plain and a grid without options looks like the table it was.
+ *
+ *   <div class="ds-table-wrap">
+ *     <table class="ds-table ds-datagrid" data-ds-datagrid data-ds-config='{"select":"multiple","focus":"cell"}'>
+ *       <thead><tr><th scope="col" data-ds-datagrid-col="name" data-ds-datagrid-sort>Device</th> ...</tr></thead>
+ *       <tbody><tr data-ds-key="d1"><td>LAPTOP-0100</td> ...</tr></tbody>
+ *     </table>
+ *   </div>
+ *
+ * Parts the module writes (never by hand):
+ *   .ds-datagrid__select    the selection column: a checkbox per row, the
+ *                       header's select-all box (mixed for some)
+ *   .ds-datagrid__toggle    the details column (a .ds-table__toggle per row)
+ *   .ds-datagrid__actions   the header of the row actions column
+ *   .ds-datagrid__grip      a .ds-grip button in a header cell that moves the
+ *                       column (DS.dnd: pointer and keys); shown with the
+ *                       cell's hover or focus, always where nothing hovers
+ *   .ds-datagrid__resize    the separator at a header cell's end: drag, or
+ *                       the arrow keys; Enter or a double click puts the
+ *                       width back. A line in --ds-line-2 shows on hover
+ *                       and focus, --ds-primary while it is dragged
+ *   .ds-datagrid__rank      the place of a column in a multi-column sort
+ *   .ds-datagrid__tree      a tree or group label: indented by its level
+ *                       (--ds-datagrid-level, written per row) times
+ *                       --ds-datagrid-indent, after its twist
+ *   .ds-datagrid__twist     the toggle of a tree row or a row group, a
+ *                       .ds-table__toggle whose .ds-datagrid__chevron turns
+ *                       90deg on the spring when it opens
+ *   .ds-datagrid__twist-room  the twist's room on a row without children
+ *   .ds-datagrid__label, .ds-datagrid__count  a tree or group label and a group's
+ *                       row count
+ *   .ds-datagrid__group     a row group's head row: the label type on
+ *                       --ds-datagrid-group-bg, its subtotals in the columns
+ *   .ds-datagrid__state     the one row of the empty, no-results, loading and
+ *                       error states (.ds-empty, .ds-loading inside)
+ *   .ds-datagrid__editable  a cell that edits (Enter, F2, a double click)
+ *   .ds-datagrid__editing   the cell while it edits, around .ds-datagrid__field
+ *                       (the .ds-input.ds-datagrid__editor and, when the
+ *                       value is refused, .ds-datagrid__message: an icon and
+ *                       the words below the field)
+ *   .ds-datagrid__every     the link button "Select all N" in the selection bar
+ *   .ds-datagrid__point     the point a row's context menu opens at (fixed,
+ *                       --ds-datagrid-point-x and -y, written per open)
+ *   data-ds-datagrid-layout="fixed"  fixed columns (after a resize, and for
+ *                       windowed rows): table-layout: fixed at
+ *                       --ds-datagrid-width (written: the columns it shows);
+ *                       cells end in an ellipsis
+ *   data-ds-datagrid-dir    the direction of every sorted column, so the
+ *                       arrow of a secondary sort turns as well
+ *   data-ds-datagrid-resizing  the separator being dragged
+ *
+ * Keys (focus: 'cell' or 'row'): the focused cell or row shows the ring,
+ * inset (it rests on the edge and snaps inward on --ds-dur-fast) and the
+ * focus layer at once, as a row link does.
+ *
+ * Options (src/core/options.css): the grid's rows and head are the
+ * table's, so size, density, touch and shape act through table.css. Here:
+ *   touch     .ds-touch: the grip widens to a third of --ds-target-min
+ *             and the separator's target to a quarter of it
+ *   shape     .ds-shape-*: multiplies the radius of the grip and of the
+ *             editor's message
+ *   density   the group row and the state row follow the table's cells
+ *   not type, no tone: the grid shows no meaning of its own (a status in
+ *             a cell does)
+ *
+ * Hooks: --ds-datagrid-indent (--ds-space-6, a tree level's indent),
+ * --ds-datagrid-group-bg (--ds-surface-low, a group's head row).
+ *
+ * Runtime properties (written by js/datagrid.js): --ds-datagrid-width,
+ * --ds-datagrid-level, --ds-datagrid-point-x, --ds-datagrid-point-y.
+ *
+ * Forced colours: the separator's line is a border (CanvasText, Highlight
+ * while dragged), the group row's tint goes (its label type and count
+ * stay), the message keeps an edge; rings are outlines.
+ * Print: no grip, separator or point; the editor prints its value.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.datagrid {
+  /* Header cells hold the grip and the separator. A sticky or pinned
+     header cell is positioned already (table.css): only the others become
+     their box. */
+  .ds-datagrid > thead > tr > th:not(:where(.ds-table--sticky-head > thead th, .ds-table-wrap--fill > .ds-table > thead th, .ds-table--pin-first > thead th:first-child, .ds-table--pin-last > thead th:last-child)) {
+    position: relative;
+  }
+
+  /* Fixed columns (a resize, windowed rows): the widths the module wrote,
+     the table as wide as the columns it shows. */
+  .ds-datagrid[data-ds-datagrid-layout="fixed"] {
+    table-layout: fixed;
+    width: var(--ds-datagrid-width, 100%);
+  }
+
+  .ds-datagrid[data-ds-datagrid-layout="fixed"]:not(.ds-table--stack, .ds-table--stack-wide) > thead > tr > th {
+    overflow-x: clip;
+  }
+
+  .ds-datagrid[data-ds-datagrid-layout="fixed"]:not(.ds-table--stack, .ds-table--stack-wide) > tbody > tr:not(.ds-table__detail, .ds-datagrid__state) > td:not(.ds-datagrid__editing) {
+    overflow-x: clip;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The system columns: as narrow as their control. */
+  .ds-datagrid :is(th, td):is(.ds-datagrid__select, .ds-datagrid__toggle) {
+    width: 1%;
+    padding-inline-end: 0;
+  }
+
+  .ds-datagrid th.ds-datagrid__actions {
+    width: 1%;
+  }
+
+  /* ── Sort rank ─────────────────────────────────── */
+
+  .ds-datagrid__rank {
+    min-inline-size: var(--ds-space-3);
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The arrow of every sorted column turns for descending (aria-sort marks
+     only the first; table.css turns that one). */
+  .ds-datagrid th[data-ds-datagrid-dir="descending"] .ds-table__sort-arrow {
+    rotate: 180deg;
+  }
+
+  /* ── The grip ──────────────────────────────────── */
+
+  /* In the cell's start padding, so the label keeps its line; as tall as
+     the head. */
+  .ds-datagrid__grip {
+    --_w: max(var(--ds-space-4), calc(var(--ds-target-min, 0px) / 3));
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: var(--ds-z-raised);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--_w);
+    padding: 0;
+    border: 0;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: transparent;
+    color: var(--ds-text-2);
+    opacity: 0;
+    outline-offset: 0;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* A touch target (--ds-target-min, from .ds-touch on the table or any
+     container) widens the grip past the cell's start padding: the padding
+     grows with it, so the label stays clear. The table's side padding is
+     computed again here (table.css: the hook, 2px per density step, the
+     card's padding on a first cell, three quarters on phones, half at
+     320px). */
+  .ds-datagrid > thead > tr > th:has(> .ds-datagrid__grip) {
+    padding-inline-start: max(calc(var(--ds-table-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px), calc(var(--ds-target-min, 0px) / 3));
+  }
+
+  .ds-card .ds-table-wrap .ds-datagrid > thead > tr > th:first-child:has(> .ds-datagrid__grip) {
+    padding-inline-start: max(var(--ds-card-pad), calc(var(--ds-target-min, 0px) / 3));
+  }
+
+  @media (max-width: 600px) {
+    .ds-datagrid > thead > tr > th:has(> .ds-datagrid__grip) {
+      padding-inline-start: max(var(--ds-space-1), calc(var(--ds-table-padding, var(--ds-space-4)) * 0.75 + var(--ds-density, 0) * 2px), calc(var(--ds-target-min, 0px) / 3));
+    }
+  }
+
+  @media (max-width: 359px) {
+    .ds-datagrid > thead > tr > th:has(> .ds-datagrid__grip) {
+      padding-inline-start: max(var(--ds-space-1), calc(var(--ds-table-padding, var(--ds-space-4)) * 0.5 + var(--ds-density, 0) * 2px), calc(var(--ds-target-min, 0px) / 3));
+    }
+  }
+
+  .ds-datagrid th:focus-within > .ds-datagrid__grip,
+  .ds-datagrid__grip[data-ds-dragging] {
+    opacity: 1;
+  }
+
+  @media (hover: hover) {
+    .ds-datagrid th:hover > .ds-datagrid__grip {
+      opacity: 1;
+    }
+
+    .ds-datagrid__grip:hover {
+      color: var(--ds-text);
+    }
+  }
+
+  @media (hover: none) {
+    .ds-datagrid__grip {
+      opacity: 1;
+    }
+  }
+
+  .ds-datagrid__grip:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  /* The header cell being moved by its grip keeps an opaque base. */
+  .ds-datagrid > thead th[data-ds-dragging] {
+    background-color: var(--ds-table-sticky-bg, var(--ds-surface));
+  }
+
+  /* ── The separator ─────────────────────────────── */
+
+  .ds-datagrid__resize {
+    --_w: max(var(--ds-space-2), calc(var(--ds-target-min, 0px) / 4));
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    z-index: var(--ds-z-raised);
+    inline-size: var(--_w);
+    cursor: col-resize;
+    touch-action: none;
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* The line: a border, so it stays in forced colours. */
+  .ds-datagrid__resize::before {
+    content: '';
+    position: absolute;
+    inset-block: var(--ds-space-2);
+    inset-inline-end: 0;
+    border-inline-end: 2px solid var(--ds-line-2);
+    opacity: 0;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-datagrid__resize:hover::before {
+      opacity: 1;
+    }
+  }
+
+  .ds-datagrid__resize:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-datagrid__resize:focus-visible::before {
+    opacity: 1;
+    transition-duration: 0s;
+  }
+
+  .ds-datagrid__resize[data-ds-datagrid-resizing]::before {
+    border-inline-end-color: var(--ds-primary);
+    opacity: 1;
+  }
+
+  /* ── Focus: cells and rows of the APG grid ─────── */
+
+  .ds-datagrid > :is(thead, tbody, tfoot) > tr > :is(td, th)[tabindex] {
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* A body cell keeps the table's layer pace (its row sets it, table.css). */
+  .ds-datagrid > tbody > tr > :is(td, th)[tabindex] {
+    transition:
+      background-color var(--ds-table-row-pace) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-datagrid > :is(thead, tbody, tfoot) > tr > :is(td, th)[tabindex]:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  /* The focus layer, at once: a body cell lays it over its row's colour
+     (a pinned cell over its opaque base, through table.css). */
+  .ds-datagrid > tbody > tr > :is(td, th)[tabindex]:focus-visible {
+    --ds-table-row-layer: color-mix(in srgb, currentColor calc(var(--ds-state-focus) * 100%), transparent);
+    --ds-table-row-pace: 0s;
+  }
+
+  .ds-datagrid > :is(thead, tfoot) > tr > :is(td, th)[tabindex]:focus-visible {
+    background-image:
+      linear-gradient(color-mix(in srgb, currentColor calc(var(--ds-state-focus) * 100%), transparent), color-mix(in srgb, currentColor calc(var(--ds-state-focus) * 100%), transparent)),
+      linear-gradient(var(--ds-table-sticky-bg, var(--ds-surface)), var(--ds-table-sticky-bg, var(--ds-surface)));
+  }
+
+  .ds-datagrid > tbody > tr[tabindex] {
+    outline-offset: 0;
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-datagrid > tbody > tr[tabindex]:focus-visible {
+    --ds-table-row-layer: color-mix(in srgb, currentColor calc(var(--ds-state-focus) * 100%), transparent);
+    --ds-table-row-pace: 0s;
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  /* ── Tree rows and row groups ──────────────────── */
+
+  .ds-datagrid__tree {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    padding-inline-start: calc(var(--ds-datagrid-level, 0) * var(--ds-datagrid-indent, var(--ds-space-6)));
+    vertical-align: top;
+  }
+
+  /* The twist hangs out of the text line as the table's toggle does; a
+     row without children keeps its room, so the labels of a level line up. */
+  .ds-datagrid__twist-room {
+    flex: none;
+    inline-size: var(--ds-space-5);
+  }
+
+  .ds-datagrid .ds-datagrid__twist {
+    flex: none;
+    margin-inline: calc((var(--ds-space-5) - max(var(--ds-target-min, 0px), calc(var(--ds-btn-icon-size, 40px) + var(--ds-size-step, 0) * 8px))) / 2);
+  }
+
+  .ds-datagrid__chevron {
+    transition: rotate var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  .ds-datagrid__twist[aria-expanded="true"] > .ds-datagrid__chevron {
+    rotate: 90deg;
+  }
+
+  .ds-datagrid__label {
+    min-inline-size: 0;
+  }
+
+  .ds-datagrid__count {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-datagrid > tbody > tr.ds-datagrid__group {
+    --ds-table-row-tint: var(--ds-datagrid-group-bg, var(--ds-surface-low));
+    background-color: var(--ds-datagrid-group-bg, var(--ds-surface-low));
+  }
+
+  /* A group's label is a row header (th): the last body row leaves the
+     line above the summary row to it, as its td cells do (table.css). */
+  .ds-datagrid > tbody > tr:last-child > th {
+    border-bottom: none;
+  }
+
+  .ds-datagrid > tbody > tr.ds-datagrid__group > :is(th, td) {
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── The state row ─────────────────────────────── */
+
+  .ds-datagrid > tbody > tr.ds-datagrid__state > td {
+    height: auto;
+    padding-block: var(--ds-space-4);
+    border-bottom: 0;
+  }
+
+  @media (hover: hover) {
+    .ds-datagrid > tbody > tr.ds-datagrid__state:hover {
+      --ds-table-row-layer: transparent;
+    }
+  }
+
+  .ds-datagrid__state .ds-empty--inline {
+    max-inline-size: none;
+  }
+
+  /* ── Editing ───────────────────────────────────── */
+
+  .ds-datagrid__editable {
+    cursor: text;
+  }
+
+  .ds-datagrid > tbody > tr:has(> .ds-datagrid__editing) {
+    position: relative;
+    z-index: var(--ds-z-raised);
+  }
+
+  .ds-datagrid > tbody > tr > td.ds-datagrid__editing {
+    padding-block: 0;
+  }
+
+  .ds-datagrid__field {
+    position: relative;
+    display: block;
+  }
+
+  .ds-datagrid__editor {
+    inline-size: 100%;
+    min-inline-size: calc(var(--ds-space-8) * 2);
+  }
+
+  .ds-datagrid__message {
+    position: absolute;
+    inset-block-start: calc(100% + var(--ds-space-1));
+    inset-inline-start: 0;
+    z-index: var(--ds-z-popover);
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+    inline-size: max-content;
+    max-inline-size: calc(var(--ds-space-8) * 8);
+    padding: var(--ds-space-1) var(--ds-space-2);
+    border-radius: calc(var(--ds-radius-sm) * var(--ds-shape, 1));
+    outline: 1px solid transparent;
+    background: var(--ds-surface-popover);
+    box-shadow: var(--ds-elev-2);
+    color: var(--ds-error);
+    font: var(--ds-font-meta);
+    text-align: start;
+    white-space: normal;
+  }
+
+  /* Under a figure (an end-aligned cell) the message hangs from the end,
+     so it stays inside the table. */
+  .ds-num > .ds-datagrid__field > .ds-datagrid__message {
+    inset-inline: auto 0;
+  }
+
+  .ds-datagrid__message > svg {
+    flex: none;
+  }
+
+  /* ── The selection bar's link, the menu's point ── */
+
+  .ds-datagrid__every {
+    margin-inline-start: var(--ds-space-2);
+    color: inherit;
+  }
+
+  .ds-datagrid__point {
+    position: fixed;
+    inset-block-start: var(--ds-datagrid-point-y, 0px);
+    inset-inline-start: var(--ds-datagrid-point-x, 0px);
+    inline-size: 0;
+    block-size: 0;
+    pointer-events: none;
+  }
+
+  @media (forced-colors: active) {
+    .ds-datagrid__resize::before {
+      border-inline-end-color: CanvasText;
+    }
+
+    .ds-datagrid__resize[data-ds-datagrid-resizing]::before {
+      border-inline-end-color: Highlight;
+    }
+
+    .ds-datagrid > tbody > tr.ds-datagrid__group {
+      background-color: Canvas;
+    }
+  }
+
+  @media print {
+    .ds-datagrid__grip,
+    .ds-datagrid__resize,
+    .ds-datagrid__point {
+      display: none;
+    }
+  }
+}

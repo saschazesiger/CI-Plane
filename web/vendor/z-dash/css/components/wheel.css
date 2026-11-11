@@ -1,0 +1,81 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Wheel: a live status line whose text changes often ("Thinking", "Running
+ * npm test", "Writing"), readable at every step and quiet enough to stay in
+ * the background (plans/wheel-and-shimmer.md). A new line pushes the old
+ * one out, like the drum of a counter.
+ *
+ *   <span class="ds-wheel">
+ *     <span class="ds-wheel__line" data-ds-key="Thinking">Thinking</span>
+ *   </span>
+ *
+ *   DS.dom.morphHtml(container, markup, DS.wheel.hooks);   a new key rolls in
+ *   DS.wheel.roll(slot, 'Running npm test');                without a morph
+ *   <span class="ds-wheel" data-ds-wheel="Thinking"></span>  DS.init(): a change of the attribute rolls
+ *
+ * Every line is keyed by what it says: drawn with DS.dom.morphHtml() and
+ * DS.wheel.hooks, a new text is a new key, so the morph inserts a line and
+ * removes the old one, and the hooks turn them. The same key with other
+ * children (a figure that ticks inside the line) is patched in place and
+ * does not roll. A line may also be a .ds-shimmer (shimmer.css).
+ *
+ * The slot is one grid cell (like .ds-swap) with a soft edge: --ds-wheel-fade
+ * of room above and below, given back by a negative margin, and a static
+ * vertical mask (nothing in the mask animates). Each line is as wide as its
+ * text, capped at the slot, and cut with an ellipsis.
+ *
+ * Motion (wheel.js, el.animate(), so an exit starts from wherever an
+ * interrupted entrance is): both lines glide together, one line apart
+ * (--ds-wheel-travel, 100%: a line's own height), on --ds-dur-slow and
+ * --ds-ease-in-out: the old line up and out through the top edge, the new
+ * one up from below. Each line's opacity runs on its glide's curve, so a
+ * line is only as visible as it is inside the slot. Only translate and
+ * opacity, on the standard curve: never 3D, never a blur. Every line shows for at least
+ * --ds-hold-status; a quick run of changes rolls once, to the last. A slot
+ * that is new shows its line at once.
+ *
+ * Options: none of its own. It takes the type, colour and line height of
+ * where it sits (a status row, a summary), so size and density reach it
+ * through its host; shape and tone have nothing to act on.
+ *
+ * Hooks: --ds-wheel-travel (100%, how far a line glides as it goes or
+ * comes; wheel.js reads it through --_travel), --ds-wheel-fade
+ * (--ds-space-3, the soft edge above and below).
+ *
+ * Accessibility: the leaving line is aria-hidden and inert. The slot is no
+ * live region of its own: a page that wants the changes announced puts it
+ * in one (aria-live="polite") and keeps ticking figures out of it.
+ *
+ * Forced colours: nothing of its own; the mask is a shape, so it stays.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.wheel {
+  .ds-wheel {
+    --_fade: var(--ds-wheel-fade, var(--ds-space-3));
+    /* What wheel.js reads: the hook, or one line's own height. */
+    --_travel: var(--ds-wheel-travel, 100%);
+    display: inline-grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    max-width: 100%;
+    vertical-align: bottom;
+    padding-block: var(--_fade);
+    margin-block: calc(-1 * var(--_fade));
+    mask-image: linear-gradient(to bottom, transparent, #000 var(--_fade), #000 calc(100% - var(--_fade)), transparent);
+  }
+
+  /* Every child is a line: the page's own lines in a morph need no class. */
+  .ds-wheel > *,
+  .ds-wheel__line {
+    grid-area: 1 / 1;
+    justify-self: start;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}

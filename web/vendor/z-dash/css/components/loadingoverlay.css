@@ -1,0 +1,170 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Loading overlay: blocks one region of the page (a card, a table, a form,
+ * a pane) while work on it runs, with a spinner and a message; the rest of
+ * the page stays usable. Not for the whole page (that is the app's start,
+ * .ds-boot) and not for content that is still to come (a skeleton).
+ *
+ *   <section class="ds-card" aria-labelledby="dev-title">            (the region: positioned)
+ *     ... the content ...
+ *     <div class="ds-loadingoverlay" hidden data-ds-loadingoverlay>
+ *       <div class="ds-loadingoverlay__box" role="status">
+ *         <span class="ds-spinner" aria-hidden="true"></span>
+ *         <p class="ds-loadingoverlay__message">Saving LAPTOP-0042 ...</p>
+ *         <p class="ds-loadingoverlay__detail">3 of 12 settings</p>      (optional)
+ *         <button class="ds-btn ds-btn--text" type="button" data-ds-loadingoverlay-cancel>Cancel</button>   (optional)
+ *       </div>
+ *     </div>
+ *
+ * Or without markup: DS.loadingoverlay.show(region, { message }) builds it
+ * as the region's last child (js/loadingoverlay.js).
+ *
+ * It covers the region (absolute, inset 0, the region's radius): a veil of
+ * the surface at --ds-state-stale over the content (.ds-loadingoverlay--opaque:
+ * the plain surface, for content that must not show while it changes), and
+ * in its middle the box, a card on the popover elevation that sticks in
+ * view when the region is taller than the window. A determinate ring
+ * (.ds-spinner--determinate with --ds-progress) may replace the arc. The
+ * veil takes the pointer at once; DS.loadingoverlay makes the region's
+ * content inert, sets aria-busy="true" on the region, moves focus that was
+ * in it to the box (or its cancel button) and back, and says the message.
+ *
+ * State (DS.loadingoverlay): data-state="open" while it blocks, "closed"
+ * while it leaves; `hidden` once it left. A region that is static gets
+ * position: relative from the script (an inline style it owns); give it
+ * yourself to keep the script out of your layout.
+ *
+ * Options: size on the region or the overlay (the spinner's size step and
+ * the message's type follow the size classes); density changes the box's
+ * padding and gap (2px per step); shape multiplies the box's radius; touch
+ * reaches the cancel button. No tone: waiting is no status.
+ *
+ * Motion: it shows only after --ds-delay-loader (a fast save shows nothing,
+ * though the region is blocked from the first frame): the veil and the box
+ * fade in over --ds-dur-fast, the box rises --ds-distance-sm on
+ * --ds-ease-out; once shown it stays for --ds-hold-loader at least
+ * (DS.motion.loaderHoldMs), then fades out over --ds-dur-instant.
+ *
+ * Forced colours: the veil is the Canvas (the content under it is blocked
+ * anyway); the box keeps its edge (a transparent border that becomes
+ * CanvasText); the spinner takes the system colours of the spinner.
+ *
+ * Hooks: --ds-loadingoverlay-veil (the surface at --ds-state-stale),
+ * --ds-loadingoverlay-radius (--ds-radius-card), --ds-loadingoverlay-padding
+ * (--ds-space-5), --ds-loadingoverlay-spinner-size (32px).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.loadingoverlay {
+  .ds-loadingoverlay {
+    position: absolute;
+    inset: 0;
+    z-index: var(--ds-z-sticky);
+    display: grid;
+    place-items: center;
+    padding: var(--ds-space-4);
+    border-radius: inherit;
+    background: var(--ds-loadingoverlay-veil, color-mix(in srgb, var(--ds-surface) calc(var(--ds-state-stale) * 100%), transparent));
+    color: var(--ds-text);
+    cursor: progress;
+    /* Hidden until --ds-delay-loader passed; it blocks from the first frame. */
+    opacity: 0;
+  }
+
+  .ds-loadingoverlay[hidden] {
+    display: none;
+  }
+
+  .ds-loadingoverlay--opaque {
+    background: var(--ds-surface);
+  }
+
+  .ds-loadingoverlay__box {
+    --_pad: calc(var(--ds-loadingoverlay-padding, var(--ds-space-5)) + var(--ds-density, 0) * 2px);
+    position: sticky;
+    inset-block: var(--ds-space-6);
+    display: grid;
+    justify-items: center;
+    gap: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px);
+    max-width: min(320px, 100%);
+    padding: var(--_pad) calc(var(--_pad) + var(--ds-space-2));
+    border: 1px solid transparent;
+    border-radius: calc(var(--ds-loadingoverlay-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    background: var(--ds-surface-popover);
+    box-shadow: var(--ds-elev-popover);
+    text-align: center;
+    cursor: default;
+  }
+
+  .ds-loadingoverlay__box > .ds-spinner {
+    --ds-spinner-size: var(--ds-loadingoverlay-spinner-size, 32px);
+  }
+
+  .ds-loadingoverlay__box:focus {
+    outline: none;
+  }
+
+  .ds-loadingoverlay__message {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-size-font, var(--ds-font-body));
+    overflow-wrap: anywhere;
+  }
+
+  .ds-loadingoverlay__detail {
+    margin: calc(-1 * var(--ds-space-2)) 0 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-loadingoverlay__message:empty,
+  .ds-loadingoverlay__detail:empty {
+    display: none;
+  }
+
+  /* State-driven: in after the loader delay, out at once. */
+  .ds-loadingoverlay[data-state] {
+    transition: opacity var(--ds-dur-instant) var(--ds-ease-in-out);
+  }
+
+  .ds-loadingoverlay[data-state] > .ds-loadingoverlay__box {
+    translate: 0 var(--ds-distance-sm);
+    transition: translate var(--ds-dur-instant) var(--ds-ease-in);
+  }
+
+  .ds-loadingoverlay[data-state="open"] {
+    opacity: 1;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out) var(--ds-delay-loader);
+  }
+
+  .ds-loadingoverlay[data-state="open"] > .ds-loadingoverlay__box {
+    translate: none;
+    transition: translate var(--ds-dur-fast) var(--ds-ease-out) var(--ds-delay-loader);
+  }
+
+  /* Leaving: it lets the pointer through at once. */
+  .ds-loadingoverlay[data-state="closed"] {
+    pointer-events: none;
+  }
+
+  /* Shown by hand (no data-state): visible after the loader delay. */
+  .ds-loadingoverlay:not([data-state]) {
+    opacity: 1;
+    animation: ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) var(--ds-delay-loader) backwards;
+  }
+
+  @media (forced-colors: active) {
+    .ds-loadingoverlay {
+      background: Canvas;
+    }
+  }
+
+  @media print {
+    .ds-loadingoverlay {
+      display: none;
+    }
+  }
+}

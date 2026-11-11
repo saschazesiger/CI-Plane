@@ -38,7 +38,7 @@ function passwordHtml(d) {
           '<small class="ds-field__hint" id="pw-new-hint">At least 10 characters. A few random words are easy to type and hard to guess.</small></div>' +
         '<div class="ds-field"><label class="ds-field__label" for="pw-repeat">Repeat the password</label>' +
           '<input class="ds-input" id="pw-repeat" type="password" autocomplete="new-password"></div>' +
-      '</div><div class="ds-form-actions">' + busyButton('ds-btn ds-btn--primary', 'Set password and continue', 'Saving', 'Saved', 'type="submit"') +
+      '</div><div class="ds-form-actions">' + busyButton('ds-btn ds-btn--filled', 'Set password and continue', 'Saving', 'Saved', 'type="submit"') +
       '</div></form>';
   }
   let text = 'Sign in with it on this local address. Forgot it? Start CI-Plane with the environment variable CI_PLANE_ADMIN_PASSWORD set to a new one.';
@@ -123,7 +123,7 @@ function cloudflareHtml(d) {
       '<h3 class="ds-card__subtitle">2. Paste it here</h3>' +
       '<div class="ds-field"><label class="ds-field__label" for="cf-token">API token</label><div class="ds-field__row">' +
         `<input class="ds-input" id="cf-token" type="password" autocomplete="off" spellcheck="false" data-field="apiToken" value="${esc(cf.token)}" aria-describedby="cf-token-hint">` +
-        busyButton(tokenDone ? 'ds-btn' : 'ds-btn ds-btn--primary', 'Check token', 'Checking', 'Valid', 'data-act="cf-zones"') + '</div>' +
+        busyButton(tokenDone ? 'ds-btn' : 'ds-btn ds-btn--filled', 'Check token', 'Checking', 'Valid', 'data-act="cf-zones"') + '</div>' +
         (tokenDone
           ? `<small class="ds-field__hint ds-field__hint--success" id="cf-token-hint">${icon('checkCircle', 16)}<span>Valid: it may use ${plural(zones.length, 'domain')}.</span></small>`
           : '<small class="ds-field__hint" id="cf-token-hint">Cloudflare shows the token once, right after you created it.</small>') + '</div>' +
@@ -133,13 +133,13 @@ function cloudflareHtml(d) {
             `<select class="ds-input" id="cf-zone" data-field="zoneId">${zones.map((z) => `<option value="${esc(z.id)}"${z.id === cf.zoneId ? ' selected' : ''}>${esc(z.name)}</option>`).join('')}</select></div>` +
           '<div class="ds-field"><label class="ds-field__label" for="cf-sub">Subdomain</label><div class="ds-input-group">' +
             `<input class="ds-input" id="cf-sub" autocomplete="off" spellcheck="false" data-field="hostname" value="${esc(cf.sub)}" aria-describedby="cf-sub-hint">` +
-            `<span class="ds-input-group__affix" aria-hidden="true">.${esc(zone ? zone.name : '')}</span></div>` +
+            `<span class="ds-input-group__suffix" aria-hidden="true">.${esc(zone ? zone.name : '')}</span></div>` +
             `<small class="ds-field__hint" id="cf-sub-hint">CI-Plane will be at https://${esc(cf.sub || '...')}.${esc(zone ? zone.name : '')}. The name must not be in use yet.</small></div>` +
         '</div>' +
         '<div class="ds-field"><label class="ds-field__label" for="cf-emails">Who may sign in from outside</label>' +
           `<textarea class="ds-input" id="cf-emails" data-field="emails" spellcheck="false" aria-describedby="cf-emails-hint" placeholder="you@example.com">${esc(cf.emails)}</textarea>` +
           '<small class="ds-field__hint" id="cf-emails-hint">One e-mail address per line. Cloudflare sends a one-time code to these addresses; nobody else gets in.</small></div>' +
-        '<div class="ds-form-actions">' + busyButton('ds-btn ds-btn--primary', 'Set up the tunnel', 'Starting', 'Started', 'data-act="cf-setup"') +
+        '<div class="ds-form-actions">' + busyButton('ds-btn ds-btn--filled', 'Set up the tunnel', 'Starting', 'Started', 'data-act="cf-setup"') +
           (cf.editing ? '<button class="ds-btn ds-btn--text" type="button" data-act="cf-cancel">Cancel</button>' : '') + '</div>'
         : '') +
     '</form>';
@@ -209,7 +209,7 @@ async function startTunnel(button) {
 function githubFormHtml(publicUrl) {
   if (!publicUrl) {
     return alertHtml('warning', 'Set up the Cloudflare tunnel first', 'GitHub sends jobs to the public address of the tunnel, so the app needs it when it is created.',
-      '<a class="ds-btn ds-btn--text ds-btn--sm" href="#/setup?step=2">Go to the Cloudflare step</a>');
+      '<a class="ds-btn ds-btn--text ds-sm" href="#/setup?step=2">Go to the Cloudflare step</a>');
   }
   const org = gh.kind === 'org';
   return '<form class="ds-form" id="gh-form" novalidate>' +
@@ -220,7 +220,7 @@ function githubFormHtml(publicUrl) {
         `<span><strong>An organisation</strong><small>You need to be an owner of it.</small></span><span class="ds-radio__mark" aria-hidden="true">${icon('check', 14)}</span></label>` +
     '</div>' +
     (org ? '<div class="ds-field"><label class="ds-field__label" for="gh-org">Name of the organisation</label><div class="ds-input-group">' +
-      `<span class="ds-input-group__affix" aria-hidden="true">github.com/</span><input class="ds-input" id="gh-org" autocomplete="off" spellcheck="false" data-field="org" value="${esc(gh.org)}" aria-describedby="gh-org-hint"></div>` +
+      `<span class="ds-input-group__prefix" aria-hidden="true">github.com/</span><input class="ds-input" id="gh-org" autocomplete="off" spellcheck="false" data-field="org" value="${esc(gh.org)}" aria-describedby="gh-org-hint"></div>` +
       '<small class="ds-field__hint" id="gh-org-hint">As in its address on GitHub, for example acme-labs.</small></div>' : '') +
     '<h3 class="ds-card__subtitle">What happens on GitHub</h3>' +
     '<div class="ds-prose ds-prose--dense"><ol>' +
@@ -228,7 +228,7 @@ function githubFormHtml(publicUrl) {
       '<li>GitHub asks where to install it. Choose the repositories whose jobs CI-Plane should run, then <strong>Install</strong>.</li>' +
       '<li>GitHub sends you back here, and the repositories show up.</li></ol></div>' +
     `<p class="ds-meta">The app may read Actions and metadata and manage ${org ? 'the self-hosted runners of the organisation' : 'self-hosted runners (GitHub calls this Administration: write on personal repositories)'}. It sends its webhooks to ${esc(publicUrl)}/webhook.</p>` +
-    `<div class="ds-form-actions">${busyButton('ds-btn ds-btn--primary', 'Continue on GitHub', 'Preparing', 'Opening', 'data-act="gh-go"')}</div>` +
+    `<div class="ds-form-actions">${busyButton('ds-btn ds-btn--filled', 'Continue on GitHub', 'Preparing', 'Opening', 'data-act="gh-go"')}</div>` +
     '</form>';
 }
 
@@ -239,7 +239,7 @@ function githubHtml(d) {
     '<p class="ds-muted">CI-Plane creates a GitHub App in your account or organisation and installs it on the repositories you choose. Through it, GitHub tells CI-Plane about queued jobs and CI-Plane registers the runners.</p>';
   for (const a of pending) {
     html += alertHtml('warning', `The app of ${esc(a.owner)} is not installed yet`, 'Install it on the repositories that should use CI-Plane.',
-      `<a class="ds-btn ds-btn--text ds-btn--sm" href="${esc(a.installUrl)}">Install on GitHub${icon('external', 16)}</a>`);
+      `<a class="ds-btn ds-btn--text ds-sm" href="${esc(a.installUrl)}">Install on GitHub${icon('external', 16)}</a>`);
   }
   if (installed.length && !gh.adding) {
     html += alertHtml('success', 'GitHub is connected', `${plural(installed.length, 'account')} with ${plural(installed.reduce((n, a) => n + a.repos.length, 0), 'repository', 'repositories')}.`) +
@@ -321,11 +321,11 @@ function workerHtml(d, inSetup) {
       '<div class="ds-field"><label class="ds-field__label" for="wk-port">SSH port</label>' +
         `<input class="ds-input" id="wk-port" inputmode="numeric" autocomplete="off" data-field="port" value="${esc(wk.port)}"></div>` +
     '</div><div class="ds-form-actions">' +
-      busyButton(wk.result ? 'ds-btn' : 'ds-btn ds-btn--primary', wk.result ? 'Connect again' : 'Connect', 'Connecting', 'Connected', 'type="submit" data-act="wk-check"') +
+      busyButton(wk.result ? 'ds-btn' : 'ds-btn ds-btn--filled', wk.result ? 'Connect again' : 'Connect', 'Connecting', 'Connected', 'type="submit" data-act="wk-check"') +
     '</div></form>';
   if (wk.error) {
     html += alertHtml('error', 'CI-Plane could not connect', esc(wk.error),
-      wk.timer ? '<button class="ds-btn ds-btn--text ds-btn--sm" type="button" data-act="wk-stop">Stop trying</button>' : '') +
+      wk.timer ? '<button class="ds-btn ds-btn--text ds-sm" type="button" data-act="wk-stop">Stop trying</button>' : '') +
       (wk.timer ? `<p class="ds-meta" id="wk-retry" role="status">Trying again by itself every 5 seconds (attempt ${wk.attempts}), so you can run the command now and watch.</p>` : '');
   }
   if (wk.result) {
@@ -353,7 +353,7 @@ function workerHtml(d, inSetup) {
       '<div class="ds-field"><label class="ds-field__label" for="wk-priority">CPU priority</label>' +
         `<select class="ds-input" id="wk-priority" data-field="cpuPriority" aria-describedby="wk-priority-hint">${priorityOptions(wk.priority)}</select>` +
         `<small class="ds-field__hint" id="wk-priority-hint">${PRIORITY_HINT}</small></div>` +
-      `<div class="ds-form-actions">${busyButton('ds-btn ds-btn--primary', 'Add worker', 'Adding', 'Added', 'type="submit" data-act="wk-add"')}</div></form>`;
+      `<div class="ds-form-actions">${busyButton('ds-btn ds-btn--filled', 'Add worker', 'Adding', 'Added', 'type="submit" data-act="wk-add"')}</div></form>`;
   }
   return html;
 }
@@ -363,7 +363,7 @@ function preparedHtml(w, inSetup) {
   let html = `<h3 class="ds-card__subtitle">2. Prepare ${esc(w.name)}</h3>`;
   if (task) html += `<div class="ds-card ds-card--filled">${taskSteps(task)}</div>`;
   if (task && task.state === 'failed') {
-    return html + `<div class="cp-row">${busyButton('ds-btn ds-btn--primary', 'Try again', 'Starting', 'Started', `data-act="wk-prepare" data-worker="${w.id}"`, 'sync')}` +
+    return html + `<div class="cp-row">${busyButton('ds-btn ds-btn--filled', 'Try again', 'Starting', 'Started', `data-act="wk-prepare" data-worker="${w.id}"`, 'sync')}` +
       `<a class="ds-btn ds-btn--text" href="#/workers?open=${w.id}">Open ${esc(w.name)}</a></div>`;
   }
   if (w.state === 'online' && w.live.connected) {
@@ -373,7 +373,7 @@ function preparedHtml(w, inSetup) {
     return html + empty({ done: true, title: `${w.name} is ready`, text: `It is online and takes jobs now, in tier ${w.tier}.`, action: next });
   }
   if (!task || task.state === 'done') {
-    return html + `<div class="ds-loading" role="status"><span class="ds-loader ds-loader--sm" aria-hidden="true"></span>Waiting for ${esc(w.name)} to report in. This takes a few seconds.</div>`;
+    return html + `<div class="ds-loading" role="status"><span class="ds-loader ds-sm" aria-hidden="true"></span>Waiting for ${esc(w.name)} to report in. This takes a few seconds.</div>`;
   }
   return html + '<p class="ds-meta">This takes a minute or two, mostly for pulling the images. You may leave this page; the preparation continues.</p>';
 }
@@ -485,7 +485,7 @@ function snippet(set) {
 
 function tryHtml(d) {
   const set = d.settings.settings;
-  const sizes = set.sizes.map((z) => `<tr data-ds-key="z-${esc(z.name)}"><th scope="row">${esc(z.name)}${z.name === set.defaultSize ? ' <span class="ds-tag ds-tag--neutral">Default</span>' : ''}</th>` +
+  const sizes = set.sizes.map((z) => `<tr data-ds-key="z-${esc(z.name)}"><th scope="row">${esc(z.name)}${z.name === set.defaultSize ? ' <span class="ds-tag ds-tone-neutral">Default</span>' : ''}</th>` +
     `<td class="ds-num">${z.cpus}</td><td class="ds-num">${z.memMb / 1024} GB</td><td><code>[self-hosted, ${esc(set.baseLabel)}, ${esc(z.name)}]</code></td></tr>`).join('');
   const jobs = d.jobs.jobs;
   const liveHtml = jobs.length
@@ -493,13 +493,13 @@ function tryHtml(d) {
       `<ul class="ds-list ds-list--interactive" id="try-jobs" aria-label="Latest jobs">${jobs.slice(0, 3).map((j) => `<li class="ds-list__item" data-ds-key="j${j.id}">` +
         `${icon('play', 20, 'ds-list__icon')}<span class="ds-list__text"><span class="ds-list__title"><a class="ds-list__action" href="#/jobs?open=${j.id}">${esc(j.name)}</a></span>` +
         `<span class="ds-list__meta">${esc(j.repo)} · ${ago(j.queuedAt)}</span></span>${jobChip(j)}</li>`).join('')}</ul>`
-    : `<div class="ds-loading" role="status"><span class="ds-loader ds-loader--sm" aria-hidden="true"></span>Waiting for the first job. Push a commit with this workflow to a connected repository; the job shows up here within seconds.</div>`;
+    : `<div class="ds-loading" role="status"><span class="ds-loader ds-sm" aria-hidden="true"></span>Waiting for the first job. Push a commit with this workflow to a connected repository; the job shows up here within seconds.</div>`;
   return '<h2 class="ds-card__title">Run your first job</h2>' +
     `<p class="ds-muted">Use this runs-on line in a workflow of a connected repository. Jobs without the label ${esc(set.baseLabel)} stay on GitHub's own runners.</p>` +
     codeWithCopy('snippet', snippet(set), 'Example workflow') +
     '<h3 class="ds-card__subtitle">Sizes</h3>' +
     '<p class="ds-muted">Add one size to runs-on for a smaller or larger job: it starts where that many CPUs are free and gets that much memory. You can change the sizes under Settings.</p>' +
-    `<div class="ds-table-wrap"><table class="ds-table ds-table--dense"><caption class="ds-sr">Sizes</caption><thead><tr><th scope="col">Size</th><th scope="col" class="ds-num">Free CPUs to start</th><th scope="col" class="ds-num">Memory</th><th scope="col">runs-on</th></tr></thead><tbody>${sizes}</tbody></table></div>` +
+    `<div class="ds-table-wrap"><table class="ds-table ds-density-tight"><caption class="ds-sr">Sizes</caption><thead><tr><th scope="col">Size</th><th scope="col" class="ds-num">Free CPUs to start</th><th scope="col" class="ds-num">Memory</th><th scope="col">runs-on</th></tr></thead><tbody>${sizes}</tbody></table></div>` +
     '<h3 class="ds-card__subtitle">Live</h3>' + `<div id="try-live">${liveHtml}</div>`;
 }
 
@@ -545,10 +545,10 @@ function navHtml(d) {
   const back = d.step > 0 ? `<button class="ds-btn ds-btn--text" type="button" data-step="${d.step}">${icon('arrowLeft', 16)}Back</button>` : '';
   if (ctx.session.needsPassword) return '';
   if (d.step === STEPS.length - 1) {
-    return `<div class="ds-form-actions">${busyButton(done ? 'ds-btn ds-btn--primary' : 'ds-btn', 'Finish setup', 'Finishing', 'Done', 'data-act="finish"')}${back}</div>`;
+    return `<div class="ds-form-actions">${busyButton(done ? 'ds-btn ds-btn--filled' : 'ds-btn', 'Finish setup', 'Finishing', 'Done', 'data-act="finish"')}${back}</div>`;
   }
   const next = done
-    ? `<button class="ds-btn ds-btn--primary" type="button" data-step="${d.step + 2}">Next: ${STEPS[d.step + 1].label}${icon('arrowRight', 16)}</button>`
+    ? `<button class="ds-btn ds-btn--filled" type="button" data-step="${d.step + 2}">Next: ${STEPS[d.step + 1].label}${icon('arrowRight', 16)}</button>`
     : `<button class="ds-btn" type="button" data-step="${d.step + 2}" aria-describedby="skip-hint">Skip for now</button>`;
   return `<div class="ds-form-actions">${next}${back}${done ? '' : '<p class="ds-meta" id="skip-hint">You can come back to this step later from the setup assistant.</p>'}</div>`;
 }
@@ -768,16 +768,16 @@ export const githubView = {
   load: async () => ({}),
   html() {
     return head('Connecting GitHub', 'One moment: CI-Plane finishes what GitHub sent back.') +
-      '<div id="github-status"><div class="ds-loading" role="status"><span class="ds-loader ds-loader--sm" aria-hidden="true"></span>Finishing ...</div></div>';
+      '<div id="github-status"><div class="ds-loading" role="status"><span class="ds-loader ds-sm" aria-hidden="true"></span>Finishing ...</div></div>';
   },
   async mount(_, params) {
     const status = $('#github-status');
     const fail = (error) => DS.dom.morphHtml(status, alertHtml('error', 'GitHub could not be connected', esc(error.message),
-      `<a class="ds-btn ds-btn--text ds-btn--sm" href="${returnTarget() === '#/repositories' ? '#/repositories/add' : '#/setup?step=3'}">Start again</a>`));
+      `<a class="ds-btn ds-btn--text ds-sm" href="${returnTarget() === '#/repositories' ? '#/repositories/add' : '#/setup?step=3'}">Start again</a>`));
     if (params.get('code')) {
       try {
         const r = await api.post('/api/github/complete', { code: params.get('code'), state: params.get('state') || '' });
-        DS.dom.morphHtml(status, `<div class="ds-loading" role="status"><span class="ds-loader ds-loader--sm" aria-hidden="true"></span>The app ${esc(r.account.slug)} was created. Opening GitHub to install it ...</div>`);
+        DS.dom.morphHtml(status, `<div class="ds-loading" role="status"><span class="ds-loader ds-sm" aria-hidden="true"></span>The app ${esc(r.account.slug)} was created. Opening GitHub to install it ...</div>`);
         location.assign(r.installUrl);
       } catch (error) {
         fail(error);

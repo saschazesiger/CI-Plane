@@ -1,0 +1,118 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Reasoning disclosure: an assistant's thinking, collapsed under a summary
+ * line ("Thinking" while it runs, "Thought for 12s" or the page's own
+ * summary when done), the thoughts a press away. Built on the plain
+ * disclosure (disclosure.css): the summary presses like a pill, the body
+ * opens as a .ds-collapsible.
+ *
+ *   <details class="ds-collapsible ds-disclosure ds-reasoning" data-ds-reasoning
+ *            data-ds-reasoning-since="2026-11-05T09:00:00Z" data-ds-reasoning-auto>
+ *     <summary>
+ *       <span class="ds-reasoning__icon">[icon sparkle 18]</span>
+ *       <span class="ds-reasoning__summary"></span> <time class="ds-reasoning__time"></time>
+ *       [icon chevronDown 20 .ds-chevron]
+ *     </summary>
+ *     <div class="ds-disclosure__body ds-reasoning__body">
+ *       <div class="ds-reasoning__text" tabindex="0" aria-label="Thoughts"><p>...</p><p>...</p></div>
+ *     </div>
+ *   </details>
+ *
+ * Parts: __icon (optional, quiet), __summary (the line: reasoning.js writes
+ * "Thinking" with the shimmer while it runs and "Thought for {time}" at the
+ * end, unless the page wrote its own), __time (optional: the time while it
+ * runs, the total beside a summary of the page's own), __body (on the
+ * .ds-disclosure__body: the rail), __text (the thoughts: quiet body type on
+ * a rail, scrolling past --ds-reasoning-max-height; while it runs it stays
+ * at its end, DS.dom.followEnd()).
+ *
+ * State: data-state="running" or "done", written by the module from
+ * data-ds-reasoning-done (or set({ done })).
+ *
+ * Options (src/core/options.css, docs/options.md), on it or any ancestor;
+ * the summary's are the plain disclosure's (size: 8px of height per step
+ * and its type; density: 4px; shape: its radius; touch: its target):
+ *   density   .ds-density-*: the room above the thoughts, 2px per step
+ *   tone      not read: it shows no meaning
+ *
+ * Hooks: --ds-reasoning-max-height (320px), --ds-reasoning-rail
+ * (--ds-line, the rail's colour).
+ *
+ * Motion: the disclosure's (the body opens as a .ds-collapsible, the
+ * chevron turns), the shimmer on the running summary; with
+ * data-ds-reasoning-auto it opens when it starts and closes when it ends,
+ * unless the reader toggled it.
+ *
+ * Forced colours: the rail stays (a border); the summary keeps its words,
+ * the shimmer's copy goes.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar on the
+ *   thoughts): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.reasoning {
+  .ds-reasoning > summary {
+    color: var(--ds-text-2);
+  }
+
+  .ds-reasoning__icon {
+    display: inline-flex;
+    flex: none;
+  }
+
+  .ds-reasoning__summary {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-reasoning__time {
+    flex: none;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-reasoning__time:empty {
+    display: none;
+  }
+
+  .ds-reasoning__body {
+    min-width: 0;
+    padding-top: max(0px, calc(var(--ds-space-2) + var(--ds-density, 0) * 2px));
+  }
+
+  .ds-reasoning__text {
+    position: relative;
+    max-height: var(--ds-reasoning-max-height, 320px);
+    margin-inline-start: var(--ds-space-2);
+    padding-inline: var(--ds-space-3) var(--ds-space-2);
+    overflow-y: auto;
+    border-inline-start: 2px solid var(--ds-reasoning-rail, var(--ds-line));
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    overflow-wrap: anywhere;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-reasoning__text:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-reasoning__text > * {
+    margin-block: 0 var(--ds-space-2);
+  }
+
+  .ds-reasoning__text > :last-child {
+    margin-block-end: 0;
+  }
+}

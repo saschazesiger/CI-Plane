@@ -1,0 +1,214 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Disclosure: a styled <details> that opens and closes like any
+ * .ds-collapsible (motion.css: the height and the fade, the .ds-chevron
+ * turning on the spring), and accordion rows.
+ *
+ *   <details class="ds-collapsible ds-disclosure">
+ *     <summary>Advanced [icon chevronDown 20 .ds-chevron]</summary>
+ *     <div class="ds-disclosure__body"> ... </div>
+ *   </details>
+ *
+ *   <div class="ds-disclosure-list">
+ *     <details class="ds-collapsible ds-disclosure ds-disclosure--row" name="faq">
+ *       <summary><span class="ds-disclosure__title">Sync</span><span class="ds-disclosure__meta">Nightly</span>[icon chevronDown 20 .ds-chevron]</summary>
+ *       <div class="ds-disclosure__body"> ... </div>
+ *     </details>
+ *   </div>
+ *
+ * The plain summary is a pill (at least 40px high) whose state layer hangs
+ * --ds-space-2 into the space at its sides, so its text stays in line with
+ * the content around it: hover --ds-state-hover, press --ds-state-pressed
+ * in --ds-dur-micro, the focus layer and a ring that snaps in from offset +
+ * width, the press morph (squarer in --ds-dur-micro, springing back over
+ * --ds-dur-medium) and the ripple (js/ripple.js). The body starts
+ * --ds-space-3 below the summary.
+ *
+ * .ds-disclosure--row: a full-width summary (at least 48px high) with a
+ * title, a quiet meta and the chevron at the end; rows in a
+ * .ds-disclosure-list are divided by hairlines. A row takes a rectangular
+ * layer (hover --ds-state-hover-lg), an inset ring, the ripple and no morph.
+ * In a card the list runs to its edges (card.css, through
+ * --ds-disclosure-row-padding-exact).
+ *
+ * Exclusive accordion: rows that share a name (details[name], at the floor)
+ * open one at a time, with no script; opening one closes the other through
+ * the same .ds-collapsible motion. Keyboard: Tab between the summaries,
+ * Enter or Space toggles (native).
+ * The errors list of alert.css (.ds-errors) keeps its own summary.
+ *
+ * Options (src/core/options.css, docs/options.md), on the disclosure or any
+ * ancestor; each is computed here, in the summary's own rule:
+ *   size      .ds-xs ... .ds-xl: 8px of height per step, the type role of
+ *             the size (--ds-size-font)
+ *   density   .ds-density-*: 4px of height per step; a row's side padding
+ *             and the space above and below a body 2px per step
+ *   shape     .ds-shape-*: multiplies the plain summary's rest and pressed
+ *             radius (a row stays rectangular)
+ *   touch     .ds-touch: at least --ds-touch-target high; touch wins over
+ *             size and density
+ *   tone      not read: a disclosure shows no meaning of its own
+ *
+ * Hooks: --ds-disclosure-height (40px), --ds-disclosure-row-height (48px),
+ * the base heights the options apply to; --ds-disclosure-radius,
+ * --ds-disclosure-radius-pressed, --ds-disclosure-font,
+ * --ds-disclosure-row-padding (--ds-space-4, the base),
+ * --ds-disclosure-row-padding-exact (unset; a fixed side padding that
+ * ignores density: what a card sets). The computed values (--_h, --_box,
+ * --_half, --_radius, --_pad) are private.
+ *
+ * Forced colours: no state layer; the ring, the hairlines and the turned
+ * chevron stay.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.disclosure {
+  .ds-disclosure > summary {
+    --_h: calc(var(--ds-disclosure-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    --_half: calc(var(--_box) / 2);
+    --_radius: min(calc(min(var(--ds-disclosure-radius, var(--ds-radius-action)), var(--_half)) * var(--ds-shape, 1)), var(--_half));
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    box-sizing: border-box;
+    width: fit-content;
+    max-width: calc(100% + 2 * var(--ds-space-2));
+    min-height: var(--_box);
+    margin-inline: calc(-1 * var(--ds-space-2));
+    padding-inline: var(--ds-space-2);
+    border-radius: var(--_radius);
+    color: var(--ds-text);
+    font: var(--ds-disclosure-font, var(--ds-size-font, var(--ds-font-label)));
+    list-style: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-disclosure > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .ds-disclosure > summary::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-disclosure > summary:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+
+    /* A row's larger hover layer; before the focus and press layers, which
+       win at the same specificity. */
+    .ds-disclosure--row > summary:hover::before {
+      opacity: var(--ds-state-hover-lg);
+    }
+  }
+
+  /* Keyboard focus: the layer appears with the ring and fades out on blur. */
+  .ds-disclosure > summary:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  /* Press-in in --ds-dur-micro (.ds-pressed: js/ripple.js holds it). */
+  .ds-disclosure > summary:active::before,
+  .ds-disclosure > summary.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  /* The press morph: squarer while pressed (never rounder than at rest),
+     springing back on release. */
+  .ds-disclosure:not(.ds-disclosure--row) > summary:active,
+  .ds-disclosure:not(.ds-disclosure--row) > summary.ds-pressed {
+    border-radius: min(calc(var(--ds-disclosure-radius-pressed, var(--ds-radius-action-pressed)) * var(--ds-shape, 1)), var(--_radius));
+    transition:
+      border-radius var(--ds-dur-micro) var(--ds-ease-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-disclosure > summary:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-disclosure > summary > svg {
+    flex: none;
+  }
+
+  .ds-disclosure__body {
+    padding-top: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px);
+  }
+
+  /*
+   * Accordion rows: a full-width summary, rectangular. The side padding is
+   * shared with the body; a card sets the exact hook to run the rows to its
+   * edges.
+   */
+  .ds-disclosure--row {
+    --_pad: var(--ds-disclosure-row-padding-exact, calc(var(--ds-disclosure-row-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px));
+  }
+
+  .ds-disclosure-list > .ds-disclosure + .ds-disclosure {
+    border-top: 1px solid var(--ds-line);
+  }
+
+  .ds-disclosure--row > summary {
+    --_h: calc(var(--ds-disclosure-row-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    width: auto;
+    max-width: none;
+    margin-inline: 0;
+    padding: var(--ds-space-2) var(--_pad);
+    border-radius: 0;
+    gap: var(--ds-space-3);
+    /* An inset ring: it rests on the edge and snaps inward. */
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-disclosure--row > summary:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-disclosure__title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ds-disclosure__meta {
+    flex: none;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+
+  .ds-disclosure--row > .ds-disclosure__body {
+    padding: 0 var(--_pad) calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+  }
+
+  /* The ring stays; a layer of the page's ink would only hide the text. */
+  @media (forced-colors: active) {
+    .ds-disclosure > summary::before {
+      display: none;
+    }
+  }
+}

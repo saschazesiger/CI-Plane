@@ -1,0 +1,1496 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Motion: the only file with @keyframes (test/css.test.js enforces it).
+ * Components either name a keyframe here directly or use the utility
+ * classes below; durations, easings, distances and scales always come from
+ * tokens.css.
+ *
+ * Keyframes sit in the ds.motion layer, the utility classes (.ds-enter,
+ * .ds-leave, .ds-stagger, .ds-reveal, .ds-reveal--scroll,
+ * .ds-collapsible, .ds-chevron, .ds-swap, .ds-swap--fade, .ds-icon-swap,
+ * .ds-presence, .ds-presence--keep, .ds-vt-view) and the view-transition
+ * rules (.ds-theme::view-transition-*) in ds.utilities. That layer comes after
+ * ds.components, so a utility wins over a component's own animation by
+ * layer order, not by specificity.
+ *
+ * The per-element hooks (--ds-motion-*, --ds-clip-from, --ds-draw-length,
+ * --ds-enter-*, --ds-leave-*, --ds-i) are registered here, at the top
+ * level, and do not inherit: a hook applies to the element that sets it,
+ * never to its descendants, so set it on the animating element.
+ *
+ * Movement keyframes use the individual translate and scale properties, so
+ * they compose with an element's own or inline transform (a placed tooltip,
+ * the indicator, FLIP) and can be read back mid-flight. Entrances define
+ * only `from`: the element animates to whatever its own styles say, so one
+ * keyframe works for any final opacity or position. Exits define only `to`
+ * and are movement-only; they always pair with ds-fade-out.
+ *
+ * [data-ds-moving] (set by DS.dom.morphHtml for one style flush on a node
+ * it moves with insertBefore, and by DS.indicator.create on its
+ * track) turns transitions off in that subtree, so a keyed reorder never
+ * replays an @starting-style entrance and the items under a new pill take
+ * their look at once.
+ *
+ * Progressive:
+ * - interpolate-size and ::details-content (.ds-collapsible animates its
+ *   height and fades its content, with content-visibility as an
+ *   allow-discrete track): without them it simply toggles.
+ * - overflow-clip-margin (focus rings at the edge of an open
+ *   .ds-collapsible show): without it the content's own padding is the
+ *   ring room.
+ * - sibling-index() (it numbers the children of .ds-stagger): without it
+ *   stagger() in js/motion.js numbers them.
+ * - @starting-style, allow-discrete transitions of display and overlay,
+ *   and :popover-open (.ds-presence animates toggled elements, stays
+ *   rendered and in the top layer while it leaves; :popover-open in a rule
+ *   of its own): without them it shows and hides at once.
+ * - View Transitions (the ::view-transition-* rules of the "View
+ *   transitions" section: fade-through, shared axis, container transform,
+ *   the group default that glides named indicators, and .ds-vt-view, a
+ *   view outside the app frame; only with .ds-theme on <html>): without
+ *   them DS.motion.transition() fades the new view (the first child of a
+ *   .ds-vt-view) through with .ds-enter--swap.
+ * - scroll-driven animations (animation-timeline: view(), animation-range;
+ *   .ds-reveal--scroll ties its fade and rise to the scroll position, and
+ *   ds-scroll-fade, ds-scroll-edge-start and ds-scroll-edge-end run on the
+ *   scroll timelines of shell.css, sheet.css, table.css and scroller.css):
+ *   without them .ds-reveal--scroll stays static, never hidden, and
+ *   data-scrolled, the data-ds-overflow-* attributes of
+ *   DS.dom.scrollEdges() and the static table fade stay.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+/*
+ * Per-element motion hooks. No initial value: an unset hook stays
+ * guaranteed-invalid, so every var(--hook, fallback) keeps its fallback.
+ * inherits: false, so a hook set on a parent (a .ds-reveal block, a
+ * .ds-enter--delayed wrapper, a staggered item) never reaches an element
+ * that animates inside it.
+ */
+@property --ds-motion-distance {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --ds-motion-scale {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --ds-motion-origin {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --ds-clip-from {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --ds-draw-length {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --ds-enter-keyframes {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --ds-enter-duration {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --ds-enter-easing {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --ds-enter-delay {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --ds-leave-keyframes {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --ds-leave-duration {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --ds-leave-easing {
+  syntax: '*';
+  inherits: false;
+}
+
+/* The stagger step of an item (stagger() in js/motion.js sets it inline). */
+@property --ds-i {
+  syntax: '<integer>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@layer ds.motion {
+  /* ── Keyframes: enter ──────────────────────────── */
+
+  @keyframes ds-fade-in {
+    from { opacity: 0; }
+  }
+
+  /*
+   * Movement only. Opacity must take the standard curve while the movement
+   * floats on the spring (an overshooting fade flashes), and one keyframe
+   * runs on one curve, so entrances pair ds-fade-in with one of these:
+   *
+   *   animation: ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) backwards,
+   *              ds-lift-in var(--ds-dur-medium) var(--ds-ease-spatial) backwards;
+   *
+   * ds-lift-in rises (snackbars, a swapped view), ds-grow-in rises from just
+   * below full size (dialogs; --ds-motion-scale sets the start scale),
+   * ds-shift-in comes from the side (side sheets), ds-pop-in grows small
+   * markers (badges). The .ds-enter utilities below always use these pairs.
+   */
+  @keyframes ds-lift-in {
+    from { translate: 0 var(--ds-motion-distance, var(--ds-distance-md)); }
+  }
+
+  @keyframes ds-grow-in {
+    from {
+      translate: 0 var(--ds-motion-distance, var(--ds-distance-md));
+      scale: var(--ds-motion-scale, var(--ds-scale-enter));
+    }
+  }
+
+  @keyframes ds-shift-in {
+    from { translate: var(--ds-motion-distance, var(--ds-distance-xl)) 0; }
+  }
+
+  /* A rolling line (a status text that changes): the new line comes up from
+     below into its slot (--ds-motion-distance: 100%, one line height). */
+  @keyframes ds-roll-in {
+    from { translate: 0 var(--ds-motion-distance, 100%); }
+  }
+
+  /* Small markers that appear (badges, counters): the smallest start scale
+     (--ds-scale-small). */
+  @keyframes ds-pop-in {
+    from { scale: var(--ds-motion-scale, var(--ds-scale-small)); }
+  }
+
+  /* A stroke that draws itself (a check after success). The glyph carries
+     pathLength="1" and the element sets stroke-dasharray: 1, so the stroke
+     starts fully offset (--ds-draw-length, default 1) and draws in. */
+  @keyframes ds-draw {
+    from { stroke-dashoffset: var(--ds-draw-length, 1); }
+  }
+
+  /* A chart mark that fills from zero to its share on its first render
+     (.ds-meter, .ds-columns__col): the registered --ds-share runs from 0
+     to the mark's own value, so its fill, clipped at the share, keeps its
+     round end the whole way. A value that changes later transitions, it
+     never replays this. */
+  @keyframes ds-fill-share {
+    from { --ds-share: 0; }
+  }
+
+  /* Deprecated in 2.0 (removed in 3.0 at the earliest): a scaled bar
+     squashes its round end; use --ds-share with ds-fill-share. A bar that
+     fills from its start: the element sets its own transform (the scaleX
+     or scaleY of its share) and transform-origin; the scale property
+     multiplies it, so the bar grows from zero to its share. A value that
+     changes later jumps or transitions, it never replays this. */
+  @keyframes ds-fill-x {
+    from { scale: 0 1; }
+  }
+
+  @keyframes ds-fill-y {
+    from { scale: 1 0; }
+  }
+
+  /* ── Keyframes: leave ──────────────────────────── */
+  /* Movement only, each paired with ds-fade-out (the fade accelerates on
+     its own curve):
+
+       animation: ds-fade-out var(--ds-dur-fast) var(--ds-ease-in) forwards,
+                  ds-drop-out var(--ds-dur-fast) var(--ds-ease-in) forwards;
+  */
+
+  @keyframes ds-fade-out {
+    to { opacity: 0; }
+  }
+
+  /* Down (the reverse of ds-lift-in). */
+  @keyframes ds-drop-out {
+    to { translate: 0 var(--ds-motion-distance, var(--ds-distance-md)); }
+  }
+
+  /* Smaller and a little down (the reverse of ds-grow-in). */
+  @keyframes ds-shrink-out {
+    to {
+      translate: 0 var(--ds-motion-distance, var(--ds-distance-sm));
+      scale: var(--ds-motion-scale, var(--ds-scale-enter));
+    }
+  }
+
+  /* Sideways (a side sheet, a drawer). */
+  @keyframes ds-shift-out {
+    to { translate: var(--ds-motion-distance, var(--ds-distance-lg)) 0; }
+  }
+
+  /* A small marker disappears (the reverse of ds-pop-in). */
+  @keyframes ds-pop-out {
+    to { scale: var(--ds-motion-scale, var(--ds-scale-small)); }
+  }
+
+  /* The rolling line leaves upwards (--ds-motion-distance: -100%). */
+  @keyframes ds-roll-out {
+    to { translate: 0 var(--ds-motion-distance, -100%); }
+  }
+
+  /* ── Keyframes: popup reveal ───────────────────── */
+  /* A popup (menu, combobox list) uncovers itself from the edge of its
+     trigger: --ds-clip-from is the hidden state (DS.motion.originFrom()
+     writes it, default: closed towards the top edge). clip-path does not
+     interpolate to `none`, so both keyframes name both ends; the open end
+     reaches --ds-space-6 beyond the box, the resting clip of .ds-menu and
+     .ds-combo__popup, so the popup's shadow stays visible while the
+     animation runs and nothing snaps when it ends. */
+  @keyframes ds-clip-in {
+    from { clip-path: var(--ds-clip-from, inset(0 0 100% 0)); }
+    to { clip-path: inset(calc(-1 * var(--ds-space-6))); }
+  }
+
+  @keyframes ds-clip-out {
+    from { clip-path: inset(calc(-1 * var(--ds-space-6))); }
+    to { clip-path: var(--ds-clip-from, inset(0 0 100% 0)); }
+  }
+
+  /* ── Keyframes: feedback ───────────────────────── */
+
+  /* The pointer ripple of an action (DS.ripple): a circle grows from the
+     pointer. Its fade is a separate track (ds-fade-out). */
+  @keyframes ds-press-ripple {
+    from { scale: 0; }
+  }
+
+  /* A ring that widens and fades once behind a confirmation. No overshoot:
+     it only grows and disappears. */
+  @keyframes ds-ripple {
+    from { opacity: var(--ds-ripple-opacity, .6); scale: 1; }
+    to { opacity: 0; scale: var(--ds-ripple-scale, 1.6); }
+  }
+
+  /* ── Keyframes: loops (loading indicators) ─────── */
+  /* Skeletons: one synchronised, calm diagonal wave across the surface
+     (ds-skeleton-wave).
+
+     Loops run `linear` on their --ds-loop-* token: the curves of the
+     generated loops are baked into their stops by scripts/motion-curves.mjs
+     (never edit a generated block by hand). The registered properties they
+     animate are in tokens.css. */
+
+  /* One turn: the spinner turns on top of its arc. The individual rotate
+     property composes with an element's own transform, which stays applied
+     while it spins. */
+  @keyframes ds-spin {
+    to { rotate: 1turn; }
+  }
+
+  /* The Material 3 arc of .ds-spinner: the sweep (--ds-spinner-arc) grows
+     from 10deg to 270deg (the head runs ahead) and shrinks back while the
+     start (--ds-spinner-start) advances 270deg (the tail chases the head),
+     on the M3 curve. Four such cycles, 3 turns of the start, make one loop
+     (--ds-loop-arc), so the loop never jumps. */
+  @keyframes ds-spinner-arc {
+    /* generated: spinner-arc */
+    0% { --ds-spinner-arc: 10deg; --ds-spinner-start: 0deg; }
+    0.95% { --ds-spinner-arc: 13.67deg; }
+    1.71% { --ds-spinner-arc: 23.79deg; }
+    2.34% { --ds-spinner-arc: 39.49deg; }
+    2.91% { --ds-spinner-arc: 61.3deg; }
+    3.59% { --ds-spinner-arc: 96.43deg; }
+    4.56% { --ds-spinner-arc: 149.37deg; }
+    5.27% { --ds-spinner-arc: 180.41deg; }
+    6.06% { --ds-spinner-arc: 206.48deg; }
+    7% { --ds-spinner-arc: 228.76deg; }
+    8.14% { --ds-spinner-arc: 247.02deg; }
+    9.54% { --ds-spinner-arc: 260.65deg; }
+    11.26% { --ds-spinner-arc: 268.56deg; }
+    12.5% { --ds-spinner-arc: 270deg; --ds-spinner-start: 0deg; }
+    13.43% { --ds-spinner-start: 3.64deg; }
+    13.45% { --ds-spinner-arc: 266.33deg; }
+    14.18% { --ds-spinner-start: 13.74deg; }
+    14.21% { --ds-spinner-arc: 256.21deg; }
+    14.8% { --ds-spinner-start: 29.33deg; }
+    14.84% { --ds-spinner-arc: 240.51deg; }
+    15.36% { --ds-spinner-start: 50.96deg; }
+    15.41% { --ds-spinner-arc: 218.7deg; }
+    16% { --ds-spinner-start: 84.53deg; }
+    16.09% { --ds-spinner-arc: 183.57deg; }
+    17.04% { --ds-spinner-start: 143.71deg; }
+    17.06% { --ds-spinner-arc: 130.63deg; }
+    17.74% { --ds-spinner-start: 175.77deg; }
+    17.77% { --ds-spinner-arc: 99.59deg; }
+    18.51% { --ds-spinner-start: 202.55deg; }
+    18.56% { --ds-spinner-arc: 73.52deg; }
+    19.42% { --ds-spinner-start: 225.51deg; }
+    19.5% { --ds-spinner-arc: 51.24deg; }
+    20.52% { --ds-spinner-start: 244.51deg; }
+    20.64% { --ds-spinner-arc: 32.98deg; }
+    21.87% { --ds-spinner-start: 258.99deg; }
+    22.04% { --ds-spinner-arc: 19.35deg; }
+    23.52% { --ds-spinner-start: 267.83deg; }
+    23.76% { --ds-spinner-arc: 11.44deg; }
+    25% { --ds-spinner-arc: 10deg; --ds-spinner-start: 270deg; }
+    25.95% { --ds-spinner-arc: 13.67deg; }
+    26.71% { --ds-spinner-arc: 23.79deg; }
+    27.34% { --ds-spinner-arc: 39.49deg; }
+    27.91% { --ds-spinner-arc: 61.3deg; }
+    28.59% { --ds-spinner-arc: 96.43deg; }
+    29.56% { --ds-spinner-arc: 149.37deg; }
+    30.27% { --ds-spinner-arc: 180.41deg; }
+    31.06% { --ds-spinner-arc: 206.48deg; }
+    32% { --ds-spinner-arc: 228.76deg; }
+    33.14% { --ds-spinner-arc: 247.02deg; }
+    34.54% { --ds-spinner-arc: 260.65deg; }
+    36.26% { --ds-spinner-arc: 268.56deg; }
+    37.5% { --ds-spinner-arc: 270deg; --ds-spinner-start: 270deg; }
+    38.43% { --ds-spinner-start: 273.64deg; }
+    38.45% { --ds-spinner-arc: 266.33deg; }
+    39.18% { --ds-spinner-start: 283.74deg; }
+    39.21% { --ds-spinner-arc: 256.21deg; }
+    39.8% { --ds-spinner-start: 299.33deg; }
+    39.84% { --ds-spinner-arc: 240.51deg; }
+    40.36% { --ds-spinner-start: 320.96deg; }
+    40.41% { --ds-spinner-arc: 218.7deg; }
+    41% { --ds-spinner-start: 354.53deg; }
+    41.09% { --ds-spinner-arc: 183.57deg; }
+    42.04% { --ds-spinner-start: 413.71deg; }
+    42.06% { --ds-spinner-arc: 130.63deg; }
+    42.74% { --ds-spinner-start: 445.77deg; }
+    42.77% { --ds-spinner-arc: 99.59deg; }
+    43.51% { --ds-spinner-start: 472.55deg; }
+    43.56% { --ds-spinner-arc: 73.52deg; }
+    44.42% { --ds-spinner-start: 495.51deg; }
+    44.5% { --ds-spinner-arc: 51.24deg; }
+    45.52% { --ds-spinner-start: 514.51deg; }
+    45.64% { --ds-spinner-arc: 32.98deg; }
+    46.87% { --ds-spinner-start: 528.99deg; }
+    47.04% { --ds-spinner-arc: 19.35deg; }
+    48.52% { --ds-spinner-start: 537.83deg; }
+    48.76% { --ds-spinner-arc: 11.44deg; }
+    50% { --ds-spinner-arc: 10deg; --ds-spinner-start: 540deg; }
+    50.95% { --ds-spinner-arc: 13.67deg; }
+    51.71% { --ds-spinner-arc: 23.79deg; }
+    52.34% { --ds-spinner-arc: 39.49deg; }
+    52.91% { --ds-spinner-arc: 61.3deg; }
+    53.59% { --ds-spinner-arc: 96.43deg; }
+    54.56% { --ds-spinner-arc: 149.37deg; }
+    55.27% { --ds-spinner-arc: 180.41deg; }
+    56.06% { --ds-spinner-arc: 206.48deg; }
+    57% { --ds-spinner-arc: 228.76deg; }
+    58.14% { --ds-spinner-arc: 247.02deg; }
+    59.54% { --ds-spinner-arc: 260.65deg; }
+    61.26% { --ds-spinner-arc: 268.56deg; }
+    62.5% { --ds-spinner-arc: 270deg; --ds-spinner-start: 540deg; }
+    63.43% { --ds-spinner-start: 543.64deg; }
+    63.45% { --ds-spinner-arc: 266.33deg; }
+    64.18% { --ds-spinner-start: 553.74deg; }
+    64.21% { --ds-spinner-arc: 256.21deg; }
+    64.8% { --ds-spinner-start: 569.33deg; }
+    64.84% { --ds-spinner-arc: 240.51deg; }
+    65.36% { --ds-spinner-start: 590.96deg; }
+    65.41% { --ds-spinner-arc: 218.7deg; }
+    66% { --ds-spinner-start: 624.53deg; }
+    66.09% { --ds-spinner-arc: 183.57deg; }
+    67.04% { --ds-spinner-start: 683.71deg; }
+    67.06% { --ds-spinner-arc: 130.63deg; }
+    67.74% { --ds-spinner-start: 715.77deg; }
+    67.77% { --ds-spinner-arc: 99.59deg; }
+    68.51% { --ds-spinner-start: 742.55deg; }
+    68.56% { --ds-spinner-arc: 73.52deg; }
+    69.42% { --ds-spinner-start: 765.51deg; }
+    69.5% { --ds-spinner-arc: 51.24deg; }
+    70.52% { --ds-spinner-start: 784.51deg; }
+    70.64% { --ds-spinner-arc: 32.98deg; }
+    71.87% { --ds-spinner-start: 798.99deg; }
+    72.04% { --ds-spinner-arc: 19.35deg; }
+    73.52% { --ds-spinner-start: 807.83deg; }
+    73.76% { --ds-spinner-arc: 11.44deg; }
+    75% { --ds-spinner-arc: 10deg; --ds-spinner-start: 810deg; }
+    75.95% { --ds-spinner-arc: 13.67deg; }
+    76.71% { --ds-spinner-arc: 23.79deg; }
+    77.34% { --ds-spinner-arc: 39.49deg; }
+    77.91% { --ds-spinner-arc: 61.3deg; }
+    78.59% { --ds-spinner-arc: 96.43deg; }
+    79.56% { --ds-spinner-arc: 149.37deg; }
+    80.27% { --ds-spinner-arc: 180.41deg; }
+    81.06% { --ds-spinner-arc: 206.48deg; }
+    82% { --ds-spinner-arc: 228.76deg; }
+    83.14% { --ds-spinner-arc: 247.02deg; }
+    84.54% { --ds-spinner-arc: 260.65deg; }
+    86.26% { --ds-spinner-arc: 268.56deg; }
+    87.5% { --ds-spinner-arc: 270deg; --ds-spinner-start: 810deg; }
+    88.43% { --ds-spinner-start: 813.64deg; }
+    88.45% { --ds-spinner-arc: 266.33deg; }
+    89.18% { --ds-spinner-start: 823.74deg; }
+    89.21% { --ds-spinner-arc: 256.21deg; }
+    89.8% { --ds-spinner-start: 839.33deg; }
+    89.84% { --ds-spinner-arc: 240.51deg; }
+    90.36% { --ds-spinner-start: 860.96deg; }
+    90.41% { --ds-spinner-arc: 218.7deg; }
+    91% { --ds-spinner-start: 894.53deg; }
+    91.09% { --ds-spinner-arc: 183.57deg; }
+    92.04% { --ds-spinner-start: 953.71deg; }
+    92.06% { --ds-spinner-arc: 130.63deg; }
+    92.74% { --ds-spinner-start: 985.77deg; }
+    92.77% { --ds-spinner-arc: 99.59deg; }
+    93.51% { --ds-spinner-start: 1012.55deg; }
+    93.56% { --ds-spinner-arc: 73.52deg; }
+    94.42% { --ds-spinner-start: 1035.51deg; }
+    94.5% { --ds-spinner-arc: 51.24deg; }
+    95.52% { --ds-spinner-start: 1054.51deg; }
+    95.64% { --ds-spinner-arc: 32.98deg; }
+    96.87% { --ds-spinner-start: 1068.99deg; }
+    97.04% { --ds-spinner-arc: 19.35deg; }
+    98.52% { --ds-spinner-start: 1077.83deg; }
+    98.76% { --ds-spinner-arc: 11.44deg; }
+    100% { --ds-spinner-arc: 10deg; --ds-spinner-start: 1080deg; }
+    /* end generated: spinner-arc */
+  }
+
+  /* The Material 3 Expressive loader: the 7 shapes (soft burst, cookie-9,
+     pentagon, pill, sunny, cookie-4, oval), each 64 vertices from the top,
+     clockwise, so a morph never twists. Run on --ds-ease-spatial over
+     --ds-loop-loader: every step lands with the spring. */
+  @keyframes ds-loader-morph {
+    /* generated: loader-morph */
+    0%, 100% {
+      clip-path: polygon(
+        50% 0%, 54.65% 2.82%, 57.66% 7.66%, 61.14% 12.09%, 66.6% 12.07%, 71.87% 9.9%, 77.32% 8.63%, 81.32% 12.3%,
+        81.24% 17.97%, 80.84% 23.66%, 83.57% 28.36%, 89.05% 29.88%, 94.57% 31.29%, 97.78% 35.67%, 95.57% 40.71%, 91.9% 45.07%,
+        89.38% 50.01%, 91.94% 54.93%, 95.63% 59.28%, 97.79% 64.34%, 94.53% 68.67%, 89.01% 70.09%, 83.53% 71.64%, 80.86% 76.37%,
+        81.29% 82.06%, 81.35% 87.72%, 77.31% 91.34%, 71.86% 90.04%, 66.58% 87.89%, 61.12% 87.93%, 57.67% 92.38%, 54.68% 97.24%,
+        50% 100%, 45.35% 97.18%, 42.34% 92.34%, 38.86% 87.91%, 33.4% 87.93%, 28.13% 90.1%, 22.68% 91.37%, 18.68% 87.7%,
+        18.76% 82.03%, 19.16% 76.34%, 16.43% 71.64%, 10.95% 70.12%, 5.43% 68.71%, 2.22% 64.33%, 4.43% 59.29%, 8.1% 54.93%,
+        10.62% 49.99%, 8.06% 45.07%, 4.37% 40.72%, 2.21% 35.66%, 5.47% 31.33%, 10.99% 29.91%, 16.47% 28.36%, 19.14% 23.63%,
+        18.71% 17.94%, 18.65% 12.28%, 22.69% 8.66%, 28.14% 9.96%, 33.42% 12.11%, 38.88% 12.07%, 42.33% 7.62%, 45.32% 2.76%
+      );
+    }
+    14.29% {
+      clip-path: polygon(
+        50% 1.98%, 54.75% 2.74%, 59.03% 4.93%, 62.87% 7.85%, 67.36% 9.57%, 72.17% 9.89%, 76.9% 10.79%, 81.11% 13.11%,
+        84.38% 16.63%, 86.4% 21%, 87.44% 25.71%, 89.62% 30%, 93.02% 33.41%, 96.19% 37.03%, 98.07% 41.45%, 98.49% 46.25%,
+        97.39% 50.93%, 95.16% 55.2%, 93.91% 59.85%, 94.17% 64.65%, 94.44% 69.46%, 93.2% 74.1%, 90.58% 78.14%, 86.83% 81.16%,
+        82.39% 83.03%, 78.35% 85.64%, 75.33% 89.38%, 72.57% 93.33%, 68.73% 96.23%, 64.18% 97.79%, 59.37% 97.87%, 54.75% 96.51%,
+        50% 95.76%, 45.25% 96.51%, 40.63% 97.87%, 35.82% 97.79%, 31.27% 96.23%, 27.43% 93.33%, 24.67% 89.38%, 21.65% 85.64%,
+        17.61% 83.03%, 13.17% 81.16%, 9.42% 78.14%, 6.8% 74.1%, 5.56% 69.46%, 5.83% 64.65%, 6.09% 59.85%, 4.84% 55.2%,
+        2.61% 50.93%, 1.51% 46.25%, 1.93% 41.45%, 3.81% 37.03%, 6.98% 33.41%, 10.38% 30%, 12.56% 25.71%, 13.6% 21%,
+        15.62% 16.63%, 18.89% 13.11%, 23.1% 10.79%, 27.83% 9.89%, 32.64% 9.57%, 37.13% 7.85%, 40.97% 4.93%, 45.25% 2.74%
+      );
+    }
+    28.57% {
+      clip-path: polygon(
+        50% 5.98%, 54.42% 6.6%, 58.51% 8.41%, 62.19% 10.97%, 65.85% 13.56%, 69.51% 16.14%, 73.17% 18.72%, 76.84% 21.31%,
+        80.5% 23.89%, 84.16% 26.48%, 87.82% 29.06%, 91.44% 31.7%, 94.37% 35.07%, 96.21% 39.15%, 96.79% 43.58%, 96.08% 47.98%,
+        94.66% 52.24%, 93.24% 56.49%, 91.82% 60.74%, 90.4% 64.99%, 88.98% 69.24%, 87.56% 73.5%, 86.14% 77.75%, 84.72% 82%,
+        83% 86.13%, 80.24% 89.64%, 76.61% 92.24%, 72.39% 93.72%, 67.93% 94.02%, 63.45% 94.02%, 58.96% 94.02%, 54.48% 94.02%,
+        50% 94.02%, 45.52% 94.02%, 41.04% 94.02%, 36.55% 94.02%, 32.07% 94.02%, 27.61% 93.72%, 23.39% 92.24%, 19.76% 89.64%,
+        17% 86.13%, 15.28% 82%, 13.86% 77.75%, 12.44% 73.5%, 11.02% 69.24%, 9.6% 64.99%, 8.18% 60.74%, 6.76% 56.49%,
+        5.34% 52.24%, 3.92% 47.98%, 3.21% 43.58%, 3.79% 39.15%, 5.63% 35.07%, 8.56% 31.7%, 12.18% 29.06%, 15.84% 26.48%,
+        19.5% 23.89%, 23.16% 21.31%, 26.83% 18.72%, 30.49% 16.14%, 34.15% 13.56%, 37.81% 10.97%, 41.49% 8.41%, 45.58% 6.6%
+      );
+    }
+    42.86% {
+      clip-path: polygon(
+        50% 9.4%, 53.83% 7.69%, 57.85% 6.53%, 62% 5.94%, 66.2% 5.93%, 70.35% 6.51%, 74.38% 7.66%, 78.21% 9.36%,
+        81.76% 11.58%, 84.97% 14.28%, 87.78% 17.39%, 90.13% 20.86%, 91.96% 24.63%, 93.25% 28.62%, 93.98% 32.75%, 94.12% 36.94%,
+        93.68% 41.1%, 92.66% 45.17%, 91.08% 49.05%, 88.98% 52.68%, 86.39% 55.98%, 83.45% 58.97%, 80.49% 61.94%, 77.52% 64.91%,
+        74.55% 67.87%, 71.59% 70.84%, 68.62% 73.8%, 65.66% 76.77%, 62.69% 79.74%, 59.72% 82.7%, 56.75% 85.66%, 53.55% 88.37%,
+        50% 90.6%, 46.17% 92.31%, 42.15% 93.47%, 38% 94.06%, 33.8% 94.07%, 29.65% 93.49%, 25.62% 92.34%, 21.79% 90.64%,
+        18.24% 88.42%, 15.03% 85.72%, 12.22% 82.61%, 9.87% 79.14%, 8.04% 75.37%, 6.75% 71.38%, 6.02% 67.25%, 5.88% 63.06%,
+        6.32% 58.9%, 7.34% 54.83%, 8.92% 50.95%, 11.02% 47.32%, 13.61% 44.02%, 16.55% 41.03%, 19.51% 38.06%, 22.48% 35.09%,
+        25.45% 32.13%, 28.41% 29.16%, 31.38% 26.2%, 34.34% 23.23%, 37.31% 20.26%, 40.28% 17.3%, 43.25% 14.34%, 46.45% 11.63%
+      );
+    }
+    57.14% {
+      clip-path: polygon(
+        50% 0%, 54.64% 1.52%, 58.44% 4.72%, 62.22% 7.94%, 66.22% 10.85%, 71.1% 11.62%, 76.05% 12.02%, 81% 12.43%,
+        85.36% 14.64%, 87.57% 19%, 87.98% 23.95%, 88.38% 28.9%, 89.15% 33.78%, 92.06% 37.78%, 95.28% 41.56%, 98.48% 45.36%,
+        100% 50%, 98.48% 54.64%, 95.28% 58.44%, 92.06% 62.22%, 89.15% 66.22%, 88.38% 71.1%, 87.98% 76.05%, 87.57% 81%,
+        85.36% 85.36%, 81% 87.57%, 76.05% 87.98%, 71.1% 88.38%, 66.22% 89.15%, 62.22% 92.06%, 58.44% 95.28%, 54.64% 98.48%,
+        50% 100%, 45.36% 98.48%, 41.56% 95.28%, 37.78% 92.06%, 33.78% 89.15%, 28.9% 88.38%, 23.95% 87.98%, 19% 87.57%,
+        14.64% 85.36%, 12.43% 81%, 12.02% 76.05%, 11.62% 71.1%, 10.85% 66.22%, 7.94% 62.22%, 4.72% 58.44%, 1.52% 54.64%,
+        0% 50%, 1.52% 45.36%, 4.72% 41.56%, 7.94% 37.78%, 10.85% 33.78%, 11.62% 28.9%, 12.02% 23.95%, 12.43% 19%,
+        14.64% 14.64%, 19% 12.43%, 23.95% 12.02%, 28.9% 11.62%, 33.78% 10.85%, 37.78% 7.94%, 41.56% 4.72%, 45.36% 1.52%
+      );
+    }
+    71.43% {
+      clip-path: polygon(
+        50% 13.38%, 54.68% 12.8%, 59.12% 11.17%, 63.49% 9.38%, 68.12% 8.43%, 72.84% 8.51%, 77.43% 9.61%, 81.66% 11.69%,
+        85.35% 14.64%, 88.3% 18.33%, 90.38% 22.57%, 91.48% 27.16%, 91.55% 31.88%, 90.6% 36.5%, 88.82% 40.88%, 87.19% 45.32%,
+        86.62% 50%, 87.2% 54.68%, 88.83% 59.12%, 90.62% 63.49%, 91.57% 68.12%, 91.49% 72.84%, 90.39% 77.43%, 88.31% 81.66%,
+        85.36% 85.35%, 81.67% 88.3%, 77.43% 90.38%, 72.84% 91.48%, 68.12% 91.55%, 63.5% 90.6%, 59.12% 88.82%, 54.68% 87.19%,
+        50% 86.62%, 45.32% 87.2%, 40.88% 88.83%, 36.51% 90.62%, 31.88% 91.57%, 27.16% 91.49%, 22.57% 90.39%, 18.34% 88.31%,
+        14.65% 85.36%, 11.7% 81.67%, 9.62% 77.43%, 8.52% 72.84%, 8.45% 68.12%, 9.4% 63.5%, 11.18% 59.12%, 12.81% 54.68%,
+        13.38% 50%, 12.8% 45.32%, 11.17% 40.88%, 9.38% 36.51%, 8.43% 31.88%, 8.51% 27.16%, 9.61% 22.57%, 11.69% 18.34%,
+        14.64% 14.65%, 18.33% 11.7%, 22.57% 9.62%, 27.16% 8.52%, 31.88% 8.45%, 36.5% 9.4%, 40.88% 11.18%, 45.32% 12.81%
+      );
+    }
+    85.71% {
+      clip-path: polygon(
+        50% 11.88%, 53.81% 10.45%, 57.72% 9.3%, 61.71% 8.49%, 65.76% 8.07%, 69.83% 8.1%, 73.86% 8.65%, 77.77% 9.79%,
+        81.43% 11.57%, 84.69% 14.01%, 87.4% 17.03%, 89.48% 20.53%, 90.91% 24.34%, 91.72% 28.33%, 91.98% 32.39%, 91.75% 36.45%,
+        91.11% 40.48%, 90.11% 44.42%, 88.8% 48.28%, 87.22% 52.03%, 85.39% 55.67%, 83.34% 59.19%, 81.09% 62.59%, 78.65% 65.85%,
+        76.05% 68.98%, 73.28% 71.97%, 70.36% 74.81%, 67.29% 77.49%, 64.09% 80.01%, 60.75% 82.34%, 57.29% 84.49%, 53.7% 86.42%,
+        50% 88.12%, 46.19% 89.55%, 42.28% 90.7%, 38.29% 91.51%, 34.24% 91.93%, 30.17% 91.9%, 26.14% 91.35%, 22.23% 90.21%,
+        18.57% 88.43%, 15.31% 85.99%, 12.6% 82.97%, 10.52% 79.47%, 9.09% 75.66%, 8.28% 71.67%, 8.02% 67.61%, 8.25% 63.55%,
+        8.89% 59.52%, 9.89% 55.58%, 11.2% 51.72%, 12.78% 47.97%, 14.61% 44.33%, 16.66% 40.81%, 18.91% 37.41%, 21.35% 34.15%,
+        23.95% 31.02%, 26.72% 28.03%, 29.64% 25.19%, 32.71% 22.51%, 35.91% 19.99%, 39.25% 17.66%, 42.71% 15.51%, 46.3% 13.58%
+      );
+    }
+    /* end generated: loader-morph */
+  }
+
+  /* The loader turns once per round while it morphs (linear). */
+  @keyframes ds-loader-turn {
+    to { rotate: 1turn; }
+  }
+
+  /* Two-segment indeterminate progress (Material 3, one cycle of
+     --ds-loop-indeterminate): the heads and tails of both segments run from
+     0% to 100% of the track on their own curves and windows and never go
+     back within a cycle. A segment is drawn from its tail to its head, so
+     it is empty at both ends of the cycle. */
+  @keyframes ds-progress-head {
+    /* generated: progress-head */
+    0% { --ds-progress-head-1: 0%; --ds-progress-head-2: 0%; }
+    1.03% { --ds-progress-head-1: 0.43%; }
+    2.34% { --ds-progress-head-1: 1.87%; }
+    3.99% { --ds-progress-head-1: 4.57%; }
+    6.06% { --ds-progress-head-1: 8.85%; }
+    8.67% { --ds-progress-head-1: 15.15%; }
+    12.04% { --ds-progress-head-1: 24.2%; }
+    16.82% { --ds-progress-head-1: 38.01%; }
+    27.08% { --ds-progress-head-1: 68.54%; }
+    31.12% { --ds-progress-head-1: 79.91%; }
+    34.14% { --ds-progress-head-1: 87.7%; }
+    36.51% { --ds-progress-head-1: 93.11%; }
+    38.4% { --ds-progress-head-1: 96.71%; }
+    39.9% { --ds-progress-head-1: 98.86%; }
+    41.09% { --ds-progress-head-1: 99.86%; }
+    41.67% { --ds-progress-head-1: 100%; }
+    55.56% { --ds-progress-head-2: 0%; }
+    58.29% { --ds-progress-head-2: 12.75%; }
+    61.53% { --ds-progress-head-2: 27.03%; }
+    64.79% { --ds-progress-head-2: 40.61%; }
+    67.92% { --ds-progress-head-2: 52.86%; }
+    70.86% { --ds-progress-head-2: 63.59%; }
+    73.59% { --ds-progress-head-2: 72.8%; }
+    76.1% { --ds-progress-head-2: 80.5%; }
+    78.39% { --ds-progress-head-2: 86.76%; }
+    80.47% { --ds-progress-head-2: 91.69%; }
+    82.34% { --ds-progress-head-2: 95.37%; }
+    84.01% { --ds-progress-head-2: 97.9%; }
+    85.5% { --ds-progress-head-2: 99.4%; }
+    86.82% { --ds-progress-head-2: 99.99%; }
+    87.06% { --ds-progress-head-2: 100%; }
+    100% { --ds-progress-head-1: 100%; --ds-progress-head-2: 100%; }
+    /* end generated: progress-head */
+  }
+
+  @keyframes ds-progress-tail {
+    /* generated: progress-tail */
+    0% { --ds-progress-tail-1: 0%; --ds-progress-tail-2: 0%; }
+    18.5% { --ds-progress-tail-1: 0%; }
+    20.66% { --ds-progress-tail-1: 0.41%; }
+    23.02% { --ds-progress-tail-1: 1.69%; }
+    25.59% { --ds-progress-tail-1: 3.92%; }
+    28.37% { --ds-progress-tail-1: 7.16%; }
+    31.37% { --ds-progress-tail-1: 11.49%; }
+    34.6% { --ds-progress-tail-1: 16.97%; }
+    38.05% { --ds-progress-tail-1: 23.66%; }
+    41.72% { --ds-progress-tail-1: 31.59%; }
+    45.6% { --ds-progress-tail-1: 40.79%; }
+    49.67% { --ds-progress-tail-1: 51.26%; }
+    53.88% { --ds-progress-tail-1: 62.9%; }
+    58.15% { --ds-progress-tail-1: 75.51%; }
+    62.29% { --ds-progress-tail-1: 88.51%; }
+    65.69% { --ds-progress-tail-1: 99.89%; }
+    65.72% { --ds-progress-tail-1: 99.99%; }
+    70.39% { --ds-progress-tail-2: 0%; }
+    70.77% { --ds-progress-tail-2: 0.45%; }
+    71.29% { --ds-progress-tail-2: 1.99%; }
+    72.02% { --ds-progress-tail-2: 5.12%; }
+    73.13% { --ds-progress-tail-2: 10.88%; }
+    77.65% { --ds-progress-tail-2: 36.58%; }
+    79.67% { --ds-progress-tail-2: 47.33%; }
+    81.54% { --ds-progress-tail-2: 56.51%; }
+    83.35% { --ds-progress-tail-2: 64.61%; }
+    85.13% { --ds-progress-tail-2: 71.79%; }
+    86.89% { --ds-progress-tail-2: 78.09%; }
+    88.65% { --ds-progress-tail-2: 83.6%; }
+    90.4% { --ds-progress-tail-2: 88.29%; }
+    92.16% { --ds-progress-tail-2: 92.2%; }
+    93.92% { --ds-progress-tail-2: 95.32%; }
+    95.68% { --ds-progress-tail-2: 97.64%; }
+    97.45% { --ds-progress-tail-2: 99.18%; }
+    99.22% { --ds-progress-tail-2: 99.92%; }
+    100% { --ds-progress-tail-1: 100%; --ds-progress-tail-2: 100%; }
+    /* end generated: progress-tail */
+  }
+
+  /* The wave of determinate progress travels one wavelength per loop
+     (--ds-loop-wave), linear: the mask tile moves, the bar stays. Written
+     as a -webkit- and unprefixed pair, like the static masks in
+     progress.css: Chrome/Edge before 120 know only the -webkit- form, and
+     without it their wave would be drawn but stand still. */
+  @keyframes ds-progress-wave {
+    to { -webkit-mask-position: var(--ds-progress-wave-length) 0; mask-position: var(--ds-progress-wave-length) 0; }
+  }
+
+  /* The skeleton wave: --ds-skeleton-x sweeps once on a sine in-out, then
+     rests with the band off screen. Every bone reads the one value (its
+     background is fixed to the viewport), so the bones of a surface show a
+     single band and background-position itself never animates. */
+  @keyframes ds-skeleton-wave {
+    /* generated: skeleton-wave */
+    0% { --ds-skeleton-x: -150vw; }
+    2.41% { --ds-skeleton-x: -149.2vw; }
+    4.84% { --ds-skeleton-x: -146.81vw; }
+    7.31% { --ds-skeleton-x: -142.76vw; }
+    9.85% { --ds-skeleton-x: -136.99vw; }
+    12.49% { --ds-skeleton-x: -129.37vw; }
+    15.28% { --ds-skeleton-x: -119.67vw; }
+    18.3% { --ds-skeleton-x: -107.5vw; }
+    21.71% { --ds-skeleton-x: -92.06vw; }
+    26% { --ds-skeleton-x: -70.79vw; }
+    35.6% { --ds-skeleton-x: -21.1vw; }
+    39.49% { --ds-skeleton-x: -2.33vw; }
+    42.74% { --ds-skeleton-x: 11.87vw; }
+    45.67% { --ds-skeleton-x: 23.15vw; }
+    48.4% { --ds-skeleton-x: 32.11vw; }
+    51% { --ds-skeleton-x: 39.1vw; }
+    53.52% { --ds-skeleton-x: 44.3vw; }
+    55.98% { --ds-skeleton-x: 47.79vw; }
+    58.4% { --ds-skeleton-x: 49.65vw; }
+    60% { --ds-skeleton-x: 50vw; }
+    100% { --ds-skeleton-x: 50vw; }
+    /* end generated: skeleton-wave */
+  }
+
+  /* A scan line over media being processed: a band travels from above the
+     frame to below it (percentages of its own height, set by the component). */
+  @keyframes ds-scan {
+    from { translate: 0 var(--ds-scan-from, -100%); }
+    to { translate: 0 var(--ds-scan-to, 100%); }
+  }
+
+  /* ── Keyframes: scroll-linked ──────────────────── */
+
+  /* A hairline or a tint that shows with the first pixels of scroll (the
+     panel's hairline, the top bar's tint, a sheet head's hairline), on a
+     scroll timeline. Both ends are named, so the element's own opacity
+     stays 0: a scroller without overflow has an inactive timeline, the
+     animation has no effect then, and nothing shows. */
+  @keyframes ds-scroll-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* The edge fades of a sideways scroller (.ds-scroll-x in scroller.css,
+     the table wrappers of table.css; menus and combobox lists reuse them
+     on the block axis), each on the scroller's scroll timeline over an
+     animation-range at its end: the start fade grows while the first
+     --ds-space-8 scroll away, the end fade goes over the last. The numbers (registered in
+     scroller.css) scale the fade length, so 0 is no fade. Both ends are
+     named (a scroll position, not an entrance); a scroller without
+     overflow has an inactive timeline and keeps 0, no fade. */
+  @keyframes ds-scroll-edge-start {
+    from { --ds-scroll-edge-start: 0; }
+    to { --ds-scroll-edge-start: 1; }
+  }
+
+  @keyframes ds-scroll-edge-end {
+    from { --ds-scroll-edge-end: 1; }
+    to { --ds-scroll-edge-end: 0; }
+  }
+
+  /* Deprecated in 2.0 (removed in 3.0 at the earliest), unused: the table
+     wrappers run ds-scroll-edge-start and ds-scroll-edge-end. The edge
+     fades of a table that scrolls sideways (table.css), on the
+     wrapper's own scroll timeline, so progress is the scroll position:
+     the start fade grows over the first 5% of the travel, the end fade
+     goes over the last 5%. Both ends are named (a scroll position, not an
+     entrance); the lengths are registered in table.css. */
+  @keyframes ds-edge-fade {
+    0% { --ds-table-fade-start: 0px; --ds-table-fade-end: var(--ds-card-pad); }
+    5% { --ds-table-fade-start: var(--ds-card-pad); }
+    95% { --ds-table-fade-end: var(--ds-card-pad); }
+    100% { --ds-table-fade-start: var(--ds-card-pad); --ds-table-fade-end: 0px; }
+  }
+}
+
+@layer ds.utilities {
+  /* `hidden` wins inside the theme also without .ds-base (an embedded
+     widget): the UA [hidden] rule loses to every component's display, so
+     DS.motion.leave(el, v, { then: 'hide' }) on an alert, a button or a chip
+     would snap back visible. Zero specificity, first in the last layer: it
+     beats every component and loses to project CSS and to the utilities
+     below that set display (.ds-swap, .ds-icon-swap). .ds-presence keeps
+     its allow-discrete exit, and hidden="until-found" stays searchable. */
+  :where(.ds-theme) :where([hidden]:not(.ds-presence, [hidden="until-found"])) {
+    display: none;
+  }
+
+  /* ── Utilities ─────────────────────────────────── */
+
+  /* Order matters inside this layer, not specificity: the layer beats every
+     component's own animation, and within it the later rule wins. The
+     first-render utilities come first, .ds-enter after them and .ds-leave
+     last, so an exit always wins over an entrance. */
+
+  /* First render of a page only: its children (cards, tiles) fade in and
+     rise the smallest distance one after the other, at most six steps
+     (stagger() numbers them). Refreshes never animate: drop the class once
+     the entrance played. */
+  .ds-stagger > * {
+    --ds-motion-distance: var(--ds-distance-sm);
+    animation:
+      ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) backwards,
+      ds-lift-in var(--ds-dur-medium) var(--ds-ease-spatial) backwards;
+    animation-delay: calc(var(--ds-i, 0) * var(--ds-stagger));
+  }
+
+  /* Where sibling-index() exists, CSS-only pages stagger too: each child
+     numbers itself, capped at the sixth step. An inline --ds-i from
+     stagger() still wins. */
+  @supports (z-index: sibling-index()) {
+    .ds-stagger > * {
+      --ds-i: min(sibling-index() - 1, 5);
+    }
+  }
+
+  /* Freshly loaded content replaces its placeholder: fade-through with the
+     smallest rise (opacity on the standard curve, the rise on the spring). */
+  .ds-reveal {
+    --ds-motion-distance: var(--ds-distance-sm);
+    animation:
+      ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) backwards,
+      ds-lift-in var(--ds-dur-medium) var(--ds-ease-spatial) backwards;
+  }
+
+  /* Loaders keep their own animation: a skeleton, .ds-loading, .ds-boot
+     or a shape loader waits its loader delay (fast loads never flash it)
+     and a spinner keeps turning, also as a direct child of .ds-stagger
+     (skeleton placeholders in a staggered grid) or with .ds-reveal.
+     revert-layer hands them back to ds.components. The selectors weigh one
+     class, so they beat the two rules above by order and .ds-enter and
+     .ds-leave below still win. */
+  .ds-stagger > :where(.ds-skeleton, .ds-loading, .ds-boot, .ds-spinner, .ds-loader),
+  .ds-reveal:where(.ds-skeleton, .ds-loading, .ds-boot, .ds-spinner, .ds-loader) {
+    animation: revert-layer;
+  }
+
+  /*
+   * Reveal on scroll (opt-in, long read-only pages: reports, overviews):
+   * a block fades in and rises --ds-distance-md while it enters the
+   * scrollport, tied to the scroll position (view()), so it never plays on
+   * its own and scrolling back reverses it. It is opaque once
+   * 4 x --ds-space-6 (96px) of it are in view; a block already passed
+   * shows its end state. Never on tables, rows, forms or anything typed
+   * into or searched, and not together with .ds-enter or .ds-reveal on the
+   * same element. Without view() timelines it does nothing: static, never
+   * hidden. The shorthand comes first (it resets animation-timeline).
+   */
+  @supports (animation-timeline: view()) {
+    .ds-reveal--scroll {
+      --ds-motion-distance: var(--ds-distance-md);
+      animation:
+        ds-fade-in linear both,
+        ds-lift-in var(--ds-ease-out) both;
+      animation-timeline: view();
+      animation-range: entry 0% entry calc(4 * var(--ds-space-6));
+    }
+
+    /* DS.motion.enter() or leave() on such a block plays in time: the
+       one-shot utilities set longhands only, which keep the view()
+       timeline, so it goes back to the document's here. */
+    .ds-reveal--scroll:is(.ds-enter, .ds-leave) {
+      animation-timeline: auto;
+      animation-range: normal;
+    }
+  }
+
+  /* Paper has no scroll position: every block prints at its end state. */
+  @media print {
+    .ds-reveal--scroll {
+      animation: none;
+    }
+  }
+
+  /*
+   * One-shot entrance. Variants pick the keyframes; `--ds-i` (set by
+   * stagger() in js/motion.js) delays each item of a list by one
+   * --ds-stagger step. Every variant fades on the standard curve: movement
+   * runs as a second animation (the lists pair up; duration, delay and fill
+   * repeat) and floats on the spring, so the fade never overshoots.
+   *
+   * It plays once and ends, also on an element with its own loop (the
+   * entrance replaces that loop while it runs). Never put .ds-enter on a
+   * looping element in static markup: wrap it (spinner.css).
+   *
+   *   <li class="ds-enter ds-enter--scale">   via JS: DS.motion.enter(el, 'scale')
+   */
+  .ds-enter {
+    animation-name: var(--ds-enter-keyframes, ds-fade-in, ds-lift-in);
+    animation-duration: var(--ds-enter-duration, var(--ds-dur-medium));
+    animation-timing-function: var(--ds-enter-easing, var(--ds-ease-in-out), var(--ds-ease-spatial));
+    animation-delay: calc(var(--ds-i, 0) * var(--ds-stagger) + var(--ds-enter-delay, 0ms));
+    animation-iteration-count: 1;
+    animation-direction: normal;
+    animation-play-state: running;
+    /* backwards: hold the start state during the delay, then hand back to the
+       element's own styles. */
+    animation-fill-mode: backwards;
+  }
+
+  .ds-enter--fade { --ds-enter-keyframes: ds-fade-in; --ds-enter-easing: var(--ds-ease-in-out); }
+  .ds-enter--scale { --ds-enter-keyframes: ds-fade-in, ds-grow-in; }
+  .ds-enter--slide { --ds-enter-keyframes: ds-fade-in, ds-shift-in; --ds-enter-duration: var(--ds-dur-slow); --ds-enter-easing: var(--ds-ease-in-out), var(--ds-ease-spatial); }
+
+  /* Content that replaces a placeholder or another view: fade-through, the
+     default pair with the smallest rise. The distance applies to this
+     element only (the hooks do not inherit): children that enter inside it
+     keep their own distance. */
+  .ds-enter--swap { --ds-motion-distance: var(--ds-distance-sm); }
+
+  /* Waits before it shows: fast loads never flash a loading indicator. */
+  .ds-enter--delayed { --ds-enter-keyframes: ds-fade-in; --ds-enter-easing: var(--ds-ease-in-out); --ds-enter-delay: var(--ds-delay-loader); }
+
+  /* A small marker appears (a badge, a counter that gets its first value):
+     it springs in from --ds-scale-small (the scale settles just past full
+     size, about 1%). */
+  .ds-enter--pop { --ds-enter-keyframes: ds-fade-in, ds-pop-in; }
+
+  /* A chart mark grows to its share once (first render of a chart): a
+     value travelling, so it glides on the value curve like progress (data
+     never overshoots). The mark sets --ds-share; the animation runs it
+     from 0. */
+  .ds-enter--fill { --ds-enter-keyframes: ds-fade-in, ds-fill-share; --ds-enter-duration: var(--ds-dur-glide); --ds-enter-easing: var(--ds-ease-in-out), var(--ds-ease-value); }
+
+  /* Deprecated in 2.0 (removed in 3.0 at the earliest; use .ds-enter--fill
+     with --ds-share): a bar or column that scales to its share. */
+  .ds-enter--fill-x { --ds-enter-keyframes: ds-fade-in, ds-fill-x; --ds-enter-duration: var(--ds-dur-glide); --ds-enter-easing: var(--ds-ease-in-out), var(--ds-ease-value); }
+  .ds-enter--fill-y { --ds-enter-keyframes: ds-fade-in, ds-fill-y; --ds-enter-duration: var(--ds-dur-glide); --ds-enter-easing: var(--ds-ease-in-out), var(--ds-ease-value); }
+
+  /* One-shot exit; leave() in js/motion.js removes or hides the element
+     afterwards. It starts at once and plays once, whatever delay (a loader
+     that waited to fade in) or loop the element's own animation had. Small
+     exits accelerate (--ds-ease-in, the fade included) in --ds-dur-fast,
+     0.6 of the default entrance. The variants pair ds-fade-out with a
+     movement-only exit. */
+  .ds-leave {
+    animation-name: var(--ds-leave-keyframes, ds-fade-out);
+    animation-duration: var(--ds-leave-duration, var(--ds-dur-fast));
+    animation-timing-function: var(--ds-leave-easing, var(--ds-ease-in));
+    animation-delay: 0ms;
+    animation-iteration-count: 1;
+    animation-fill-mode: forwards;
+    pointer-events: none;
+  }
+
+  .ds-leave--sink { --ds-leave-keyframes: ds-fade-out, ds-drop-out; }
+  .ds-leave--scale { --ds-leave-keyframes: ds-fade-out, ds-shrink-out; --ds-leave-duration: var(--ds-dur-base); }
+  .ds-leave--slide { --ds-leave-keyframes: ds-fade-out, ds-shift-out; --ds-leave-duration: var(--ds-dur-base); }
+  .ds-leave--pop { --ds-leave-keyframes: ds-fade-out, ds-pop-out; }
+
+  /* Loaders whose loop draws them keep it while they leave (a loading bar
+     after its data arrived, a skeleton replaced by content): the loop
+     names stay in the list, so they run on where they are, and the exit
+     takes the positions after them. A leave variant may name one or two
+     keyframes, so its timing is listed twice (a list repeats to the
+     number of names; surplus entries are ignored). */
+  .ds-leave:where(.ds-loadbar) {
+    animation-name: ds-progress-head, ds-progress-tail, var(--ds-leave-keyframes, ds-fade-out);
+    animation-duration: var(--ds-loop-indeterminate), var(--ds-loop-indeterminate), var(--ds-leave-duration, var(--ds-dur-fast)), var(--ds-leave-duration, var(--ds-dur-fast));
+    animation-timing-function: linear, linear, var(--ds-leave-easing, var(--ds-ease-in)), var(--ds-leave-easing, var(--ds-ease-in));
+    animation-iteration-count: infinite, infinite, 1, 1;
+    animation-fill-mode: none, none, forwards, forwards;
+  }
+
+  .ds-leave:where(.ds-skeleton) {
+    animation-name: ds-skeleton-wave, var(--ds-leave-keyframes, ds-fade-out);
+    animation-duration: var(--ds-loop-skeleton), var(--ds-leave-duration, var(--ds-dur-fast)), var(--ds-leave-duration, var(--ds-dur-fast));
+    animation-timing-function: linear, var(--ds-leave-easing, var(--ds-ease-in)), var(--ds-leave-easing, var(--ds-ease-in));
+    animation-delay: calc(var(--ds-delay-loader) + var(--ds-dur-medium)), 0ms, 0ms;
+    animation-iteration-count: infinite, 1, 1;
+    animation-fill-mode: backwards, forwards, forwards;
+  }
+
+  /*
+   * A slot where outgoing and incoming content cross (roll() and
+   * crossfade() in js/motion.js): every child takes the same grid cell, so
+   * while both are there the slot keeps the width of the wider one instead
+   * of jumping, and a line that rolls in or out is clipped at the slot.
+   *
+   *   <span class="ds-swap"><span>Saving ...</span></span>   via JS: DS.motion.roll(el, 'Saved')
+   */
+  .ds-swap {
+    display: inline-grid;
+    overflow: clip;
+  }
+
+  .ds-swap > * {
+    grid-area: 1 / 1;
+  }
+
+  /*
+   * A soft slot edge (2.0): lines appear from and leave behind a soft edge
+   * instead of a hard cut. The slot takes --ds-swap-fade (default
+   * --ds-space-2) of room above and below, given back by a negative margin
+   * so nothing moves, and a static vertical mask fades that room. Nothing
+   * in the mask animates.
+   *
+   *   <span class="ds-swap ds-swap--fade"><span>Syncing 3 of 40</span></span>
+   */
+  .ds-swap--fade {
+    padding-block: var(--ds-swap-fade, var(--ds-space-2));
+    margin-block: calc(-1 * var(--ds-swap-fade, var(--ds-space-2)));
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--ds-swap-fade, var(--ds-space-2)), #000 calc(100% - var(--ds-swap-fade, var(--ds-space-2))), transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 var(--ds-swap-fade, var(--ds-space-2)), #000 calc(100% - var(--ds-swap-fade, var(--ds-space-2))), transparent);
+  }
+
+  /*
+   * Icon swap (copy to check, play to pause): two icons in one grid cell.
+   * data-swap="b" on the wrapper, or (without data-swap) an ancestor with
+   * aria-pressed="true", shows b; otherwise a shows. The incoming icon
+   * fades in (--ds-dur-fast) and springs up from --ds-scale-small
+   * (--ds-dur-medium); the outgoing one only fades (--ds-dur-instant,
+   * accelerating) and takes its small scale once it is gone. A
+   * pathLength="1" glyph in b (the check) draws itself as it comes. A
+   * crossfade with a scale, not a path morph. Transitions, not keyframes:
+   * nothing plays on the first render, and a rapid toggle turns back from
+   * where the icons are. DS.motion.crossfade(el, icon, { kind: 'icon' })
+   * builds the markup and flips data-swap.
+   *
+   *   <span class="ds-icon-swap" data-swap="a">
+   *     <span class="ds-icon-swap__a">(copy)</span><span class="ds-icon-swap__b">(check)</span>
+   *   </span>
+   */
+  .ds-icon-swap {
+    display: inline-grid;
+    place-items: center;
+    vertical-align: middle;
+  }
+
+  .ds-icon-swap > :is(.ds-icon-swap__a, .ds-icon-swap__b) {
+    grid-area: 1 / 1;
+    display: inline-flex;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  /* Hidden: b at rest, a while b shows. b's drawn glyph waits undrawn:
+     the face carries stroke-dashoffset and the glyph inherits it (one
+     state on the face, so engines that restyle only the face's own
+     subtree still draw the glyph). */
+  .ds-icon-swap > .ds-icon-swap__b,
+  .ds-icon-swap:where([data-swap="b"], [aria-pressed="true"] :not([data-swap])) > .ds-icon-swap__a {
+    opacity: 0;
+    scale: var(--ds-scale-small);
+    stroke-dashoffset: 1;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in),
+      scale 0s var(--ds-dur-instant),
+      stroke-dashoffset 0s var(--ds-dur-instant);
+  }
+
+  .ds-icon-swap:where([data-swap="b"], [aria-pressed="true"] :not([data-swap])) > .ds-icon-swap__b {
+    opacity: 1;
+    scale: 1;
+    stroke-dashoffset: 0;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-medium) var(--ds-ease-spatial),
+      stroke-dashoffset var(--ds-dur-medium) var(--ds-ease-out);
+  }
+
+  .ds-icon-swap__b [pathLength] {
+    stroke-dasharray: 1;
+  }
+
+  /*
+   * Disclosure: <details class="ds-collapsible"> opens and closes with a
+   * height transition where the browser can animate to `auto` (progressive
+   * enhancement; elsewhere it simply toggles). A transition takes the
+   * timing of the state it moves to, so the closed rule is the close and
+   * the [open] rule the open: it opens over --ds-dur-medium on
+   * --ds-ease-out (the height pushes the content below, so it never
+   * overshoots, D29) and closes faster, accelerating; the content fades
+   * with it. content-visibility steps at the end of the close
+   * (allow-discrete), so the content stays painted while it goes.
+   *
+   * The content box clips during the height change, but its clip reaches
+   * out by --ds-space-3 (12px): a 2px ring at its snap start (offset +
+   * width out, then its own width) plus about --ds-space-1 of room, so the
+   * ring of a control flush with the content edge is never cut. One token,
+   * not a calc() of the focus tokens: Chromium computes a calc() in
+   * overflow-clip-margin to 0. Larger shadows (--ds-elev-2/3) may still be
+   * cut a little. Where overflow-clip-margin is missing, give the content
+   * that much padding (the ring room) instead.
+   */
+  @supports (interpolate-size: allow-keywords) {
+    .ds-collapsible {
+      interpolate-size: allow-keywords;
+    }
+
+    .ds-collapsible::details-content {
+      height: 0;
+      opacity: 0;
+      overflow: clip;
+      overflow-clip-margin: var(--ds-space-3);
+      transition:
+        height var(--ds-dur-base) var(--ds-ease-in),
+        opacity var(--ds-dur-fast) var(--ds-ease-in),
+        content-visibility var(--ds-dur-base) allow-discrete;
+    }
+
+    .ds-collapsible[open]::details-content {
+      height: auto;
+      opacity: 1;
+      transition:
+        height var(--ds-dur-medium) var(--ds-ease-out),
+        opacity var(--ds-dur-medium) var(--ds-ease-in-out),
+        content-visibility var(--ds-dur-medium) allow-discrete;
+    }
+  }
+
+  /*
+   * Disclosure chevron (D25): turns 180deg with the expansion on the spring,
+   * in a summary of an open <details> or under aria-expanded="true" (a
+   * table row's toggle, a menu trigger).
+   *
+   *   <summary>Advanced <svg class="ds-chevron" ...>(chevronDown)</svg></summary>
+   *   <button aria-expanded="false" ...><svg class="ds-chevron" ...>(chevronDown)</svg></button>
+   */
+  .ds-chevron {
+    transition: rotate var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  /* A collapsible's summary with a chevron drops the native marker. */
+  .ds-collapsible > summary:has(> .ds-chevron) {
+    list-style: none;
+  }
+
+  .ds-collapsible > summary:has(> .ds-chevron)::-webkit-details-marker {
+    display: none;
+  }
+
+  .ds-chevron:where([open] > summary *, [aria-expanded="true"] *) {
+    rotate: 180deg;
+  }
+
+  /*
+   * Presence: a project element that is toggled with the hidden attribute,
+   * as a [popover] or as a <dialog> without DS.overlay fades in and grows
+   * from --ds-motion-scale (default --ds-scale-popup) on the spring, its
+   * clip opening from --ds-clip-from (DS.motion.originFrom() writes it;
+   * by default the clip stays open), and leaves faster, accelerating.
+   * display and overlay step with allow-discrete, so it stays rendered (and
+   * in the top layer) until its exit ends. Plain transitions retarget by
+   * themselves: open, close, open continues from where it is. The exit
+   * state is three separate rules, so an engine that does not know
+   * :popover-open drops only its own rule. Elsewhere: an instant toggle.
+   * The lists also carry the element's own state transitions (background,
+   * colour, border, shadow on --ds-dur-fast, the focus snap of
+   * outline-offset), so a pill inside keeps its hover and focus motion; put
+   * .ds-presence on a wrapper, never on a .ds-btn, .ds-chip or .ds-card
+   * (their own transition lists would be replaced).
+   */
+  @supports (transition-behavior: allow-discrete) {
+    .ds-presence {
+      clip-path: inset(calc(-1 * var(--ds-space-6)));
+      transition:
+        opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+        scale var(--ds-dur-medium) var(--ds-ease-spatial),
+        clip-path var(--ds-dur-medium) var(--ds-ease-spatial),
+        background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+        color var(--ds-dur-fast) var(--ds-ease-in-out),
+        border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+        box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+        outline-offset var(--ds-dur-fast) var(--ds-ease-out),
+        display var(--ds-dur-medium) allow-discrete,
+        overlay var(--ds-dur-medium) allow-discrete;
+    }
+
+    @starting-style {
+      .ds-presence:not(.ds-presence--keep) {
+        opacity: 0;
+        scale: var(--ds-motion-scale, var(--ds-scale-popup));
+        clip-path: var(--ds-clip-from, inset(calc(-1 * var(--ds-space-6))));
+      }
+    }
+
+    .ds-presence[hidden] {
+      opacity: 0;
+      scale: var(--ds-motion-scale, var(--ds-scale-popup));
+      clip-path: var(--ds-clip-from, inset(calc(-1 * var(--ds-space-6))));
+      transition:
+        opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+        scale var(--ds-dur-fast) var(--ds-ease-in),
+        clip-path var(--ds-dur-fast) var(--ds-ease-in),
+        background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+        color var(--ds-dur-fast) var(--ds-ease-in-out),
+        border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+        box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+        outline-offset var(--ds-dur-fast) var(--ds-ease-out),
+        display var(--ds-dur-fast) allow-discrete,
+        overlay var(--ds-dur-fast) allow-discrete;
+    }
+
+    dialog.ds-presence:not([open]) {
+      opacity: 0;
+      scale: var(--ds-motion-scale, var(--ds-scale-popup));
+      clip-path: var(--ds-clip-from, inset(calc(-1 * var(--ds-space-6))));
+      transition:
+        opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+        scale var(--ds-dur-fast) var(--ds-ease-in),
+        clip-path var(--ds-dur-fast) var(--ds-ease-in),
+        background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+        color var(--ds-dur-fast) var(--ds-ease-in-out),
+        border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+        box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+        outline-offset var(--ds-dur-fast) var(--ds-ease-out),
+        display var(--ds-dur-fast) allow-discrete,
+        overlay var(--ds-dur-fast) allow-discrete;
+    }
+
+    .ds-presence[popover]:not(:popover-open) {
+      opacity: 0;
+      scale: var(--ds-motion-scale, var(--ds-scale-popup));
+      clip-path: var(--ds-clip-from, inset(calc(-1 * var(--ds-space-6))));
+      transition:
+        opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+        scale var(--ds-dur-fast) var(--ds-ease-in),
+        clip-path var(--ds-dur-fast) var(--ds-ease-in),
+        background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+        color var(--ds-dur-fast) var(--ds-ease-in-out),
+        border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+        box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+        outline-offset var(--ds-dur-fast) var(--ds-ease-out),
+        display var(--ds-dur-fast) allow-discrete,
+        overlay var(--ds-dur-fast) allow-discrete;
+    }
+  }
+
+  /*
+   * Presence that keeps its box (2.0): a pill that shows on hover, a "Saved"
+   * note, a jump button whose room stays reserved. The page toggles
+   * data-ds-shown; hidden is opacity 0 and visibility hidden (out of the
+   * tab order and the accessibility tree), so nothing around it moves. It
+   * fades in over --ds-dur-fast and out in --ds-dur-instant (exit 0.67);
+   * visibility steps at the end of the exit. Baseline: no @starting-style
+   * or allow-discrete needed.
+   *
+   *   <span class="ds-presence ds-presence--keep" [data-ds-shown]>...</span>
+   */
+  .ds-presence--keep {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in-out),
+      visibility 0s linear var(--ds-dur-instant);
+  }
+
+  .ds-presence--keep[data-ds-shown] {
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      visibility 0s;
+  }
+
+  /* A node that DS.dom.morphHtml moves with insertBefore (engines without
+     moveBefore) is new to the style engine, so its @starting-style
+     entrances (a status icon, an error message's room) would play again on
+     every sort. It carries data-ds-moving for one style flush: no
+     transitions, so data changes glide and never replay an entrance.
+     DS.indicator.create() sets it on the track for the flush that
+     gives its items their look under the new pill. Their ::before and
+     ::after too: a hairline or a state layer is part of the look. */
+  :where(.ds-theme) [data-ds-moving],
+  :where(.ds-theme) [data-ds-moving]::before,
+  :where(.ds-theme) [data-ds-moving]::after,
+  :where(.ds-theme) [data-ds-moving] *,
+  :where(.ds-theme) [data-ds-moving] *::before,
+  :where(.ds-theme) [data-ds-moving] *::after {
+    transition: none;
+  }
+
+  /* ── View transitions ──────────────────────────── */
+  /*
+   * DS.motion.transition() (js/motion.js) writes data-ds-vt="<type>" on
+   * <html> while a View Transition runs; shell.css, sheet.css and
+   * toast.css name the view, the panel, the docked drawer, an open sheet's
+   * body and a snackbar region with messages only then (and it adds
+   * data-ds-vt-morph while the panel changes width), and an
+   * indicator created with a `name` carries its own name for good. Every
+   * selector starts at .ds-theme, so it only matches when the theme sits on
+   * <html> (the pseudo-elements hang off the document element and inherit
+   * its tokens) and never restyles a host page. Durations and curves are
+   * tokens, so --ds-time-scale slows them too.
+   *
+   * Old and new are two images of one moment, not a component's entrance
+   * and exit: the exit-to-entrance ratio does not apply, and fade-through
+   * lets the old view go in --ds-dur-instant by design. No keyframes of
+   * their own: the ds-fade-*, ds-grow-in and ds-shift-in/-out pairs.
+   */
+
+  /* A view outside the app frame (2.0): a wizard, a sign-in page or a page
+     without .ds-app names its .ds-vt-view ds-view while a transition runs,
+     so it plays like .ds-view. One per page, never inside .ds-app (the
+     frame's view has the name then). Without View Transitions
+     DS.motion.transition() enters its first child with .ds-enter--swap.
+
+       <main class="ds-vt-view"><section>(step 1)</section></main> */
+  .ds-theme[data-ds-vt] .ds-vt-view {
+    view-transition-name: ds-view;
+  }
+
+  /* The root (the top bar, the backdrop, everything unnamed): the browser's
+     crossfade, short; pixels that did not change stay still under its
+     plus-lighter blend. */
+  .ds-theme::view-transition-old(root),
+  .ds-theme::view-transition-new(root) {
+    animation-duration: var(--ds-dur-fast);
+    animation-timing-function: var(--ds-ease-in-out);
+  }
+
+  /* Every group moves and resizes on the spring, over the indicator's cap
+     (--ds-dur-slow): a named indicator glides to its new item this way on
+     a page load (css/optional/view-transitions.css). */
+  .ds-theme::view-transition-group(*) {
+    animation-duration: var(--ds-dur-slow);
+    animation-timing-function: var(--ds-ease-spatial);
+  }
+
+  /* The docked drawer stays the drawer: its new image is live and covers
+     the old one at once (no crossfade), so the pill glides to the new
+     destination under its labels and the labels change colour, as on a
+     click (DS.motion.transition() lifts an indicator's name meanwhile).
+     When the drawer leaves or comes back with the view, the :only-child
+     image plays its own motion. */
+  .ds-theme::view-transition-new(ds-drawer) {
+    animation: none;
+  }
+
+  /* Fade-through, the default (without a condition on data-ds-vt, so the
+     opt-in stylesheet for page loads reuses it): the old view goes quickly
+     and accelerating, then the new one fades in and grows from
+     --ds-scale-enter in place. */
+  .ds-theme::view-transition-old(ds-view),
+  .ds-theme::view-transition-old(ds-sheet-body) {
+    animation: ds-fade-out var(--ds-dur-instant) var(--ds-ease-in) both;
+  }
+
+  .ds-theme::view-transition-new(ds-view),
+  .ds-theme::view-transition-new(ds-sheet-body) {
+    --ds-motion-distance: 0px;
+    animation:
+      ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) var(--ds-dur-instant) both,
+      ds-grow-in var(--ds-dur-medium) var(--ds-ease-spatial) var(--ds-dur-instant) both;
+  }
+
+  /* Shared axis X: forward, the old view leaves to the start while the new
+     one comes from the end; back mirrors both. The two images travel on
+     one axis on the spring and land together at --ds-dur-slow; the fades
+     are those of fade-through. The new image travels with its fade (after
+     --ds-dur-instant, over --ds-dur-medium): the spring covers most of
+     its way early, so a view that moved while still invisible would only
+     settle on screen. */
+  .ds-theme[data-ds-vt="forward"]::view-transition-old(ds-view),
+  .ds-theme[data-ds-vt="forward"]::view-transition-old(ds-sheet-body) {
+    --ds-motion-distance: calc(-1 * var(--ds-distance-xl));
+    animation:
+      ds-fade-out var(--ds-dur-instant) var(--ds-ease-in) both,
+      ds-shift-out var(--ds-dur-slow) var(--ds-ease-spatial) both;
+  }
+
+  .ds-theme[data-ds-vt="forward"]::view-transition-new(ds-view),
+  .ds-theme[data-ds-vt="forward"]::view-transition-new(ds-sheet-body) {
+    --ds-motion-distance: var(--ds-distance-xl);
+    animation:
+      ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) var(--ds-dur-instant) both,
+      ds-shift-in var(--ds-dur-medium) var(--ds-ease-spatial) var(--ds-dur-instant) both;
+  }
+
+  .ds-theme[data-ds-vt="back"]::view-transition-old(ds-view),
+  .ds-theme[data-ds-vt="back"]::view-transition-old(ds-sheet-body) {
+    --ds-motion-distance: var(--ds-distance-xl);
+    animation:
+      ds-fade-out var(--ds-dur-instant) var(--ds-ease-in) both,
+      ds-shift-out var(--ds-dur-slow) var(--ds-ease-spatial) both;
+  }
+
+  .ds-theme[data-ds-vt="back"]::view-transition-new(ds-view),
+  .ds-theme[data-ds-vt="back"]::view-transition-new(ds-sheet-body) {
+    --ds-motion-distance: calc(-1 * var(--ds-distance-xl));
+    animation:
+      ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) var(--ds-dur-instant) both,
+      ds-shift-in var(--ds-dur-medium) var(--ds-ease-spatial) var(--ds-dur-instant) both;
+  }
+
+  /* Container transform: the card or row (ds-container before the update)
+     grows into its detail (ds-container after it) on the spring over
+     --ds-dur-long, a large surface. One surface grows: the new image is
+     live and opaque from the first frame, and the old one lies on top of
+     it and fades out within --ds-dur-fast (two images fading at once
+     would leave the group see-through halfway, the page showing through
+     a card that vanishes and a panel that fades in). */
+  .ds-theme[data-ds-vt="container"]::view-transition-group(ds-container) {
+    animation-duration: var(--ds-dur-long);
+    animation-timing-function: var(--ds-ease-spatial);
+  }
+
+  /* Both images keep the browser's sizing (as wide as the group, their own
+     aspect, from the top) and the pair clips them to the group: a card is
+     never stretched into the shape of its detail, nor magnified to cover a
+     much taller panel (cover would scale a card's text several times). */
+  .ds-theme[data-ds-vt="container"]::view-transition-image-pair(ds-container) {
+    overflow: clip;
+  }
+
+  .ds-theme[data-ds-vt="container"]::view-transition-old(ds-container) {
+    z-index: var(--ds-z-raised);
+    animation: ds-fade-out var(--ds-dur-fast) var(--ds-ease-in-out) both;
+  }
+
+  .ds-theme[data-ds-vt="container"]::view-transition-new(ds-container) {
+    animation: none;
+  }
+
+  /* A view with or without the drawer (data-drawer-hidden toggled inside
+     DS.motion.transition()): the panel morphs to its new width instead of
+     the grid jumping, a large surface on the spring over --ds-dur-long.
+     Its images are only the white surface (the content is the separately
+     named view), so the new one fills the group at once and the old one
+     is not drawn. The view's group travels with it; its images keep their
+     natural size from the top left, so text is never scaled while the
+     width changes (the group's edge cuts it). Only then (DS.motion.
+     transition() sets data-ds-vt-morph when the panel's width changed):
+     a plain swap keeps the --ds-dur-slow groups, so the frozen page holds
+     input no longer than the view's own motion. Page loads cannot tell,
+     so they keep --ds-dur-slow too. */
+  .ds-theme[data-ds-vt-morph]::view-transition-group(ds-panel),
+  .ds-theme[data-ds-vt-morph]::view-transition-group(ds-view) {
+    animation-duration: var(--ds-dur-long);
+  }
+
+  /* Stacking inside the transition (two steps of the z scale): a drawer
+     that comes back exists in the new state only, so its group comes last
+     and would paint over the panel that makes room for it; the surfaces of
+     the page lie above the drawer instead, in their own order. The drawer
+     lies above an indicator's group (page loads), so a gliding pill passes
+     under its labels (the opt-in stylesheet makes the docked drawer
+     transparent; it lies on the same backdrop). */
+  .ds-theme::view-transition-group(ds-drawer) {
+    z-index: var(--ds-z-raised);
+  }
+
+  .ds-theme::view-transition-group(ds-panel),
+  .ds-theme::view-transition-group(ds-view),
+  .ds-theme::view-transition-group(ds-sheet-body),
+  .ds-theme::view-transition-group(ds-container) {
+    z-index: var(--ds-z-sticky);
+  }
+
+  /* Snackbars stay where they are: a region with messages (toast.css
+     names it ds-toasts while a transition runs) lies above every group
+     of the page and shows only its live image, so a message never blinks
+     out under the panel's opaque image; its group follows the region if
+     the update moves it (the drawer shown or hidden). A message that goes
+     with the update fades out. */
+  .ds-theme::view-transition-group(ds-toasts) {
+    z-index: var(--ds-z-toast);
+  }
+
+  .ds-theme::view-transition-old(ds-toasts) {
+    opacity: 0;
+    animation: none;
+  }
+
+  .ds-theme::view-transition-new(ds-toasts) {
+    animation: none;
+  }
+
+  .ds-theme::view-transition-old(ds-toasts):only-child {
+    opacity: 1;
+    animation: ds-fade-out var(--ds-dur-fast) var(--ds-ease-in) both;
+  }
+
+  /* A drawer in both states shows only its live image (see above); a
+     transparent one would otherwise show both label sets at once. */
+  .ds-theme::view-transition-old(ds-drawer) {
+    opacity: 0;
+    animation: none;
+  }
+
+  .ds-theme::view-transition-old(ds-panel) {
+    opacity: 0;
+    animation: none;
+  }
+
+  .ds-theme::view-transition-new(ds-panel) {
+    width: 100%;
+    height: 100%;
+    animation: none;
+  }
+
+  /* A panel on one side only: a page load from a page whose frame lay
+     under the modal drawer or an overlay (css/optional/view-transitions.css
+     names it only where nothing covers it) crossfades like the root
+     around it, so the drawer and its scrim do not vanish at once. */
+  .ds-theme::view-transition-new(ds-panel):only-child {
+    animation: ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) both;
+  }
+
+  .ds-theme::view-transition-old(ds-panel):only-child {
+    opacity: 1;
+    animation: ds-fade-out var(--ds-dur-fast) var(--ds-ease-in-out) both;
+  }
+
+  .ds-theme::view-transition-old(ds-view),
+  .ds-theme::view-transition-new(ds-view) {
+    height: 100%;
+    overflow: clip;
+    object-fit: none;
+    object-position: left top;
+  }
+
+  /* The docked drawer leaves to the start, accelerating, faded within
+     --ds-dur-fast (the panel grows over it); it comes back from there on
+     the spring while the panel makes room. Only one image exists then:
+     the drawer is shown on one side of the transition only. */
+  .ds-theme::view-transition-old(ds-drawer):only-child {
+    --ds-motion-distance: calc(-1 * var(--ds-distance-xl));
+    opacity: 1;
+    animation:
+      ds-fade-out var(--ds-dur-fast) var(--ds-ease-in) both,
+      ds-shift-out var(--ds-dur-base) var(--ds-ease-exit) both;
+  }
+
+  .ds-theme::view-transition-new(ds-drawer):only-child {
+    --ds-motion-distance: calc(-1 * var(--ds-distance-xl));
+    animation:
+      ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) both,
+      ds-shift-in var(--ds-dur-long) var(--ds-ease-spatial) both;
+  }
+}

@@ -1,0 +1,174 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Plan card: a plan an assistant or agent proposes before it acts, its
+ * steps, and the person's decision (approve or reject), in a frame.
+ *
+ *   <section class="ds-plan" data-ds-plan aria-labelledby="plan-title">
+ *     <div class="ds-plan__head">
+ *       <span class="ds-plan__icon">[icon clipboardCheck 20]</span>
+ *       <h3 class="ds-plan__title" id="plan-title">Replace the swollen batteries</h3>
+ *       <span class="ds-plan__state"></span>
+ *     </div>
+ *     <p class="ds-plan__lead">Nothing changes until you approve.</p>
+ *     <ol class="ds-tasks ds-plan__steps" aria-label="Steps">
+ *       <li class="ds-tasks__item" data-status="pending"><span class="ds-tasks__mark"></span>
+ *         <span class="ds-tasks__text">Find the laptops with a battery ticket</span></li>
+ *     </ol>
+ *     <div class="ds-plan__actions">
+ *       <button class="ds-btn ds-btn--filled" type="button" data-ds-plan-action="approve">Approve</button>
+ *       <button class="ds-btn" type="button" data-ds-plan-action="reject">Reject</button>
+ *     </div>
+ *     <p class="ds-plan__note">Proposed by the assistant at 09:12</p>
+ *   </section>
+ *
+ * Parts: __head (an optional __icon, the __title and the __state, which
+ * plan.js fills with a 16px __glyph and the word), __lead (optional: what
+ * the plan does, what it leaves alone), __steps (on a .ds-tasks list: the
+ * steps, each with its status as the work goes on), __actions (the
+ * decision: one filled Approve, Reject, and any action of the page's own,
+ * such as Edit), __note (optional, quiet: who proposed or decided, when).
+ *
+ * State (data-state, written by plan.js from data-ds-plan-state or a
+ * decision; never colour alone): waiting (the hourglass and "Waiting for
+ * approval"), approved (a check in a circle in --ds-success and
+ * "Approved"), rejected (a crossed circle and "Rejected"; the steps turn
+ * quiet). Once decided, the actions go.
+ *
+ * Options (src/core/options.css, docs/options.md), on it or any ancestor:
+ *   density   .ds-density-*: the padding and the room between the parts,
+ *             2px per step (the steps and the buttons follow their own)
+ *   shape     the frame's corners times --ds-shape (the buttons follow
+ *             their own)
+ *   size      the buttons and the steps follow their own; the title keeps
+ *             its role
+ *   touch     the buttons' target (button.css)
+ *   tone      not read: the state shows the meaning, with its word
+ *
+ * Hooks: --ds-plan-padding (--ds-space-4, the padding at the default
+ * density), --ds-plan-radius (--ds-radius-card), --ds-plan-bg
+ * (--ds-surface), --ds-plan-border (--ds-line).
+ *
+ * Motion: once decided the actions leave (DS.motion.leave(), .ds-leave:
+ * --ds-dur-fast); back to waiting they enter (.ds-enter). The state's
+ * word and glyph change in place.
+ *
+ * Forced colours: the frame keeps its border, the glyph follows the
+ * word's forced text colour (global.css), the word stays.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.plan {
+  .ds-plan {
+    --_pad: max(var(--ds-space-2), calc(var(--ds-plan-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px));
+    --_gap: max(var(--ds-space-1), calc(var(--ds-space-3) + var(--ds-density, 0) * 2px));
+    display: grid;
+    gap: var(--_gap);
+    min-width: 0;
+    margin: 0;
+    padding: var(--_pad);
+    border: 1px solid var(--ds-plan-border, var(--ds-line));
+    border-radius: calc(var(--ds-plan-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    background: var(--ds-plan-bg, var(--ds-surface));
+    color: var(--ds-text);
+  }
+
+  .ds-plan > * {
+    margin: 0;
+  }
+
+  .ds-plan__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-1) var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-plan__icon {
+    display: inline-flex;
+    flex: none;
+    color: var(--ds-primary);
+  }
+
+  .ds-plan__icon > svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .ds-plan__title {
+    flex: 1 1 12em;
+    min-width: 0;
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-subtitle);
+    overflow-wrap: anywhere;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* Focus lands here once the actions went (tabindex="-1"); a ring only for the keyboard. */
+  .ds-plan__title:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-plan__state {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-1);
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+  }
+
+  .ds-plan__state:empty {
+    display: none;
+  }
+
+  .ds-plan__glyph {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    color: var(--ds-text-2);
+  }
+
+  .ds-plan[data-state="waiting"] .ds-plan__glyph {
+    color: var(--ds-primary);
+  }
+
+  .ds-plan[data-state="approved"] .ds-plan__glyph {
+    color: var(--ds-success);
+  }
+
+  .ds-plan__lead {
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+
+  .ds-plan__steps {
+    min-width: 0;
+  }
+
+  .ds-plan[data-state="rejected"] .ds-plan__steps .ds-tasks__text {
+    color: var(--ds-text-2);
+  }
+
+  .ds-plan__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2);
+  }
+
+  .ds-plan__actions[hidden] {
+    display: none;
+  }
+
+  .ds-plan__note {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+}

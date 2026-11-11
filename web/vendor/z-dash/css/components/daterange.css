@@ -1,0 +1,94 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Date range picker: a field of two dates and a picker popover with
+ * presets ("Last 7 days", "This month") and two months side by side that
+ * preview the range. DS.daterange (daterange.js) builds the popover inside
+ * the root; the field is a .ds-datefield of type range, the months a
+ * .ds-calendar in range mode, the presets .ds-picker__preset buttons.
+ *
+ *   <span class="ds-field__label" id="period-label">Period</span>
+ *   <div class="ds-picker" data-ds-daterange data-ds-value="last-7-days">
+ *     <div class="ds-datefield" role="group" aria-labelledby="period-label">
+ *       (rendered: the two dates, then)
+ *       <span class="ds-daterange__preset" id="...">Last 7 days</span>   (the preset in force; the field's description)
+ *       <button class="ds-btn ds-btn--quiet ds-btn--icon ds-datefield__toggle" type="button" aria-label="Choose dates">(calendarRange)</button>
+ *     </div>
+ *     (rendered:)
+ *     <div class="ds-picker__popover" role="dialog" aria-modal="true" aria-label="Choose dates" hidden>
+ *       <div class="ds-picker__panes">
+ *         <div class="ds-picker__presets" role="group" aria-label="Presets">(.ds-picker__preset ...)</div>
+ *         <div class="ds-picker__pane"><div class="ds-calendar" (range, two months)>...</div></div>
+ *       </div>
+ *       <div class="ds-picker__foot">
+ *         <span class="ds-daterange__summary" aria-live="polite">Nov 1 – 7, 2026</span>
+ *         <span class="ds-picker__spacer"></span> (Clear)
+ *       </div>
+ *     </div>
+ *   </div>
+ *
+ * The preset in force shows as a quiet tag inside the field (it is also
+ * the field's description, so a screen reader hears "Last 7 days" with
+ * the dates) and as the current preset in the list. At 480px or less
+ * (the window, or the ds-content container) the tag steps aside, so the
+ * two dates fit a phone. The foot says the
+ * range being chosen, in words (Intl formatRange).
+ *
+ * Options: those of the field, the calendar and the popover, each in its
+ * own component; the tag follows the field's size through its type.
+ *
+ * Motion: the popover's and the calendar's; the band and its preview
+ * change colour over --ds-dur-fast.
+ *
+ * Forced colours: the tag keeps a border (CanvasText); the rest is the
+ * parts' own.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.daterange {
+  /* The preset in force, a quiet tag at the field's end. */
+  .ds-daterange__preset {
+    flex: none;
+    max-inline-size: 40%;
+    overflow: hidden;
+    padding: 2px var(--ds-space-2);
+    border: 1px solid transparent;
+    border-radius: calc(var(--ds-radius-chip) * var(--ds-shape, 1));
+    background: var(--ds-surface-high);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-daterange__preset[hidden] {
+    display: none;
+  }
+
+  /* On a phone the two dates need the room; the preset stays the field's
+     description and the current row of the list. */
+  @media (max-width: 480px) {
+    .ds-daterange__preset {
+      display: none;
+    }
+  }
+
+  @container ds-content (max-width: 480px) {
+    .ds-daterange__preset {
+      display: none;
+    }
+  }
+
+  .ds-daterange__summary {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (forced-colors: active) {
+    .ds-daterange__preset {
+      border-color: CanvasText;
+    }
+  }
+}

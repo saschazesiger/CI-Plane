@@ -1,0 +1,155 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Copy: a button that copies a value or a target's text (DS.copy), and the
+ * value it sits next to. The button is a .ds-btn (an icon button with an
+ * icon swap, or a labelled one with faces); this file lays out the value.
+ *
+ *   <span class="ds-copy ds-copy--field">
+ *     <code class="ds-copy__value" id="api-key">ak_live_7f3a9c2e</code>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm" type="button" aria-label="Copy the key"
+ *             data-tip="Copy the key" data-ds-copy="#api-key">
+ *       <span class="ds-icon-swap"><span class="ds-icon-swap__a">(copy 20)</span><span class="ds-icon-swap__b">(check 20)</span></span>
+ *     </button>
+ *   </span>
+ *
+ *   <button class="ds-btn" type="button" data-ds-copy data-ds-copy-value="https://example.com/t/4127">
+ *     <span class="ds-btn__faces">
+ *       <span class="ds-btn__face">(copy 16) Copy link</span>
+ *       <span class="ds-btn__face ds-btn__face--done" aria-hidden="true">(check 16, pathLength 1)<span class="ds-copy__done"></span></span>
+ *     </span>
+ *   </button>
+ *
+ *   .ds-copy                 a value and its copy button in one line
+ *   .ds-copy--field          the read-only field look: a box of the field
+ *                            height (--ds-input-height, its size and density
+ *                            steps, the touch minimum), the field radius
+ *                            times --ds-shape, --ds-copy-field-bg; the value
+ *                            fills it, the button sits at its end: an
+ *                            icon button 8px lower than the field at every
+ *                            size and density (32px at md), whatever size
+ *                            class it carries
+ *   .ds-copy__value          the value (a <code>, or a read-only <input>):
+ *                            the code role (--ds-copy-font), one line with
+ *                            an ellipsis, no box of its own; a click selects
+ *                            all of it (user-select: all), so it can be
+ *                            copied by hand as well
+ *   .ds-copy__manual         written by DS.copy after the button when the
+ *                            browser refuses to copy and nothing on the
+ *                            page shows the text: a read-only field (with
+ *                            .ds-copy__value) holding it, selected, to copy
+ *                            by hand; gone on blur or Escape
+ *   .ds-copy__done           the words of a done face; DS.copy writes the
+ *                            strings' "Copied" into it
+ *   [data-state="copied"]    on the button, written by DS.copy for
+ *                            --ds-hold-status after a copy
+ *
+ * Options (docs/options.md):
+ *   size      the field's height (8px per step) and the button's; the value
+ *             keeps the code role
+ *   density   the field's height, 4px per step
+ *   shape     the field's radius
+ *   touch     the field at least --ds-target-min high
+ *
+ * Hooks: --ds-copy-font (the value's type), --ds-copy-field-bg (the field
+ * look's fill).
+ *
+ * Motion: the button's own: the icon swap crossfades with a small scale,
+ * the faces roll and the check draws itself (button.css, motion.css).
+ *
+ * Forced colours: the field and the manual field keep their border
+ * (ButtonBorder); the value is CanvasText.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.copy {
+  .ds-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    vertical-align: middle;
+  }
+
+  /* A <code>, or a read-only <input> (its value is what is copied): the
+     same text either way, without the field's or the code chip's box. */
+  .ds-copy__value {
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    overflow: hidden;
+    color: var(--ds-text);
+    font: var(--ds-copy-font, var(--ds-font-code));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: all;
+  }
+
+  /* The read-only field: the height of a field (the input's formula), the
+     value filling it, the button at its end. */
+  .ds-copy--field {
+    --_field: max(var(--ds-target-min, 0px), calc(var(--ds-input-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    display: flex;
+    inline-size: 100%;
+    min-block-size: var(--_field);
+    padding-block: 0;
+    padding-inline: calc(var(--ds-space-3) + var(--ds-size-step, 0) * 4px) var(--ds-space-1);
+    border: 1px solid var(--ds-line-2);
+    border-radius: min(calc(var(--ds-radius-field) * var(--ds-shape, 1)), calc(var(--_field) / 2));
+    background: var(--ds-copy-field-bg, var(--ds-surface-low));
+    /* The ring of a focused value (a read-only input) is the field's: it
+       rests one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-copy--field > .ds-copy__value:focus-visible {
+    outline: none;
+  }
+
+  .ds-copy--field:has(.ds-copy__value:focus-visible) {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-copy--field > .ds-copy__value {
+    flex: 1 1 auto;
+  }
+
+  /* The icon button inside follows the field: 8px lower than it at every
+     size and density (32px in the 40px field), never below the touch
+     minimum (the field grows around it then). Through the button's own
+     hook: the button adds its size step back, so its box is the field's
+     less 8px whatever size class it carries. */
+  .ds-copy--field > .ds-btn--icon {
+    --ds-btn-icon-size: calc(var(--_field) - var(--ds-space-2) - var(--ds-size-step, 0) * 8px);
+    flex-shrink: 0;
+  }
+
+  /* The manual fallback: the text in a small read-only field after the
+     button, focused and selected. Its ring rests one width further out and
+     snaps in, as every ring does. */
+  .ds-copy__manual {
+    inline-size: min(32ch, 100%);
+    padding-block: var(--ds-space-1);
+    padding-inline: var(--ds-space-2);
+    border: 1px solid var(--ds-line-2);
+    border-radius: calc(var(--ds-radius-field) * var(--ds-shape, 1));
+    background: var(--ds-copy-field-bg, var(--ds-surface-low));
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-copy__manual:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-copy__done {
+    white-space: nowrap;
+  }
+}

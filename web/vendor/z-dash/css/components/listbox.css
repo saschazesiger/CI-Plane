@@ -1,0 +1,421 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Listbox: a list of options to choose one or several from, in an
+ * outlined box that scrolls on its own (the WAI listbox pattern). It is a
+ * tab stop; the active option (data-active, aria-activedescendant on the
+ * box) takes the state layer, the chosen ones (aria-selected) the tint, the
+ * label weight and a check, never colour alone. Several values
+ * (aria-multiselectable) show a box per option that fills and draws its
+ * check. DS.listbox (listbox.js) brings the keys, type-ahead, the value and
+ * the data path (rendered, filtered, windowed); it is also the list engine of
+ * the combobox and the select panel.
+ *
+ *   <div class="ds-listbox" role="listbox" aria-labelledby="device-label" data-ds-listbox>
+ *     <div class="ds-listbox__option" role="option" aria-selected="true" data-value="laptop-14">
+ *       <span class="ds-listbox__check" aria-hidden="true">(check 16)</span>
+ *       <span class="ds-listbox__name">Laptop 14</span>
+ *       <span class="ds-listbox__description">For most desks</span>
+ *       <span class="ds-listbox__meta">14 inch</span>
+ *     </div>
+ *     <div class="ds-listbox__group" role="group" aria-labelledby="g-1">
+ *       <div class="ds-listbox__heading" id="g-1" role="presentation">Desktops</div> ... options
+ *     </div>
+ *   </div>
+ *
+ * One choice: the check stands at the end of the chosen option. Several:
+ * the check is a box at the start (the checkbox's size, --ds-check-size)
+ * that fills in the primary colour and draws its check. A
+ * .ds-listbox__match marks the letters a filter matched (bold, underlined:
+ * no colour alone). aria-disabled="true" on an option: the disabled ink, no
+ * layer; on the listbox: every option so, and no tab stop.
+ *
+ * .ds-listbox--plain: no box, no cap of its own (inside a panel that has
+ * both, the select panel's).
+ *
+ * Options (src/core/options.css, docs/options.md), on the listbox or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: an option 8px per step (40px at md), the
+ *             name's type role (--ds-size-font), the check box 2px per step
+ *   density   .ds-density-*: an option 4px per step, its block padding 2px
+ *             per step; side padding and type stay
+ *   shape     .ds-shape-*: multiplies the box's radius and the check box's
+ *   touch     .ds-touch: options at least --ds-touch-target (48px)
+ *   tone      none: a listbox shows no status of its own
+ *
+ * Focus: the box takes the ring on :focus-visible (it rests one width
+ * further out and snaps in on --ds-dur-fast) and its active option the
+ * focus layer at once; under the pointer an option takes the hover layer.
+ *
+ * Motion: the active layer fades in over --ds-dur-micro and goes at once,
+ * so a held arrow key leaves no trail; the check box fills over
+ * --ds-dur-fast and its check is drawn left to right over --ds-dur-medium
+ * (--ds-ease-out), as a checkbox's; the end check of one choice fades.
+ *
+ * Cut edges: the box fades each edge with more to show over
+ * --ds-scroll-fade (the combobox list's mask on the registered numbers
+ * --ds-scroll-edge-start and -end, registered in tokens.css, so the single
+ * file works without scroller.css); DS.listbox attaches DS.dom.scrollEdges() on
+ * the block axis, whose data-ds-overflow-start and -end set them (gliding
+ * over --ds-dur-fast once it measured, data-ds-edges).
+ *
+ * Hooks: --ds-listbox-option-height (40px), --ds-listbox-max-height
+ * (264px; none shows every option), --ds-listbox-radius (--ds-radius-field),
+ * --ds-check-size (the box of several values, form.css's). The private
+ * --_h, --_size are computed here: never set them.
+ *
+ * Forced colours: the box keeps its border, a chosen option is
+ * SelectedItem / SelectedItemText (a CanvasText ring inside while it is the
+ * active one), the active one a Highlight outline, a blocked one GrayText;
+ * the check box keeps its edge in CanvasText.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar): without
+ *   them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.listbox {
+  .ds-listbox {
+    position: relative;
+    display: block;
+    max-height: var(--ds-listbox-max-height, 264px);
+    margin: 0;
+    padding: var(--ds-space-1) 0;
+    overflow-y: auto;
+    border: 1px solid var(--ds-outline);
+    border-radius: calc(var(--ds-listbox-radius, var(--ds-radius-field)) * var(--ds-shape, 1));
+    background: var(--ds-surface);
+    color: var(--ds-text);
+    list-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    /* The active option, scrolled into view, lands clear of the fades. */
+    scroll-padding-block: var(--ds-scroll-fade, var(--ds-space-8));
+    /* The ring rests one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    mask-image:
+      linear-gradient(to bottom, transparent, #000 calc(var(--ds-scroll-edge-start) * var(--ds-scroll-fade, var(--ds-space-8))), #000 calc(100% - var(--ds-scroll-edge-end) * var(--ds-scroll-fade, var(--ds-space-8))), transparent),
+      linear-gradient(#000, #000);
+    mask-size: calc(100% - var(--ds-scrollbar-width, 0px)) 100%, var(--ds-scrollbar-width, 0px) 100%;
+    mask-position: 0 0, 100% 0;
+    mask-repeat: no-repeat;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* The fades glide only once DS.dom.scrollEdges() has measured
+     (data-ds-edges): nothing moves on load. */
+  .ds-listbox[data-ds-edges] {
+    transition:
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out),
+      --ds-scroll-edge-start var(--ds-dur-fast) var(--ds-ease-in-out),
+      --ds-scroll-edge-end var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-listbox:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-listbox--plain {
+    max-height: none;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    mask-image: none;
+  }
+
+  .ds-listbox[data-ds-overflow-start] {
+    --ds-scroll-edge-start: 1;
+  }
+
+  .ds-listbox[data-ds-overflow-end] {
+    --ds-scroll-edge-end: 1;
+  }
+
+  .ds-listbox__group {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A line between groups, not above the first one that shows. */
+  .ds-listbox__group:has(> .ds-listbox__option:not([hidden])) ~ .ds-listbox__group {
+    margin-block-start: var(--ds-space-1);
+    padding-block-start: var(--ds-space-1);
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  .ds-listbox__option[hidden],
+  .ds-listbox__group[hidden],
+  .ds-listbox__group:not(:has(> .ds-listbox__option:not([hidden]))) {
+    display: none;
+  }
+
+  .ds-listbox__heading {
+    display: block;
+    margin: 0;
+    padding: var(--ds-space-2) var(--ds-space-4) var(--ds-space-1);
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    cursor: default;
+  }
+
+  /* One choice: the text, and the check at the end. */
+  .ds-listbox__option {
+    --_h: calc(var(--ds-listbox-option-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-content: center;
+    align-items: center;
+    column-gap: var(--ds-space-3);
+    row-gap: 2px;
+    min-height: max(var(--ds-target-min, 0px), var(--_h));
+    margin: 0;
+    padding: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px) var(--ds-space-4);
+    color: var(--ds-text);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ds-listbox__option > :not(.ds-listbox__check) {
+    grid-column: 1;
+  }
+
+  .ds-listbox__option > .ds-listbox__check {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
+
+  /* Several: the box first, the text after it. */
+  .ds-listbox[aria-multiselectable="true"] .ds-listbox__option {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .ds-listbox[aria-multiselectable="true"] .ds-listbox__option > :not(.ds-listbox__check) {
+    grid-column: 2;
+  }
+
+  .ds-listbox[aria-multiselectable="true"] .ds-listbox__option > .ds-listbox__check {
+    grid-column: 1;
+  }
+
+  /* The state layer: hover under a pointer, the active option's layer, and
+     the focus layer while the box has keyboard focus. */
+  .ds-listbox__option::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--ds-text);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-micro) var(--ds-ease-in-out);
+  }
+
+  .ds-listbox__option:not([data-active])::before {
+    transition-duration: 0ms;
+  }
+
+  @media (hover: hover) {
+    .ds-listbox__option:hover:not([aria-disabled="true"], .ds-listbox[aria-disabled="true"] *)::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  /* A listbox that is its own tab stop shows its active option only while
+     it has the focus; in a panel the field keeps the focus. */
+  .ds-listbox[tabindex]:not(:focus) .ds-listbox__option[data-active]:not([aria-disabled="true"])::before {
+    opacity: 0;
+  }
+
+  .ds-listbox__option[data-active]:not([aria-disabled="true"])::before {
+    opacity: var(--ds-state-hover);
+  }
+
+  .ds-listbox:focus-visible .ds-listbox__option[data-active]:not([aria-disabled="true"])::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  .ds-listbox__option[aria-selected="true"] {
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+  }
+
+  .ds-listbox__name {
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
+    font: var(--ds-size-font, var(--ds-font-body));
+    font-weight: var(--ds-weight-regular);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-listbox__option[aria-selected="true"] .ds-listbox__name {
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-listbox__description,
+  .ds-listbox__meta {
+    position: relative;
+    min-width: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-listbox__meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-listbox__option[aria-selected="true"] :is(.ds-listbox__description, .ds-listbox__meta) {
+    color: inherit;
+  }
+
+  /* The letters a filter matched: weight and a line, not colour. */
+  .ds-listbox__match {
+    background: transparent;
+    color: inherit;
+    font-weight: var(--ds-weight-label);
+    text-decoration: underline;
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+    text-underline-offset: var(--ds-link-underline-offset);
+  }
+
+  /* One choice: the check at the end, there only on the chosen option. */
+  .ds-listbox__check {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: inherit;
+    opacity: 0;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-listbox__option[aria-selected="true"] > .ds-listbox__check {
+    opacity: 1;
+  }
+
+  /* Several: a box that fills and draws its check, as a checkbox does. */
+  .ds-listbox[aria-multiselectable="true"] .ds-listbox__check {
+    --_size: calc(var(--ds-check-size, 18px) + var(--ds-size-step, 0) * 2px);
+    box-sizing: border-box;
+    width: var(--_size);
+    height: var(--_size);
+    border: 2px solid var(--ds-text-2);
+    border-radius: calc(var(--ds-radius-check) * var(--ds-shape, 1));
+    background: transparent;
+    color: var(--ds-on-primary);
+    opacity: 1;
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-listbox[aria-multiselectable="true"] .ds-listbox__check svg {
+    width: 100%;
+    height: 100%;
+    clip-path: inset(0 100% 0 0);
+    opacity: 0;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in),
+      clip-path 0s linear var(--ds-dur-fast);
+  }
+
+  .ds-listbox[aria-multiselectable="true"] .ds-listbox__option[aria-selected="true"] > .ds-listbox__check {
+    border-color: var(--ds-primary);
+    background: var(--ds-primary);
+  }
+
+  .ds-listbox[aria-multiselectable="true"] .ds-listbox__option[aria-selected="true"] > .ds-listbox__check svg {
+    clip-path: inset(0);
+    opacity: 1;
+    transition:
+      opacity 0s,
+      clip-path var(--ds-dur-medium) var(--ds-ease-out) var(--ds-dur-micro);
+  }
+
+  /* Blocked: the disabled ink, no layer, no pointer. */
+  .ds-listbox__option[aria-disabled="true"],
+  .ds-listbox[aria-disabled="true"] .ds-listbox__option {
+    color: var(--ds-disabled-ink, var(--ds-text));
+    cursor: default;
+  }
+
+  .ds-listbox__option[aria-disabled="true"] :is(.ds-listbox__description, .ds-listbox__meta),
+  .ds-listbox[aria-disabled="true"] :is(.ds-listbox__description, .ds-listbox__meta) {
+    color: inherit;
+  }
+
+  .ds-listbox[aria-multiselectable="true"] .ds-listbox__option[aria-disabled="true"] > .ds-listbox__check,
+  .ds-listbox[aria-multiselectable="true"][aria-disabled="true"] .ds-listbox__check {
+    border-color: var(--ds-disabled-ink, var(--ds-text-2));
+  }
+
+  /* A chosen box that is blocked fills with the disabled fill, as a
+     checked checkbox that is disabled does. */
+  .ds-listbox[aria-multiselectable="true"] .ds-listbox__option[aria-disabled="true"][aria-selected="true"] > .ds-listbox__check,
+  .ds-listbox[aria-multiselectable="true"][aria-disabled="true"] .ds-listbox__option[aria-selected="true"] > .ds-listbox__check {
+    border-color: transparent;
+    background: var(--ds-disabled-fill, var(--ds-primary));
+    color: var(--ds-disabled-ink, var(--ds-on-primary));
+  }
+
+  .ds-listbox[aria-disabled="true"] {
+    border-color: var(--ds-line);
+    background: var(--ds-surface-low);
+  }
+
+  @media (forced-colors: active) {
+    .ds-listbox__option[data-active] {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+
+    .ds-listbox[tabindex]:not(:focus) .ds-listbox__option[data-active] {
+      outline: none;
+    }
+
+    .ds-listbox__option[aria-selected="true"] {
+      forced-color-adjust: none;
+      background: SelectedItem;
+      color: SelectedItemText;
+    }
+
+    .ds-listbox__option[aria-selected="true"][data-active] {
+      outline-color: CanvasText;
+    }
+
+    .ds-listbox__option[aria-disabled="true"],
+    .ds-listbox[aria-disabled="true"] .ds-listbox__option {
+      color: GrayText;
+    }
+
+    .ds-listbox__option[aria-selected="true"][aria-disabled="true"] {
+      background: Canvas;
+      outline: 1px solid GrayText;
+      outline-offset: -1px;
+    }
+
+    .ds-listbox[aria-multiselectable="true"] .ds-listbox__check {
+      border-color: CanvasText;
+    }
+
+    .ds-listbox[aria-multiselectable="true"] .ds-listbox__option[aria-selected="true"] > .ds-listbox__check {
+      border-color: SelectedItemText;
+      background: SelectedItemText;
+      color: SelectedItem;
+    }
+
+    .ds-listbox__match {
+      text-decoration-color: currentColor;
+    }
+  }
+}

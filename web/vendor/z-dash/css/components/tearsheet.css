@@ -1,0 +1,380 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Tearsheet: a tall create or edit flow over the page (a new device with
+ * its network and owner, a bulk edit), taller than a dialog and with its
+ * own head, steps and foot. It is a modal dialog of the dialog component
+ * (DS.overlay opens and closes it; the box is .ds-dialog__box), anchored
+ * to the bottom of the window with a gap above, rising from the bottom
+ * edge. Its backdrop does not close it: a stray click never loses a
+ * half-filled form.
+ *
+ *   <dialog class="ds-dialog ds-tearsheet" aria-labelledby="t-title" data-ds-tearsheet>
+ *     <div class="ds-dialog__backdrop"></div>
+ *     <form class="ds-dialog__box ds-tearsheet__box" novalidate>       (or a div)
+ *       <div class="ds-tearsheet__head">
+ *         <div class="ds-tearsheet__heading">
+ *           <p class="ds-tearsheet__label">Devices</p>                 (optional)
+ *           <h2 class="ds-dialog__title" id="t-title">Add a device</h2>
+ *           <p class="ds-tearsheet__description">Register it ...</p>   (optional)
+ *           <p class="ds-tearsheet__progress"></p>        (DS.tearsheet writes it)
+ *         </div>
+ *         <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Close" data-ds-close>(close)</button>
+ *       </div>
+ *       <div class="ds-tearsheet__main">
+ *         <nav class="ds-tearsheet__steps" aria-label="Steps">          (optional)
+ *           <ol class="ds-steps ds-steps--vertical"> ... </ol>
+ *         </nav>
+ *         <div class="ds-tearsheet__body">
+ *           <section class="ds-tearsheet__step" aria-labelledby="s1"> <h3 id="s1" tabindex="-1">Device</h3> ... </section>
+ *           <section class="ds-tearsheet__step" aria-labelledby="s2" hidden> ... </section>
+ *         </div>
+ *       </div>
+ *       <div class="ds-tearsheet__foot">
+ *         <button class="ds-btn ds-btn--text" type="button" data-ds-close>Cancel</button>
+ *         <button class="ds-btn ds-btn--outlined" type="button" data-ds-tearsheet-back>Back</button>
+ *         <button class="ds-btn ds-btn--filled" type="button" data-ds-tearsheet-next>Next</button>
+ *         <button class="ds-btn ds-btn--filled" type="submit" data-ds-tearsheet-submit>Add device</button>
+ *       </div>
+ *
+ * Variants:
+ *   (default)           as wide as --ds-tearsheet-width (1200px), never wider
+ *                       than the window less --ds-space-8 on each side
+ *   .ds-tearsheet--narrow  --ds-tearsheet-width-narrow (640px): a short form,
+ *                       usually without the step rail
+ *   stacked             a tearsheet opened over another (DS.tearsheet sets
+ *                       data-stacked on the one below): the lower box recedes
+ *                       (scale --ds-scale-enter, up by --ds-distance-lg) and
+ *                       the upper one sits --ds-space-4 lower, so the edge of
+ *                       the one below shows above it
+ *
+ * Parts: the head (a label, the title, a description, the close button;
+ * a hairline under it), the main area (the step rail at the start, on
+ * --ds-surface-low, and the body, the one part that scrolls, with a thin
+ * scrollbar), the foot (the actions at the end; the first of several,
+ * Cancel or a .ds-meta line, takes the start; a hairline above it). Only the
+ * current .ds-tearsheet__step shows; DS.tearsheet writes `hidden` on the
+ * others, and on the Back, Next and submit buttons that do not apply.
+ *
+ * Options: density changes the padding of head, body, rail and foot (2px
+ * per step); shape multiplies the box's top radius; a size class reaches
+ * the controls inside only. There is no tone.
+ *
+ * Phones (600px and below): the box fills the window (no gap, no radius,
+ * safe areas on head and foot) and the rail gives way to the progress
+ * line (.ds-tearsheet__progress, "Step 2 of 4: Network") in the head,
+ * which also shows in a tearsheet without a rail.
+ *
+ * Motion: state-driven on data-state like every dialog. The box rises its
+ * full height from the bottom edge over --ds-dur-long on --ds-ease-out (a
+ * box as tall as the window would show the page under it if it sprang
+ * past its rest) while it fades in over --ds-dur-fast; it drops back in
+ * --ds-dur-base, accelerating. Stacking moves the lower box on the spring
+ * over --ds-dur-slow, and back. By hand (no data-state) the keyframes
+ * ds-lift-in and ds-drop-out with the fades.
+ *
+ * Forced colours: the box keeps the dialog's transparent border as its
+ * edge; the hairlines of head, rail and foot are borders, so they stay.
+ *
+ * Hooks: --ds-tearsheet-width (1200px), --ds-tearsheet-width-narrow
+ * (640px), --ds-tearsheet-gap (--ds-space-12: the room above the box),
+ * --ds-tearsheet-padding (--ds-space-6), --ds-tearsheet-rail-width
+ * (256px), --ds-tearsheet-radius (--ds-radius-dialog).
+ *
+ * Print: an open tearsheet is not printed (the dialog's rule).
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar on the
+ *   body): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.tearsheet {
+  /* The frame: the box at the bottom, the gap above it. */
+  .ds-tearsheet {
+    --_gap: var(--ds-tearsheet-gap, var(--ds-space-12));
+    place-items: end center;
+    padding: var(--_gap) var(--ds-space-8) 0;
+  }
+
+  .ds-tearsheet.ds-dialog--nested {
+    padding-top: calc(var(--_gap) + var(--ds-space-4));
+  }
+
+  .ds-tearsheet .ds-dialog__box {
+    --_pad: calc(var(--ds-tearsheet-padding, var(--ds-space-6)) + var(--ds-density, 0) * 2px);
+    --_radius: calc(var(--ds-tearsheet-radius, var(--ds-radius-dialog)) * var(--ds-shape, 1));
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 0;
+    width: min(var(--ds-tearsheet-width, 1200px), 100%);
+    height: 100%;
+    max-height: none;
+    padding: 0;
+    overflow: hidden;
+    border-radius: var(--_radius) var(--_radius) 0 0;
+  }
+
+  .ds-tearsheet--narrow .ds-dialog__box {
+    width: min(var(--ds-tearsheet-width-narrow, 640px), 100%);
+  }
+
+  /* Head: label, title and description; the close button at the end. */
+  .ds-tearsheet__head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-3);
+    padding-block: var(--_pad);
+    padding-inline: var(--_pad) calc(var(--_pad) - var(--ds-space-2));
+    border-bottom: 1px solid var(--ds-line);
+  }
+
+  .ds-tearsheet__heading {
+    display: grid;
+    gap: var(--ds-space-1);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ds-tearsheet__head > .ds-btn {
+    flex-shrink: 0;
+    margin-top: calc(-1 * var(--ds-space-2));
+  }
+
+  .ds-tearsheet__label {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-tearsheet__description {
+    margin: 0;
+    max-width: 72ch;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+
+  .ds-tearsheet__label:empty,
+  .ds-tearsheet__description:empty {
+    display: none;
+  }
+
+  /* "Step 2 of 4: Network", written by DS.tearsheet: shown where no rail
+     says it (a tearsheet without one, and phones). */
+  .ds-tearsheet__progress {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-tearsheet__progress:empty,
+  .ds-tearsheet__box:has(> .ds-tearsheet__main > .ds-tearsheet__steps) .ds-tearsheet__progress {
+    display: none;
+  }
+
+  /* Main: the rail and the body side by side; only the body scrolls. */
+  .ds-tearsheet__main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .ds-tearsheet__main:has(> .ds-tearsheet__steps) {
+    grid-template-columns: var(--ds-tearsheet-rail-width, 256px) minmax(0, 1fr);
+  }
+
+  .ds-tearsheet__steps {
+    position: relative;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--_pad);
+    border-inline-end: 1px solid var(--ds-line);
+    background: var(--ds-surface-low);
+  }
+
+  .ds-tearsheet__body {
+    position: relative;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    padding: var(--_pad);
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-tearsheet__body:focus {
+    outline: none;
+  }
+
+  .ds-tearsheet__body:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  /* A step: a column of the page's fields, at a readable width. */
+  .ds-tearsheet__step {
+    display: grid;
+    align-content: start;
+    gap: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+    max-width: 720px;
+  }
+
+  .ds-tearsheet__step[hidden] {
+    display: none;
+  }
+
+  /* The step's heading: the subtitle role, no margins of its own. */
+  .ds-tearsheet__step > :is(h2, h3, h4):first-child {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-subtitle);
+  }
+
+  /* The heading focus lands on when the step changes: no ring of its own
+     (it is no control), the step's content follows. */
+  .ds-tearsheet__step [tabindex="-1"]:focus {
+    outline: none;
+  }
+
+  /* Foot: the actions at the end; Cancel or a meta line takes the start. */
+  .ds-tearsheet__foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--ds-space-2);
+    padding: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px) var(--_pad);
+    border-top: 1px solid var(--ds-line);
+  }
+
+  /* The first of several (Cancel, or a line of meta) takes the start. */
+  .ds-tearsheet__foot > :first-child:not(:last-child) {
+    margin-inline-end: auto;
+  }
+
+  .ds-tearsheet__foot > [hidden] {
+    display: none;
+  }
+
+  /* Motion, state-driven: the box rises its full height and fades in,
+     drops back accelerating. A transition takes the timing of the state it
+     moves to. */
+  .ds-tearsheet[data-state] .ds-dialog__box {
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-slow) var(--ds-ease-spatial),
+      translate var(--ds-dur-long) var(--ds-ease-out);
+  }
+
+  .ds-tearsheet[data-state="closed"] .ds-dialog__box {
+    scale: none;
+    translate: 0 var(--ds-distance-sheet);
+    transition:
+      opacity var(--ds-dur-base) var(--ds-ease-in-out),
+      translate var(--ds-dur-base) var(--ds-ease-exit);
+  }
+
+  /* Stacked: the tearsheet under another one recedes on the spring, and
+     comes back when the upper one closes. */
+  .ds-tearsheet[data-stacked][data-state="open"] .ds-dialog__box {
+    scale: var(--ds-scale-enter);
+    translate: 0 calc(-1 * var(--ds-distance-lg));
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-slow) var(--ds-ease-spatial),
+      translate var(--ds-dur-slow) var(--ds-ease-spatial);
+  }
+
+  .ds-tearsheet[data-stacked] .ds-dialog__box {
+    transform-origin: 50% 0;
+  }
+
+  /* By hand (no data-state): the keyframes, movement with the fades. */
+  .ds-tearsheet:not([data-state]) .ds-dialog__box {
+    --ds-motion-distance: var(--ds-distance-sheet);
+    animation:
+      ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) backwards,
+      ds-lift-in var(--ds-dur-long) var(--ds-ease-out) backwards;
+  }
+
+  .ds-tearsheet.ds-dialog--closing:not([data-state]) .ds-dialog__box {
+    --ds-motion-distance: var(--ds-distance-sheet);
+    animation:
+      ds-fade-out var(--ds-dur-base) var(--ds-ease-in-out) forwards,
+      ds-drop-out var(--ds-dur-base) var(--ds-ease-exit) forwards;
+  }
+
+  /* A native tearsheet shown by hand (showModal() without DS.overlay). */
+  dialog.ds-tearsheet:not([data-state]) .ds-dialog__box {
+    animation: none;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      translate var(--ds-dur-long) var(--ds-ease-out);
+  }
+
+  dialog.ds-tearsheet:not([data-state]):not([open]) .ds-dialog__box {
+    scale: none;
+    translate: 0 var(--ds-distance-sheet);
+    transition:
+      opacity var(--ds-dur-base) var(--ds-ease-in-out),
+      translate var(--ds-dur-base) var(--ds-ease-exit);
+  }
+
+  @starting-style {
+    dialog.ds-tearsheet[open]:not([data-state]) .ds-dialog__box {
+      opacity: 0;
+      scale: none;
+      translate: 0 var(--ds-distance-sheet);
+    }
+  }
+
+  /* Phones: the whole window, the rail a row of steps above the body. */
+  @media (max-width: 600px) {
+    .ds-tearsheet,
+    .ds-tearsheet.ds-dialog--nested {
+      padding: 0 0 var(--ds-keyboard-inset, 0px);
+    }
+
+    .ds-tearsheet .ds-dialog__box,
+    .ds-tearsheet--narrow .ds-dialog__box {
+      width: 100%;
+      border-radius: 0;
+    }
+
+    .ds-tearsheet__head {
+      padding-top: max(var(--_pad), env(safe-area-inset-top));
+      padding-inline: max(var(--ds-space-4), env(safe-area-inset-left)) max(var(--ds-space-2), env(safe-area-inset-right));
+    }
+
+    .ds-tearsheet__main:has(> .ds-tearsheet__steps) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    /* The rail gives way to the progress line in the head. */
+    .ds-tearsheet__steps {
+      display: none;
+    }
+
+    .ds-tearsheet__box:has(> .ds-tearsheet__main > .ds-tearsheet__steps) .ds-tearsheet__progress:not(:empty) {
+      display: block;
+    }
+
+    .ds-tearsheet__body {
+      padding-inline: max(var(--ds-space-4), env(safe-area-inset-left)) max(var(--ds-space-4), env(safe-area-inset-right));
+    }
+
+    .ds-tearsheet__foot {
+      padding-inline: max(var(--ds-space-4), env(safe-area-inset-left)) max(var(--ds-space-4), env(safe-area-inset-right));
+      padding-bottom: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px + env(safe-area-inset-bottom));
+    }
+
+    .ds-tearsheet[data-stacked][data-state="open"] .ds-dialog__box {
+      scale: none;
+      translate: none;
+    }
+  }
+}

@@ -1,0 +1,146 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Sort control: the field and the direction of a list or a set of cards,
+ * outside a table (a table sorts in its header, .ds-table__sort). Two
+ * looks, one behaviour (js/sort.js, data-ds-sort):
+ *
+ * Inline: a label, a select of the fields and an order button whose words
+ * say the direction in the field's terms ("A to Z", "Newest first"):
+ *
+ *   <div class="ds-sort" data-ds-sort role="group" aria-label="Sort devices">
+ *     <label class="ds-sort__label" for="sort-field">Sort by</label>
+ *     <select class="ds-input ds-sort__field" id="sort-field">
+ *       <option value="name" data-ds-sort-type="text">Name</option>
+ *       <option value="seen" data-ds-sort-type="date" data-ds-sort-default="descending">Last seen</option>
+ *     </select>
+ *     <button class="ds-btn ds-btn--quiet ds-sort__order" type="button">
+ *       (arrowUp 20 .ds-sort__arrow)<span class="ds-sr">Order: </span>
+ *       <span class="ds-sort__words"><span class="ds-sort__word">A to Z</span><span class="ds-sort__word">Z to A</span></span>
+ *     </button>
+ *   </div>
+ *
+ * Menu (.ds-sort--menu): one button that names the field and points the
+ * direction, and a menu of the fields and the two directions:
+ *
+ *   <div class="ds-sort ds-sort--menu" data-ds-sort>
+ *     <button class="ds-btn ds-sort__trigger" type="button" aria-haspopup="menu" aria-expanded="false" data-ds-open="#sort-menu">
+ *       (sort 20)<span class="ds-sr">Sort by </span><span class="ds-sort__value">Name</span>
+ *       <span class="ds-sr">, </span><span class="ds-sort__words ds-sr">(the two words)</span>(arrowUp 20 .ds-sort__arrow)</button>
+ *     <div class="ds-menu" id="sort-menu" role="menu" aria-label="Sort" hidden>
+ *       <div role="group" aria-labelledby="sort-by"><p class="ds-menu__heading" id="sort-by">Sort by</p>
+ *         <button class="ds-menu__item" role="menuitemradio" aria-checked="true" type="button" data-ds-sort-field="name">(check 20 .ds-menu__check)<span class="ds-menu__label">Name</span></button> ...</div>
+ *       <div class="ds-menu__divider" role="separator"></div>
+ *       <div role="group" aria-labelledby="sort-order"><p class="ds-menu__heading" id="sort-order">Order</p>
+ *         <button class="ds-menu__item" role="menuitemradio" type="button" data-ds-sort-direction="ascending">(check)<span class="ds-menu__label">A to Z</span></button> ...</div>
+ *     </div>
+ *   </div>
+ *
+ * State, written by the system: data-state="ascending" or "descending" on
+ * .ds-sort. The arrow (.ds-sort__arrow, one up arrow for both directions)
+ * turns 180deg for descending on the spring (--ds-dur-medium), as the
+ * table's sort arrow does; the two words of the order button stack in one
+ * grid cell, so the button keeps its width when they change, and only
+ * the current one shows. The direction is never told by the arrow alone:
+ * the words say it.
+ *
+ * Options (src/core/options.css, docs/options.md), on .ds-sort or any
+ * ancestor: size, density, shape and touch reach its select and buttons,
+ * which compute them in their own rules; the gap between them steps with
+ * size (4px per step). The label keeps its role. There is no tone: a sort
+ * shows no meaning of its own.
+ *
+ * Narrow: the inline control wraps at its gap; in a content area of at
+ * most 480px its label goes (it stays the select's name).
+ *
+ * Forced colours: the arrow and the words are text, so they keep the
+ * system's colours; nothing of its own.
+ *
+ * Hooks: --ds-sort-field-width (the select's least width, 160px). The
+ * computed --_gap is private: never set it.
+ *
+ * No progressive feature.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.sort {
+  .ds-sort {
+    --_gap: max(var(--ds-space-1), calc(var(--ds-space-2) + var(--ds-size-step, 0) * 4px));
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--_gap);
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* The menu look is one button: it never wraps. */
+  .ds-sort--menu {
+    flex-wrap: nowrap;
+  }
+
+  .ds-sort__label {
+    color: var(--ds-text-2);
+    font: var(--ds-font-label);
+    white-space: nowrap;
+  }
+
+  /* A select as wide as its longest field, at least the hook; never wider
+     than the row. The least width is a length, not min(100%, …): a
+     percentage counts as nothing in the control's max-content width, so a
+     flex row would size it too narrow and wrap the order button. */
+  .ds-sort__field {
+    inline-size: auto;
+    min-inline-size: var(--ds-sort-field-width, 160px);
+    max-inline-size: 100%;
+  }
+
+  .ds-sort__order,
+  .ds-sort__trigger {
+    white-space: nowrap;
+  }
+
+  /* One up arrow for both directions: descending turns it to point down. */
+  .ds-sort__arrow {
+    flex: none;
+    transition: rotate var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  .ds-sort[data-state="descending"] .ds-sort__arrow {
+    rotate: 180deg;
+  }
+
+  /* Both words in one cell: the button is as wide as the longer one. */
+  .ds-sort__words {
+    display: inline-grid;
+  }
+
+  .ds-sort__word {
+    grid-area: 1 / 1;
+  }
+
+  .ds-sort:not([data-state="descending"]) .ds-sort__word:last-child,
+  .ds-sort[data-state="descending"] .ds-sort__word:first-child:not(:last-child) {
+    visibility: hidden;
+  }
+
+  /* The field's name on the menu trigger: one line, an ellipsis when the
+     row is short. */
+  .ds-sort__value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @container ds-content (max-width: 480px) {
+    .ds-sort__label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+}

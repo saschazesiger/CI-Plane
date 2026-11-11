@@ -395,8 +395,8 @@ func TestSecurityHeadersAndAssets(t *testing.T) {
 		t.Fatalf("asset headers: %v", js.header)
 	}
 	r.expect(r.local_("GET", "/app/main.js", nil, func(req *http.Request) { req.Header.Set("If-None-Match", etag) }), 304)
-	r.expect(r.local_("GET", "/vendor/dashboard-style/ds.js", nil), 200)
-	r.expect(r.local_("GET", "/vendor/dashboard-style/tools/verify.mjs", nil), 404)
+	r.expect(r.local_("GET", "/vendor/z-dash/ds.min.js", nil), 200)
+	r.expect(r.local_("GET", "/vendor/z-dash/tools/verify.mjs", nil), 404)
 	r.expect(r.local_("GET", "/healthz", nil), 200)
 	r.expect(r.local_("GET", "/api/nothing", nil), 404)
 }

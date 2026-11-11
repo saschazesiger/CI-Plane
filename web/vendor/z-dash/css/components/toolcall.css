@@ -1,0 +1,283 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Tool call: one call an assistant or agent made (a command, a search, an
+ * API), as a row that opens: its name and arguments, its status with a
+ * word, how long it took; opened, its input, its output and the calls it
+ * made itself. Built on the disclosure row (disclosure.css): the summary
+ * presses like a row, the body opens as a .ds-collapsible.
+ *
+ *   <details class="ds-collapsible ds-disclosure ds-disclosure--row ds-toolcall" data-status="running"
+ *            data-ds-toolcall data-ds-toolcall-since="2026-11-05T09:00:00Z">
+ *     <summary>
+ *       <span class="ds-toolcall__icon">[icon terminal 20]</span>
+ *       <span class="ds-disclosure__title ds-toolcall__title">
+ *         <span class="ds-toolcall__name">run_tests</span> <span class="ds-toolcall__args">npm test -- devices</span></span>
+ *       <span class="ds-toolcall__status"><span class="ds-toolcall__mark"><span class="ds-spinner"></span></span><span class="ds-toolcall__word">Running</span></span>
+ *       <time class="ds-toolcall__time"></time>
+ *       [icon chevronDown 20 .ds-chevron]
+ *     </summary>
+ *     <div class="ds-disclosure__body ds-toolcall__body">
+ *       <div class="ds-toolcall__part"><p class="ds-toolcall__label">Input</p>
+ *         <pre class="ds-toolcall__code" tabindex="0" aria-label="Input"><code>{ "script": "test" }</code></pre></div>
+ *       <div class="ds-toolcall__part ds-toolcall__part--error"><p class="ds-toolcall__label">Output</p>
+ *         <pre class="ds-toolcall__code" tabindex="0" aria-label="Output">...</pre></div>
+ *       <div class="ds-toolcall__calls"> (nested .ds-toolcall rows) </div>
+ *     </div>
+ *   </details>
+ *
+ * Status (data-status on the row, with an icon and a word, never colour
+ * alone): pending (an hourglass, waiting to run or for approval), running (the
+ * spinner), done (a check in a circle, --ds-success), failed (the alert
+ * circle and the word in --ds-error), cancelled (a ban). toolcall.js
+ * writes the mark for set({ status }); a page that renders the row writes
+ * it in its markup.
+ *
+ * Parts: __icon (the tool's glyph), __name (in the code type), __args (a
+ * quiet one-line summary of the arguments, cut with an ellipsis), __time
+ * (the duration, tabular), __part with a __label and a __code block (the
+ * code type, scrolling past --ds-toolcall-code-max-height; give it
+ * tabindex="0" and a name so the keyboard can scroll it; a code block of the
+ * system may stand in its place), __part--error (an output that failed:
+ * its label and edge in --ds-error), __calls (the calls this one made:
+ * rows on a rail, without a frame of their own).
+ *
+ * The frame: a hairline at --ds-toolcall-radius (--ds-radius-card) times
+ * --ds-shape, clipping the row's state layer at its corners. Rows in a
+ * .ds-toolcall-list stack with --ds-space-2 between them.
+ *
+ * Options (src/core/options.css, docs/options.md), on the row or any
+ * ancestor; computed here and in the disclosure row:
+ *   size      .ds-xs ... .ds-xl: the summary's height (8px per step, the
+ *             disclosure row's own steps) and its type; the code keeps its
+ *             role
+ *   density   .ds-density-*: the summary's height (4px per step) and the
+ *             room of the body, 2px per step
+ *   shape     the frame's and the code's radius times --ds-shape
+ *   touch     .ds-touch: the summary is at least --ds-touch-target high
+ *   tone      not read: the status shows the meaning, with its word
+ *
+ * Hooks: --ds-toolcall-height (40px, the summary's base height),
+ * --ds-toolcall-radius (--ds-radius-card), --ds-toolcall-code-max-height
+ * (240px), --ds-toolcall-code-bg (--ds-surface-low).
+ *
+ * Motion: the disclosure's (the body opens as a .ds-collapsible, the
+ * chevron turns); a status that changes swaps its mark at once.
+ *
+ * Forced colours: the frame and the code's edge stay (borders); the marks
+ * and the icon take CanvasText, and every status keeps its word; the
+ * spinner takes its system colours (spinner.css).
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar on the
+ *   code): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.toolcall {
+  .ds-toolcall {
+    --_radius: calc(var(--ds-toolcall-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    --_room: max(0px, calc(var(--ds-space-3) + var(--ds-density, 0) * 2px));
+    --ds-disclosure-row-height: var(--ds-toolcall-height, 40px);
+    --ds-disclosure-row-padding: var(--ds-space-3);
+    container-type: inline-size;
+    display: block;
+    min-width: 0;
+    border: 1px solid var(--ds-line);
+    border-radius: var(--_radius);
+    background: var(--ds-surface);
+    overflow: clip;
+  }
+
+  .ds-toolcall-list {
+    display: grid;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  /* Room above and below the line is the height's: a small row is as low
+     as its steps say. */
+  .ds-toolcall > summary {
+    gap: var(--ds-space-2);
+    padding-block: var(--ds-space-1);
+    font: var(--ds-size-font, var(--ds-font-label));
+  }
+
+  .ds-toolcall__icon {
+    display: inline-flex;
+    flex: none;
+    color: var(--ds-text-2);
+  }
+
+  .ds-toolcall__title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--ds-space-2);
+    overflow: hidden;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  .ds-toolcall__name {
+    flex: none;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font: var(--ds-font-code);
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-toolcall__args {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--ds-text-2);
+    font: var(--ds-font-code);
+  }
+
+  .ds-toolcall__status {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-1);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-toolcall__mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+  }
+
+  .ds-toolcall__mark > svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* The word stays whole: with the mark it is the status. */
+  .ds-toolcall__word {
+    white-space: nowrap;
+  }
+
+  .ds-toolcall[data-status="done"] > summary .ds-toolcall__mark {
+    color: var(--ds-success);
+  }
+
+  .ds-toolcall[data-status="failed"] > summary .ds-toolcall__status {
+    color: var(--ds-error);
+  }
+
+  .ds-toolcall__time {
+    flex: none;
+    min-width: 3ch;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  .ds-toolcall__time:empty {
+    display: none;
+  }
+
+  /* A narrow row (each row is its own container) lets the time go; the
+     arguments are cut shorter. */
+  @container (max-width: 359.98px) {
+    .ds-toolcall__time {
+      display: none;
+    }
+  }
+
+  .ds-toolcall__body {
+    display: grid;
+    gap: var(--_room);
+    min-width: 0;
+  }
+
+  .ds-toolcall > .ds-toolcall__body {
+    padding-top: var(--ds-space-1);
+  }
+
+  .ds-toolcall__part {
+    display: grid;
+    gap: var(--ds-space-1);
+    min-width: 0;
+  }
+
+  .ds-toolcall__label {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+  }
+
+  .ds-toolcall__code {
+    position: relative;
+    max-height: var(--ds-toolcall-code-max-height, 240px);
+    margin: 0;
+    padding: var(--ds-space-2) var(--ds-space-3);
+    overflow: auto;
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-radius-sm) * var(--ds-shape, 1));
+    background: var(--ds-toolcall-code-bg, var(--ds-surface-low));
+    color: var(--ds-text);
+    font: var(--ds-font-code);
+    white-space: pre;
+    tab-size: 2;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-toolcall__code:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  /* A closed call holds no ring: the snap back of a ring that left as the
+     call closed would never end in Firefox, which does not run transitions
+     in the hidden content of a closed <details>. */
+  .ds-toolcall:not([open]) .ds-toolcall__code {
+    transition: none;
+  }
+
+  .ds-toolcall__part--error > .ds-toolcall__label {
+    color: var(--ds-error);
+  }
+
+  .ds-toolcall__part--error > .ds-toolcall__code {
+    border-color: var(--ds-error);
+  }
+
+  /* Nested calls: rows on a rail under the icon, no frame of their own. */
+  .ds-toolcall__calls {
+    display: grid;
+    min-width: 0;
+    margin-inline-start: calc(var(--ds-space-3) + 9px);
+    border-inline-start: 2px solid var(--ds-line);
+  }
+
+  .ds-toolcall__calls > .ds-toolcall {
+    --ds-disclosure-row-padding: var(--ds-space-2);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .ds-toolcall__calls > .ds-toolcall > .ds-toolcall__body {
+    padding-inline-start: calc(var(--ds-space-2) + var(--ds-space-3));
+  }
+
+  @media (forced-colors: active) {
+    .ds-toolcall__icon,
+    .ds-toolcall__mark,
+    .ds-toolcall[data-status] > summary .ds-toolcall__mark {
+      color: CanvasText;
+    }
+  }
+}

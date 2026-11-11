@@ -1,0 +1,545 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Tabs: sections of one page or record. The selected tab takes the primary
+ * ink, the label weight and an indicator that glides between the tabs
+ * (js/indicator.js); selected is indicator, weight and ARIA, never colour
+ * alone.
+ *
+ *   <div class="ds-tabs" role="tablist" aria-label="Device">
+ *     <button class="ds-tabs__tab" role="tab" type="button" id="t-overview" aria-selected="true" aria-controls="p-overview" data-label="Overview">Overview</button>
+ *     <button class="ds-tabs__tab" role="tab" type="button" id="t-activity" aria-selected="false" aria-controls="p-activity" tabindex="-1" data-label="Activity">Activity<span class="ds-tabs__count"><span class="ds-sr">, </span>3</span></button>
+ *   </div>
+ *   <div class="ds-tabs__panel" role="tabpanel" id="p-overview" aria-labelledby="t-overview" tabindex="0"> ... </div>
+ *   <div class="ds-tabs__panel" role="tabpanel" id="p-activity" aria-labelledby="t-activity" tabindex="0" hidden> ... </div>
+ *
+ *   Link tabs (navigation between pages of a record):
+ *   <nav class="ds-tabs" aria-label="Device">
+ *     <a class="ds-tabs__tab" href="/devices/42" aria-current="page" data-label="Overview">Overview</a> ...
+ *   </nav>
+ *
+ *   A tab that closes (a wrapper, so the close button is no child of the tab;
+ *   the button is for the pointer alone: a tablist owns only tabs, so it is
+ *   hidden from the accessibility tree, and the tab's panel holds a named
+ *   close action for the others, a screen reader on a touch screen above all):
+ *   <span class="ds-tabs__item" role="none">
+ *     <button class="ds-tabs__tab" role="tab" aria-keyshortcuts="Delete" ... data-label="Report">Report</button>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon ds-xs ds-tabs__close" type="button" tabindex="-1" aria-hidden="true" data-tip="Close">(close 16)</button>
+ *   </span>
+ *   <div class="ds-tabs__panel" ...> ... <button class="ds-btn ds-btn--text" type="button">Close Report</button></div>
+ *
+ *   Vertical, beside its panels:
+ *   <div class="ds-tabs__columns">
+ *     <div class="ds-tabs ds-tabs--vertical" role="tablist" aria-orientation="vertical" aria-label="Settings"> tabs </div>
+ *     <div> panels </div>
+ *   </div>
+ *
+ *   The behaviour (tabs.js, DS.tabs): data-ds-tabs on the row selects,
+ *   moves the one tab stop, shows the panels, glides the indicator and
+ *   closes tabs; the page listens to ds:change, ds:close and ds:add.
+ *   <div class="ds-tabs" role="tablist" aria-label="Device" data-ds-tabs> ... </div>
+ *
+ *   A bar around the row, for a row that overflows into a "More" menu
+ *   (data-ds-tabs-overflow) and for an add button; the hairline is the bar's:
+ *   <div class="ds-tabs__bar">
+ *     <div class="ds-tabs" role="tablist" aria-label="Reports" data-ds-tabs data-ds-tabs-overflow> ... </div>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon ds-tabs__add" type="button" aria-label="New report">(plus 20)</button>
+ *   </div>
+ *   The module writes the More button after the row (a quiet button,
+ *   .ds-tabs__more, "More" and a chevron) and its .ds-menu; the tabs that do
+ *   not fit carry hidden.
+ *
+ *   By hand, without the module (2.x):
+ *   DS.indicator.create(tabs, { active: '[aria-selected="true"], [aria-current="page"]', className: 'ds-tabs__indicator' })
+ *   DS.dom.roving(tabs)   (arrow keys, Home, End; the page's click handler selects;
+ *                          vertical: { orientation: 'vertical' })
+ *
+ * data-label (the tab's text again) reserves the width of the heavier
+ * selected weight, so a selection change moves nothing (as on the
+ * segmented switch); an icon, a count or a badge keeps its place.
+ *
+ * Variants:
+ *   .ds-tabs               a row of labels over a hairline; a bar under the
+ *                          selected tab
+ *   .ds-tabs--line         the same, named explicitly
+ *   .ds-tabs--contained    a tinted tray (--ds-tabs-contained-bg), the
+ *                          selected tab a surface pill that glides inside
+ *                          it; as wide as its tabs, the row's height unchanged
+ *   .ds-tabs--vertical     a column with the hairline and the bar at its end
+ *                          (combines with --contained); the page sets
+ *                          aria-orientation="vertical"; .ds-tabs__columns
+ *                          lays it out beside the panels, over them at 600px
+ *                          of the content
+ *   .ds-tabs--fill         equal widths across the row
+ *   .ds-tabs--flush        no hairline
+ *
+ * Parts: .ds-tabs__count (a count after the label, tabular meta figures; a
+ * .ds-sr separator reads it with the label; a .ds-badge still works for
+ * news), an icon as the tab's first child (svg, 18 or 20), .ds-tabs__item
+ * with .ds-tabs__close (above), .ds-tabs__bar (the row with the buttons
+ * after it: as wide as its container, the hairline under all of them; none
+ * around a contained or flush row), .ds-tabs__more (the More button the
+ * module writes, after the last tab that fits), .ds-tabs__add (an icon
+ * button at the bar's end, the page's own).
+ *
+ * Options (src/core/options.css, docs/options.md), on the row or any
+ * ancestor; each is computed here, in the tab's own rule:
+ *   size      .ds-xs ... .ds-xl: 8px of height per step, 4px of side padding
+ *             per step, the type role of the size (always at the regular
+ *             weight: the selected tab alone is heavier)
+ *   density   .ds-density-*: 4px of height per step (48, 44, 40, 36px); not
+ *             the side padding, not the type
+ *   shape     .ds-shape-*: multiplies the radius of the ring, the state
+ *             layer (rest and pressed) and the contained tray and pill
+ *   touch     .ds-touch: a tab is at least --ds-target-min high, also under
+ *             the smallest size and density; the close button as well
+ *   tone      none: a tab does not state a status (a count or a word in it
+ *             may, through its own component)
+ *
+ * Blocked: :disabled or aria-disabled="true" (the disabled model; no
+ * hover, press or morph, aria-disabled keeps its focus layer).
+ *
+ * Press: the state layer is a pill inside the tab (--ds-space-1 from its
+ * top and bottom edge; the contained tab's own edges) that turns squarer
+ * while pressed (--ds-radius-action-pressed times the shape, in
+ * --ds-dur-micro, back on the spring) and ripples (js/ripple.js); nothing
+ * moves. The keyboard ring is inset and snaps inward (outline-offset,
+ * --ds-dur-fast) with the focus layer.
+ *
+ * Switching: ARIA tabs toggle `hidden` on the panels and enter the new one
+ * (DS.motion.enter(panel, 'swap')); link tabs are navigation
+ * (DS.motion.transition(update, { type: 'fade-through' })). The labels
+ * change colour on the indicator's timing (--ds-indicator-dur).
+ *
+ * Overflow: the row scrolls sideways without a scrollbar (a vertical one
+ * scrolls down); DS.dom.roving() scrolls a focused tab into view, and
+ * DS.indicator.create(..., { reveal: true }) keeps the selected one in view.
+ * With data-ds-tabs-overflow in a .ds-tabs__bar the tabs that do not fit
+ * hide instead (hidden on the tab or its .ds-tabs__item) and the More menu
+ * lists them; the selected tab always stays in the row.
+ *
+ * Hooks: --ds-tabs-height (48px, size md and comfortable),
+ * --ds-tabs-padding-x (--ds-space-4), --ds-tabs-font (the size's role),
+ * --ds-tabs-indicator-height (3px, the bar's thickness),
+ * --ds-tabs-indicator-color (--ds-primary), --ds-tabs-contained-bg
+ * (--ds-surface-high). The computed values (--_h, --_box, --_half,
+ * --_radius, --_pad, --_inset, --_layer ...) are private: never set them.
+ * One reader outside this file: the ripple box in ripple.css takes --_inset
+ * and --_layer, inherited from the tab, so it lies exactly over the layer.
+ *
+ * Forced colours: the selected tab is a choice in a set (SelectedItem /
+ * SelectedItemText, the indicator hidden), a focused one a CanvasText ring
+ * inside; blocked tabs GrayText; the contained tray keeps an edge. The close
+ * button of a selected tab lies over that fill: SelectedItemText, its ring
+ * CanvasText.
+ *
+ * Print: the row wraps instead of scrolling.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (the row hides its scrollbar while
+ *   it scrolls sideways): without them the platform scrollbar shows under
+ *   the row.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.tabs {
+  .ds-tabs {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid var(--ds-line);
+    scrollbar-width: none;
+  }
+
+  .ds-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ds-tabs--line {
+    border-bottom-color: var(--ds-line);
+  }
+
+  /* The bar: the row and the buttons after it share one hairline. The row
+     takes the width of its tabs (so the More button follows the last one),
+     a full-width row the rest. */
+  .ds-tabs__bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+    min-width: 0;
+    border-bottom: 1px solid var(--ds-line);
+  }
+
+  .ds-tabs__bar:has(> .ds-tabs:is(.ds-tabs--flush, .ds-tabs--contained)) {
+    border-bottom: 0;
+  }
+
+  .ds-tabs__bar > .ds-tabs {
+    flex: 0 1 auto;
+    border-bottom: 0;
+  }
+
+  .ds-tabs__bar > .ds-tabs--fill {
+    flex: 1 1 auto;
+  }
+
+  .ds-tabs__more,
+  .ds-tabs__add {
+    flex: none;
+  }
+
+  /* What overflows into the More menu, and the More button while nothing
+     does: gone, whatever display the part sets. */
+  .ds-tabs__tab[hidden],
+  .ds-tabs__item[hidden],
+  .ds-tabs__more[hidden] {
+    display: none;
+  }
+
+  .ds-tabs--flush {
+    border-bottom: 0;
+  }
+
+  .ds-tabs--fill > .ds-tabs__tab,
+  .ds-tabs--fill > .ds-tabs__item {
+    flex: 1 1 0;
+  }
+
+  /* The bar: the indicator's box is the selected tab; only its bottom edge
+     is painted, in the hook colour (square: --ds-indicator-radius keeps its
+     initial 0px). */
+  .ds-tabs__indicator {
+    background: linear-gradient(var(--ds-tabs-indicator-color, var(--ds-primary)), var(--ds-tabs-indicator-color, var(--ds-primary))) bottom / 100% var(--ds-tabs-indicator-height, 3px) no-repeat;
+  }
+
+  .ds-tabs__tab {
+    /* The options, computed here. The height: the hook (size md,
+       comfortable) plus 8px per size step and 4px per density step. */
+    --_h: calc(var(--ds-tabs-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    /* What it measures: never below the touch minimum (.ds-touch). */
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    --_half: calc(var(--_box) / 2);
+    /* The ring's radius: the pill times the shape. */
+    --_radius: min(calc(min(var(--ds-radius-action), var(--_half)) * var(--ds-shape, 1)), var(--_half));
+    /* The state layer inside the tab: the same pill less its inset; pressed
+       the role times the shape, never rounder than at rest. */
+    --_inset: var(--ds-space-1);
+    --_layer-half: calc(var(--_half) - var(--_inset));
+    --_layer: min(calc(min(var(--ds-radius-action), var(--_layer-half)) * var(--ds-shape, 1)), var(--_layer-half));
+    --_layer-pressed: min(calc(var(--ds-radius-action-pressed) * var(--ds-shape, 1)), var(--_layer));
+    /* Side padding: 4px per size step; density leaves it alone. */
+    --_pad: calc(var(--ds-tabs-padding-x, var(--ds-space-4)) + var(--ds-size-step, 0) * 4px);
+    position: relative;
+    display: inline-grid;
+    grid-auto-flow: column;
+    align-items: center;
+    /* The rows pack in the middle: the 0px row of data-label takes none of
+       the free height, so the label sits on the tab's centre. */
+    align-content: center;
+    justify-content: center;
+    column-gap: var(--ds-space-2);
+    flex: none;
+    min-height: var(--_box);
+    margin: 0;
+    padding: 0 var(--_pad);
+    border: 0;
+    /* The ring follows this radius; the layer inside is a pill too. */
+    border-radius: var(--_radius);
+    background: none;
+    color: var(--ds-text-2);
+    font: var(--ds-tabs-font, var(--ds-size-font, var(--ds-font-label)));
+    font-weight: var(--ds-weight-regular);
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    /* An inset ring (the scrolling row clips anything outside): it rests on
+       the edge and snaps inward. */
+    outline-offset: 0;
+    transition:
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* With the gliding indicator, the label changes colour while it arrives
+     (on its timing, --ds-indicator-dur on the row). */
+  .ds-has-indicator .ds-tabs__tab {
+    transition:
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-indicator-dur, var(--ds-dur-medium)) var(--ds-ease-in-out);
+  }
+
+  /* The label once more in the selected weight, without height and unseen,
+     under the text (a count or a badge keeps its column). */
+  .ds-tabs__tab[data-label]::after {
+    content: attr(data-label);
+    grid-row: 2;
+    grid-column: 1;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+    font-weight: var(--ds-weight-label);
+  }
+
+  /* A leading icon takes the first column, both rows of it (so the text
+     does not flow in under the icon): the copy goes under the text. */
+  .ds-tabs__tab[data-label] > svg:first-child {
+    grid-row: 1 / span 2;
+  }
+
+  .ds-tabs__tab[data-label]:has(> svg:first-child)::after {
+    grid-column: 2;
+  }
+
+  .ds-tabs__tab svg {
+    flex-shrink: 0;
+  }
+
+  .ds-tabs__count {
+    color: inherit;
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-tabs__tab:is([aria-selected="true"], [aria-current="page"]) {
+    color: var(--ds-primary);
+    font-weight: var(--ds-weight-label);
+  }
+
+  /* State layer: a pill inside the tab, the colour of the label. */
+  .ds-tabs__tab::before {
+    content: '';
+    position: absolute;
+    inset: var(--_inset) 0;
+    border-radius: var(--_layer);
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  @media (hover: hover) {
+    .ds-tabs__tab:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-tabs__tab:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-tabs__tab:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s, var(--ds-dur-medium);
+  }
+
+  .ds-tabs__tab:active::before,
+  .ds-tabs__tab.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    border-radius: var(--_layer-pressed);
+    transition:
+      opacity var(--ds-dur-micro) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-micro) var(--ds-ease-out);
+  }
+
+  /* Blocked: the disabled model, no hover, press or morph; an
+     aria-disabled tab stays focusable and keeps its focus layer. */
+  .ds-tabs__tab:is(:disabled, [aria-disabled="true"]) {
+    color: var(--ds-disabled-ink);
+    opacity: var(--ds-disabled-opacity);
+    cursor: default;
+  }
+
+  @media (hover: hover) {
+    .ds-tabs__tab:is(:disabled, [aria-disabled="true"]):hover::before {
+      opacity: 0;
+    }
+  }
+
+  .ds-tabs__tab:is(:disabled, [aria-disabled="true"]):is(:active, .ds-pressed)::before {
+    opacity: 0;
+    border-radius: var(--_layer);
+  }
+
+  .ds-tabs__tab[aria-disabled="true"]:focus-visible::before {
+    opacity: var(--ds-state-focus);
+  }
+
+  /* A tab that closes: the tab fills the wrapper and keeps room at its end
+     for the button lying over it (a small icon button, or a finger's target
+     under .ds-touch), as a drawer row does. The button is a sibling: a
+     button inside a button is no valid markup. */
+  .ds-tabs__item {
+    --_close: max(var(--ds-target-min, 0px), calc(var(--ds-btn-icon-size, 40px) - 16px));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    flex: none;
+  }
+
+  .ds-tabs__item > .ds-tabs__tab {
+    grid-area: 1 / 1 / 2 / 3;
+    padding-inline-end: calc(var(--_close) + var(--ds-space-2));
+  }
+
+  .ds-tabs__close {
+    grid-area: 1 / 2;
+    margin-inline-end: var(--ds-space-1);
+  }
+
+  /* Contained: a tinted tray, the selected tab a pill of the surface inside
+     it. The tab gives up what the tray's padding takes, so the row keeps
+     the height of a line row. The indicator paints the pill; without it the
+     tab paints itself. */
+  .ds-tabs--contained {
+    --_tab: calc(var(--ds-tabs-height, 48px) - 2 * var(--ds-space-1) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_tab-half: calc(max(var(--ds-target-min, 0px), var(--_tab)) / 2);
+    --_tab-radius: min(calc(min(var(--ds-radius-action), var(--_tab-half)) * var(--ds-shape, 1)), var(--_tab-half));
+    --_tray-half: calc(var(--_tab-half) + var(--ds-space-1));
+    gap: var(--ds-space-1);
+    padding: var(--ds-space-1);
+    border-bottom: 0;
+    border-radius: min(calc(min(var(--ds-radius-action), var(--_tray-half)) * var(--ds-shape, 1)), var(--_tray-half));
+    background: var(--ds-tabs-contained-bg, var(--ds-surface-high));
+  }
+
+  .ds-tabs--contained:not(.ds-tabs--fill, .ds-tabs--vertical) {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .ds-tabs--contained .ds-tabs__tab {
+    --_h: var(--_tab);
+    --_inset: 0px;
+  }
+
+  .ds-tabs--contained .ds-tabs__tab:is([aria-selected="true"], [aria-current="page"]) {
+    background: var(--ds-surface);
+  }
+
+  .ds-tabs--contained.ds-has-indicator .ds-tabs__tab:is([aria-selected="true"], [aria-current="page"]) {
+    background: transparent;
+  }
+
+  .ds-tabs--contained > .ds-tabs__indicator {
+    --ds-indicator-radius: var(--_tab-radius);
+    background: var(--ds-surface);
+  }
+
+  /* Vertical: a column, the hairline and the bar at its inline end, the
+     labels at its start. */
+  .ds-tabs--vertical {
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-bottom: 0;
+    border-inline-end: 1px solid var(--ds-line);
+  }
+
+  .ds-tabs--vertical.ds-tabs--contained,
+  .ds-tabs--vertical.ds-tabs--flush {
+    border-inline-end: 0;
+  }
+
+  .ds-tabs--vertical .ds-tabs__tab {
+    justify-content: start;
+    text-align: start;
+  }
+
+  .ds-tabs--vertical:not(.ds-tabs--contained) > .ds-tabs__indicator {
+    background: linear-gradient(var(--ds-tabs-indicator-color, var(--ds-primary)), var(--ds-tabs-indicator-color, var(--ds-primary))) right / var(--ds-tabs-indicator-height, 3px) 100% no-repeat;
+  }
+
+  .ds-tabs__columns {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--ds-space-6);
+    min-width: 0;
+  }
+
+  @container ds-content (max-width: 600px) {
+    .ds-tabs__columns {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--ds-space-4);
+    }
+  }
+
+  /* A panel takes focus as a whole (tabindex="0") when it holds nothing
+     focusable; its ring snaps in like every ring. */
+  .ds-tabs__panel {
+    min-width: 0;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-tabs__panel:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  /* A badge (badge.css) in a blocked tab: the disabled model, as in a
+     blocked button (the badge's own --_fill as its colour). */
+  .ds-tabs__tab:is(:disabled, [aria-disabled="true"]) .ds-badge {
+    background: var(--ds-disabled-fill, var(--ds-badge-bg, var(--_fill)));
+    color: var(--ds-disabled-ink, var(--ds-badge-color, var(--ds-on-accent)));
+  }
+
+  @media (forced-colors: active) {
+    .ds-tabs__tab:is(:disabled, [aria-disabled="true"]) .ds-badge {
+      outline-color: GrayText;
+      color: GrayText;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-tabs__indicator {
+      display: none;
+    }
+
+    .ds-tabs__tab:is([aria-selected="true"], [aria-current="page"]),
+    .ds-tabs--contained .ds-tabs__tab:is([aria-selected="true"], [aria-current="page"]),
+    .ds-tabs--contained.ds-has-indicator .ds-tabs__tab:is([aria-selected="true"], [aria-current="page"]) {
+      forced-color-adjust: none;
+      background: SelectedItem;
+      color: SelectedItemText;
+    }
+
+    .ds-tabs__tab:is([aria-selected="true"], [aria-current="page"]):focus-visible {
+      outline-color: CanvasText;
+    }
+
+    .ds-tabs__tab:is(:disabled, [aria-disabled="true"]) {
+      color: GrayText;
+    }
+
+    /* A sibling lying over the selected tab's fill: the forced button ink
+       could match that fill, so it takes the fill's own ink. */
+    .ds-tabs__item:has(> .ds-tabs__tab:is([aria-selected="true"], [aria-current="page"])) > .ds-tabs__close {
+      forced-color-adjust: none;
+      color: SelectedItemText;
+      outline-color: CanvasText;
+    }
+
+    /* The tray's tint is gone: its edge stays. */
+    .ds-tabs--contained {
+      outline: 1px solid CanvasText;
+      outline-offset: -1px;
+    }
+  }
+
+  @media print {
+    .ds-tabs {
+      flex-wrap: wrap;
+      overflow: visible;
+    }
+  }
+}

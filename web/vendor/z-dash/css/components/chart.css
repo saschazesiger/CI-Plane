@@ -1,0 +1,1443 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Charts: DS.chart (chart.js: line, area, stacked area, column, bar,
+ * combo, sparkline, donut, pie, ring, gauge and bar gauge, SVG drawn by
+ * the module into a .ds-chart figure), and the CSS-only marks of 2.x: a
+ * meter (a share as a thin bar), columns (counts per category) and a
+ * legend. Everything is drawn from the chart roles (--ds-chart-1 ...
+ * --ds-chart-4, --ds-chart-neutral, --ds-chart-track, --ds-chart-warning,
+ * --ds-chart-error).
+ *
+ *   <figure class="ds-chart" data-ds-chart="line">            the data is the page's <table>
+ *     <figcaption>Requests per hour</figcaption>
+ *     <table class="ds-table"> <thead> x, series ... </thead> <tbody> one row per point </tbody> </table>
+ *   </figure>
+ *   <figure class="ds-chart" data-ds-chart='{"type":"donut","labels":[...],"series":[...]}'>
+ *
+ * The module writes its parts after the caption, each data-ds-keep:
+ *   .ds-chart__tools   the table view toggle (a quiet icon .ds-btn,
+ *                      aria-pressed); .ds-chart__view
+ *   .ds-chart__legend  li > button.ds-chart__key (aria-pressed: the series
+ *                      shows) with an svg .ds-chart__swatch (a line with
+ *                      its marker, or a fill) and .ds-chart__key-name
+ *                      (.ds-chart__key-value: a slice's share, a ring's value)
+ *   .ds-chart__frame   the plot, one tab stop (role application described
+ *                      as a chart; img when it takes no keys, meter for a
+ *                      gauge): svg.ds-chart__svg with its layers
+ *                      .ds-chart__grid (__gridline, __baseline),
+ *                      __bands (__zone), __hover (__band), __bars (__bar),
+ *                      __areas (__area, __track), __lines (__line, __lone,
+ *                      __slice, __zone-arc, __value-arc), __rules (__rule,
+ *                      __rule-label), __axes (__tick, __tick--category,
+ *                      __axis-title), __cursor, __markers (__marker),
+ *                      __dots (__dot); the patterns (__pattern,
+ *                      __pattern-ground, __pattern-ink); .ds-chart__centre
+ *                      (__figure, __caption) of a donut, ring or gauge;
+ *                      the tooltip .ds-chart__tip (__tip-title, __tip-row,
+ *                      __tip-key, __tip-key-bar, __tip-gap, __tip-value,
+ *                      __tip-name); .ds-chart__rows of a bar gauge
+ *                      (__row, __row-head, __row-label, __row-status,
+ *                      __row-value, __row-bar); the hint .ds-chart__hint
+ *                      and the probe .ds-chart__probe (the lengths below,
+ *                      read back by the module)
+ *   .ds-chart__table   the table the module writes for a JSON chart
+ *                      (__table-caption); visually hidden while the chart
+ *                      shows, as is the page's own table
+ * State: data-state="chart" or "table" on the figure (written).
+ * Modifiers (written from the spec): .ds-chart--line, --area, --column,
+ * --bar, --combo, --sparkline, --donut, --pie, --ring, --gauge,
+ * --bargauge; .ds-chart--stacked; .ds-chart--patterns (series 2 to 4 of
+ * fills hatched, as in forced colours). A series part carries
+ * .ds-chart__series and .ds-chart__series--s2, --s3, --s4 or --other (the
+ * neutral, after four), or a tone (.ds-tone-*, its own class, always
+ * with its name); .ds-chart__series--dim while the keyboard picks another.
+ * Lines of series 2 to 4 are dashed (--ds-chart-dash-2 ... -4) and every
+ * series has its marker shape (circle, square, triangle, diamond), so
+ * series stay apart without colour. Bars are value bars: a rect clipped
+ * from --ds-chart-from to --ds-share (registered numbers the module sets),
+ * so the round data end keeps its shape and a new value glides on
+ * --ds-ease-value over --ds-dur-glide; stacked segments keep a seam and
+ * only the outer end rounds (.ds-chart__bar--inner, --on, --down).
+ * Lines and areas morph their path in the module (D14), on the same
+ * curve and time.
+ *
+ * Options, computed in .ds-chart and its frame: size steps the plot
+ * height (40px per step; radial 24px; a sparkline stays 32px), the widest
+ * bar (4px), the marker (2px) and the legend key; density steps the plot
+ * height (16px per step; radial 8px) and the legend's gaps; shape
+ * multiplies the radius of a bar's data end, a legend key, the tooltip;
+ * .ds-touch makes every legend key at least --ds-touch-target high. The
+ * frame is container-driven: under 480px of chart width the plot is 3/4
+ * of its height and a donut's legend goes under it (beside it from 480px,
+ * shrinking to 10rem before it would wrap).
+ *
+ *   <span class="ds-meter" role="meter" aria-label="Disk" aria-valuemin="0" aria-valuemax="100"
+ *         aria-valuenow="78" aria-valuetext="78% used"></span>     (the page sets --ds-share: .78)
+ *
+ *   <figure class="ds-columns">
+ *     <figcaption class="ds-sr">Devices that checked in, per day</figcaption>
+ *     <ol class="ds-columns__plot">
+ *       <li class="ds-columns__col">                               (the page sets --ds-share on each column)
+ *         <span class="ds-columns__value">42</span>
+ *         <span class="ds-columns__fill" aria-hidden="true"></span>
+ *         <span class="ds-columns__label">Mon</span>
+ *       </li>
+ *     </ol>
+ *   </figure>
+ *
+ *   <ul class="ds-legend"><li><span class="ds-legend__key"></span>Opened</li><li><span class="ds-legend__key ds-legend__key--s2"></span>Closed</li></ul>
+ *
+ * Share: --ds-share (0 ... 1, registered in tokens.css), set by the page
+ * on the mark (the meter, each column) with style.setProperty. A fill is
+ * clipped at the share, never scaled, so its round data end keeps its
+ * shape; a later value glides there on --ds-ease-value over
+ * --ds-dur-glide, and a column's value rides on the top of its fill. The
+ * first render fills from zero with .ds-enter--fill
+ * (DS.motion.enterAll(marks, 'fill', { stagger: false })).
+ *
+ *   .ds-tone-*  on a .ds-meter, a .ds-columns__col or a .ds-legend__key, on
+ *               the mark itself (an inherited tone would recolour a whole
+ *               chart in a tinted region), always with words next to it:
+ *               neutral, warning and error take their chart roles, the
+ *               others the tone
+ *   .ds-columns__col--s2, --s3, --s4           a column of series 2 to 4
+ *   .ds-columns--mini                          a 32px sparkline of columns:
+ *     no labels, the columns aria-hidden, the figure role="img" with a
+ *     summary in its aria-label; .ds-columns__col--highlight takes
+ *     --ds-chart-1, the rest --ds-chart-neutral; spans instead of the
+ *     figure and the list inside a button or a link
+ *   .ds-columns--grouped                       groups of columns side by
+ *     side: .ds-columns__groups > .ds-columns__group (a .ds-columns__plot
+ *     and a .ds-columns__label), columns 2px apart, the current group
+ *     (.ds-columns__group--current, with a .ds-sr word) on a band of
+ *     --ds-surface-low with its label in the label weight; put it in a
+ *     .ds-scroll-x when it may be wider than its card
+ *   :is(button, a).ds-columns__col             a column that opens its
+ *     category: the state layer, an inset ring, the ripple, no morph
+ *   .ds-legend__key--s2, --s3, --s4            a key of series 2 to 4
+ *
+ * Options (src/core/options.css, docs/options.md), on the mark or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: a meter's height 1px per step, the plot of
+ *             the columns 24px per step, a legend key 2px per step; the
+ *             type stays the meta font; not a sparkline (32px, it lines up
+ *             with a figure)
+ *   density   .ds-density-*: the plot of the columns 12px per step; not a
+ *             meter, which is thin already, and not the type
+ *   shape     .ds-shape-*: multiplies the radius of a meter, of a column's
+ *             data end and of a legend key
+ *   touch     .ds-touch: a column that opens is at least --ds-touch-target
+ *             high (its width comes from the chart's)
+ *
+ * Every chart has a text equivalent: its caption plus a table or a
+ * key-value list, or the values as text. In forced colours the fills
+ * take CanvasText, series 2 to 4 a hatching of their own (45, 135 and 90
+ * degrees), as do the legend keys; a meter's track becomes Canvas with a
+ * CanvasText outline. Printed, the fills keep their colours.
+ *
+ * DS.chart in forced colours: lines, markers and fills in CanvasText,
+ * series 2 to 4 dashed and hatched (45, 135 and 90 degrees), gridlines
+ * GrayText, the tooltip and the active slice with a CanvasText edge, the
+ * legend keys Highlight while they show (an on/off toggle).
+ * -webkit-print-color-adjust stays: Chromium took the plain name late.
+ *
+ * Hooks: --ds-meter-height (4px), --ds-meter-track (--ds-chart-track),
+ * --ds-meter-color (--ds-chart-1), --ds-columns-height (120px),
+ * --ds-columns-radius (--ds-radius-xs), --ds-columns-group-min (56px),
+ * --ds-chart-color (the series of a column or a legend key, set by the
+ * modifiers), --ds-legend-key-size (12px), --ds-chart-forced-ink (CanvasText);
+ * DS.chart: --ds-chart-height (240px), --ds-chart-radial-height (200px),
+ * --ds-chart-gauge-height (160px), --ds-chart-spark-height (32px),
+ * --ds-chart-bar (24px), --ds-chart-radius (--ds-radius-xs),
+ * --ds-chart-stroke (2px), --ds-chart-marker (8px), --ds-chart-grid
+ * (--ds-line), --ds-chart-area-opacity (--ds-state-dragged),
+ * --ds-chart-stack-opacity (--ds-state-stale), --ds-chart-dash-2 ... -4.
+ *
+ * Progressive:
+ * - content-visibility: auto (the table a screen reader reads while the
+ *   chart shows is not laid out, so a long series stays fast; it stays in
+ *   the accessibility tree): without it the hidden table is laid out.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+/* The start of a value bar of DS.chart (0 ... 1, the share it rests on in
+   a stack), written by the module; registered so it glides with
+   --ds-share. */
+@property --ds-chart-from {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@layer ds.components.chart {
+  /* ── Meter ── */
+
+  .ds-meter {
+    --_h: calc(var(--ds-meter-height, 4px) + var(--ds-size-step, 0) * 1px);
+    --_radius: min(calc(min(var(--ds-radius-action), calc(var(--_h) / 2)) * var(--ds-shape, 1)), calc(var(--_h) / 2));
+    --_fill: var(--ds-meter-color, var(--ds-chart-1));
+    display: block;
+    position: relative;
+    height: var(--_h);
+    border-radius: var(--_radius);
+    background: var(--ds-meter-track, var(--ds-chart-track));
+    transition: --ds-share var(--ds-dur-glide) var(--ds-ease-value);
+  }
+
+  .ds-meter::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--_fill);
+    clip-path: inset(0 calc((1 - var(--ds-share)) * 100%) 0 0 round var(--_radius));
+  }
+
+  /* The tone of the meter itself; it beats a --ds-meter-color of the theme,
+     as the meaning goes first. */
+  .ds-meter:is(.ds-tone-primary, .ds-tone-info, .ds-tone-success) {
+    --_fill: var(--ds-tone);
+  }
+
+  .ds-meter.ds-tone-neutral {
+    --_fill: var(--ds-chart-neutral);
+  }
+
+  .ds-meter.ds-tone-warning {
+    --_fill: var(--ds-chart-warning);
+  }
+
+  .ds-meter.ds-tone-error {
+    --_fill: var(--ds-chart-error);
+  }
+
+  /* ── Columns ── */
+
+  /* No top margin of their own: inside a card the card's rhythm spaces
+     them (zero weight). */
+  :where(.ds-columns, .ds-legend) {
+    margin-top: 0;
+  }
+
+  /* Block also as a <span>: a sparkline inside a tile that is a button. */
+  .ds-columns {
+    display: block;
+    min-width: 0;
+    margin-inline: 0;
+    margin-bottom: 0;
+  }
+
+  .ds-columns__plot,
+  .ds-columns__groups {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: var(--ds-space-3);
+    margin: 0;
+    /* Room above a full column for its value. */
+    padding: var(--ds-space-6) 0 0;
+    list-style: none;
+  }
+
+  /* An interactive column sits in a plain <li>, which holds its place. */
+  .ds-columns__plot > li:not(.ds-columns__col) {
+    display: grid;
+    min-width: 0;
+  }
+
+  .ds-columns__col {
+    --_plot: calc(var(--ds-columns-height, 120px) + var(--ds-size-step, 0) * 24px + var(--ds-density, 0) * 12px);
+    position: relative;
+    display: grid;
+    grid-template-rows: var(--_plot) auto;
+    justify-items: center;
+    row-gap: var(--ds-space-2);
+    min-width: 0;
+    transition: --ds-share var(--ds-dur-glide) var(--ds-ease-value);
+  }
+
+  .ds-columns__fill,
+  .ds-columns__value {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .ds-columns__fill {
+    width: 100%;
+    max-width: var(--ds-space-10);
+    height: 100%;
+    background: var(--ds-chart-color, var(--ds-chart-1));
+    --_radius: calc(var(--ds-columns-radius, var(--ds-radius-xs)) * var(--ds-shape, 1));
+    clip-path: inset(calc((1 - var(--ds-share)) * 100%) 0 0 0 round var(--_radius) var(--_radius) 0 0);
+  }
+
+  /* The value rides on the top of the fill: only the registered share
+     transitions, the position follows it. */
+  .ds-columns__value {
+    align-self: end;
+    translate: 0 calc(-1 * var(--ds-share) * var(--_plot) - var(--ds-space-1));
+    color: var(--ds-text);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .ds-columns__label {
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-columns__col--s2 {
+    --ds-chart-color: var(--ds-chart-2);
+  }
+
+  .ds-columns__col--s3 {
+    --ds-chart-color: var(--ds-chart-3);
+  }
+
+  .ds-columns__col--s4 {
+    --ds-chart-color: var(--ds-chart-4);
+  }
+
+  /* A sparkline of columns: no labels or values, one highlighted column. */
+  .ds-columns--mini .ds-columns__plot {
+    gap: 2px;
+    padding: 0;
+  }
+
+  .ds-columns--mini .ds-columns__col {
+    --ds-chart-color: var(--ds-chart-neutral);
+    --_plot: var(--ds-space-8);
+    grid-template-rows: var(--_plot);
+    row-gap: 0;
+  }
+
+  .ds-columns--mini .ds-columns__col--highlight {
+    --ds-chart-color: var(--ds-chart-1);
+  }
+
+  .ds-columns--mini :is(.ds-columns__value, .ds-columns__label) {
+    display: none;
+  }
+
+  .ds-columns--mini .ds-columns__fill {
+    max-width: none;
+  }
+
+  /* After the sparkline's neutral: a tone holds in a sparkline too. */
+  .ds-columns__col:is(.ds-tone-primary, .ds-tone-info, .ds-tone-success) {
+    --ds-chart-color: var(--ds-tone);
+  }
+
+  .ds-columns__col.ds-tone-neutral {
+    --ds-chart-color: var(--ds-chart-neutral);
+  }
+
+  .ds-columns__col.ds-tone-warning {
+    --ds-chart-color: var(--ds-chart-warning);
+  }
+
+  .ds-columns__col.ds-tone-error {
+    --ds-chart-color: var(--ds-chart-error);
+  }
+
+  /* Groups of columns side by side, the label under each group. */
+  .ds-columns__group {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto auto;
+    justify-items: center;
+    row-gap: var(--ds-space-2);
+    min-width: var(--ds-columns-group-min, 56px);
+    padding-inline: var(--ds-space-1);
+  }
+
+  .ds-columns--grouped .ds-columns__groups {
+    grid-auto-columns: minmax(var(--ds-columns-group-min, 56px), 1fr);
+    gap: var(--ds-space-2);
+  }
+
+  .ds-columns__group > .ds-columns__plot {
+    gap: 2px;
+    justify-self: stretch;
+    padding: 0;
+  }
+
+  .ds-columns__group .ds-columns__col {
+    grid-template-rows: var(--_plot);
+    row-gap: 0;
+  }
+
+  .ds-columns__group .ds-columns__value {
+    display: none;
+  }
+
+  .ds-columns__group--current {
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-surface-low);
+  }
+
+  .ds-columns__group--current > .ds-columns__label {
+    color: var(--ds-text);
+    font-weight: var(--ds-weight-label);
+  }
+
+  /* A column that opens its category: a state layer over the column,
+     an inset ring, the ripple, no morph. */
+  :is(button, a).ds-columns__col {
+    isolation: isolate;
+    width: 100%;
+    min-height: var(--ds-target-min, 0px);
+    padding: 0 0 var(--ds-space-1);
+    border: 0;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    outline-offset: 0;
+    transition:
+      --ds-share var(--ds-dur-glide) var(--ds-ease-value),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  :is(button, a).ds-columns__col::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    :is(button, a).ds-columns__col:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  :is(button, a).ds-columns__col:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  /* Press-in in --ds-dur-micro (.ds-pressed: js/ripple.js holds it). */
+  :is(button, a).ds-columns__col:active::before,
+  :is(button, a).ds-columns__col.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  :is(button, a).ds-columns__col:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  /* ── Legend ── */
+
+  .ds-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ds-space-1) var(--ds-space-4);
+    margin-inline: 0;
+    margin-bottom: 0;
+    padding: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    list-style: none;
+  }
+
+  .ds-legend > li {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+  }
+
+  .ds-legend__key {
+    --_size: calc(var(--ds-legend-key-size, 12px) + var(--ds-size-step, 0) * 2px);
+    flex: none;
+    width: var(--_size);
+    height: var(--_size);
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-chart-color, var(--ds-chart-1));
+  }
+
+  .ds-legend__key--s2 {
+    --ds-chart-color: var(--ds-chart-2);
+  }
+
+  .ds-legend__key--s3 {
+    --ds-chart-color: var(--ds-chart-3);
+  }
+
+  .ds-legend__key--s4 {
+    --ds-chart-color: var(--ds-chart-4);
+  }
+
+  /* The tone of the key itself. */
+  .ds-legend__key:is(.ds-tone-primary, .ds-tone-info, .ds-tone-success) {
+    --ds-chart-color: var(--ds-tone);
+  }
+
+  .ds-legend__key.ds-tone-neutral {
+    --ds-chart-color: var(--ds-chart-neutral);
+  }
+
+  .ds-legend__key.ds-tone-warning {
+    --ds-chart-color: var(--ds-chart-warning);
+  }
+
+  .ds-legend__key.ds-tone-error {
+    --ds-chart-color: var(--ds-chart-error);
+  }
+
+  /* ── DS.chart ── */
+
+  /* The figure: the caption and the tools on one line, then the legend,
+     the frame and the table, each a line of its own. The lengths the
+     module lays out with are computed here from the options (and read
+     back through the probe). */
+  .ds-chart {
+    position: relative;
+    --_bar: calc(var(--ds-chart-bar, 24px) + var(--ds-size-step, 0) * 4px);
+    --_marker: calc(var(--ds-chart-marker, 8px) + var(--ds-size-step, 0) * 2px);
+    --_stroke: var(--ds-chart-stroke, 2px);
+    --_seam: 2px;
+    --_gap: var(--ds-space-2);
+    --_radius: calc(var(--ds-chart-radius, var(--ds-radius-xs)) * var(--ds-shape, 1));
+    container: ds-chart / inline-size;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px) var(--ds-space-2);
+    min-width: 0;
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-chart > * {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  /* The tools stand at the end of the first line, over the caption's (or
+     the legend's) room for them. */
+  .ds-chart > figcaption {
+    display: flex;
+    align-items: center;
+    min-height: var(--ds-space-8);
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+  }
+
+  .ds-chart:has(> .ds-chart__tools:not([hidden])) > figcaption,
+  .ds-chart:not(:has(> figcaption)):has(> .ds-chart__tools:not([hidden])) > .ds-chart__legend {
+    padding-inline-end: var(--ds-space-10);
+  }
+
+  .ds-chart__tools {
+    position: absolute;
+    top: 0;
+    inset-inline-end: 0;
+    display: flex;
+    gap: var(--ds-space-1);
+  }
+
+  :is(.ds-chart__tools, .ds-chart__legend, .ds-chart__centre)[hidden] {
+    display: none;
+  }
+
+  /* The table view: the plot and its legend give way to the table. While
+     the chart shows, the tables (the module's, or the page's own) stay for
+     screen readers only. */
+  .ds-chart[data-state="table"] > :is(.ds-chart__frame, .ds-chart__legend) {
+    display: none;
+  }
+
+  /* flex and clip-path as well: a wrapper of the page's (a .ds-table-wrap,
+     in a later layer) may keep its own position and overflow. Not laid out
+     (content-visibility), yet read: a table of 10,000 rows would take
+     seconds of layout on every new value. */
+  .ds-chart[data-state="chart"] > :not(figcaption, .ds-chart__tools, .ds-chart__legend, .ds-chart__frame) {
+    content-visibility: auto;
+    flex: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ds-chart__table {
+    position: relative;
+    overflow-x: auto;
+  }
+
+  .ds-chart__table-caption {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* ── Legend: one toggle per series ── */
+
+  .ds-chart__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 calc(var(--ds-space-1) + var(--ds-density, 0) * 1px);
+    margin: 0;
+    margin-inline-start: calc(-1 * var(--ds-space-2));
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-chart__key {
+    --_h: calc(28px + var(--ds-size-step, 0) * 4px + var(--ds-density, 0) * 2px);
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    --_half: calc(var(--_box) / 2);
+    --_key-radius: min(calc(min(var(--ds-radius-action), var(--_half)) * var(--ds-shape, 1)), var(--_half));
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-height: var(--_box);
+    padding: 0 var(--ds-space-2);
+    border: 0;
+    border-radius: var(--_key-radius);
+    background: transparent;
+    color: var(--ds-text);
+    font: var(--ds-font-meta);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-chart__key::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-chart__key:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  /* Press-in in --ds-dur-micro (.ds-pressed: js/ripple.js holds it). */
+  .ds-chart__key:active::before,
+  .ds-chart__key.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-chart__key:active,
+  .ds-chart__key.ds-pressed {
+    border-radius: min(calc(var(--ds-radius-action-pressed) * var(--ds-shape, 1)), var(--_key-radius));
+    transition: border-radius var(--ds-dur-micro) var(--ds-ease-out);
+  }
+
+  /* With DS.ripple.attach() the ripple brings the press; the flat layer
+     stays at its hover value. */
+  :where(.ds-ripples) .ds-chart__key:where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *)):is(:active, .ds-pressed)::before {
+    opacity: 0;
+  }
+
+  @media (hover: hover) {
+    :where(.ds-ripples) .ds-chart__key:where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *)):is(:active, .ds-pressed)::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-chart__key:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-chart__key:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  /* A hidden series: the name struck through, the key hollow (never by
+     colour alone; aria-pressed says it to screen readers). */
+  .ds-chart__key[aria-pressed="false"] {
+    color: var(--ds-text-2);
+  }
+
+  .ds-chart__key[aria-pressed="false"] .ds-chart__key-name {
+    text-decoration: line-through;
+  }
+
+  .ds-chart__key-value {
+    color: var(--ds-text-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-chart__swatch {
+    flex: none;
+    width: calc(20px + var(--ds-size-step, 0) * 2px);
+    height: calc(12px + var(--ds-size-step, 0) * 2px);
+    overflow: visible;
+  }
+
+  .ds-chart__swatch-fill {
+    fill: var(--_ink);
+    stroke: var(--_ink);
+    stroke-width: 1.5px;
+    rx: calc(var(--ds-radius-xs) / 2 * var(--ds-shape, 1));
+    transition: fill var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-chart__key[aria-pressed="false"] .ds-chart__swatch-fill {
+    fill: transparent;
+  }
+
+  .ds-chart__key[aria-pressed="false"] .ds-chart__swatch-line {
+    stroke: var(--ds-text-2);
+  }
+
+  .ds-chart__key[aria-pressed="false"] .ds-chart__swatch-marker {
+    fill: transparent;
+    stroke: var(--ds-text-2);
+    stroke-width: 1.5px;
+  }
+
+  .ds-chart__swatch-marker {
+    fill: var(--_ink);
+  }
+
+  /* ── Series colours, in their fixed order ── */
+
+  .ds-chart__series {
+    --_ink: var(--ds-chart-1);
+    --_dash: none;
+  }
+
+  .ds-chart__series--s2 {
+    --_ink: var(--ds-chart-2);
+    --_dash: var(--ds-chart-dash-2, 8px 4px);
+    --_pattern: var(--ds-chart-pattern-2, var(--_ink));
+  }
+
+  .ds-chart__series--s3 {
+    --_ink: var(--ds-chart-3);
+    --_dash: var(--ds-chart-dash-3, 2px 4px);
+    --_pattern: var(--ds-chart-pattern-3, var(--_ink));
+  }
+
+  .ds-chart__series--s4 {
+    --_ink: var(--ds-chart-4);
+    --_dash: var(--ds-chart-dash-4, 12px 4px 2px 4px);
+    --_pattern: var(--ds-chart-pattern-4, var(--_ink));
+  }
+
+  .ds-chart__series--other {
+    --_ink: var(--ds-chart-neutral);
+  }
+
+  /* A tone of the series (or zone, or rule) itself; always with its name. */
+  :is(.ds-chart__series, .ds-chart__zone, .ds-chart__rule, .ds-chart__zone-arc, .ds-chart__value-arc, .ds-chart__row):is(.ds-tone-primary, .ds-tone-info, .ds-tone-success) {
+    --_ink: var(--ds-tone);
+  }
+
+  :is(.ds-chart__series, .ds-chart__zone, .ds-chart__rule, .ds-chart__zone-arc, .ds-chart__value-arc, .ds-chart__row).ds-tone-neutral {
+    --_ink: var(--ds-chart-neutral);
+  }
+
+  :is(.ds-chart__series, .ds-chart__zone, .ds-chart__rule, .ds-chart__zone-arc, .ds-chart__value-arc, .ds-chart__row).ds-tone-warning {
+    --_ink: var(--ds-chart-warning);
+  }
+
+  :is(.ds-chart__series, .ds-chart__zone, .ds-chart__rule, .ds-chart__zone-arc, .ds-chart__value-arc, .ds-chart__row).ds-tone-error {
+    --_ink: var(--ds-chart-error);
+  }
+
+  /* ── The frame and the plot ── */
+
+  .ds-chart__frame {
+    --_h: calc(var(--ds-chart-height, 240px) + var(--ds-size-step, 0) * 40px + var(--ds-density, 0) * 16px);
+    position: relative;
+    height: var(--_h);
+    border-radius: var(--_radius);
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-chart__frame:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  :is(.ds-chart--donut, .ds-chart--pie, .ds-chart--ring) > .ds-chart__frame {
+    --_h: calc(var(--ds-chart-radial-height, 200px) + var(--ds-size-step, 0) * 24px + var(--ds-density, 0) * 8px);
+  }
+
+  .ds-chart--gauge > .ds-chart__frame {
+    --_h: calc(var(--ds-chart-gauge-height, 160px) + var(--ds-size-step, 0) * 24px + var(--ds-density, 0) * 8px);
+  }
+
+  .ds-chart--bargauge > .ds-chart__frame {
+    height: auto;
+  }
+
+  /* A sparkline lines up with a figure: 32px, no tools, no legend. */
+  .ds-chart--sparkline {
+    display: block;
+  }
+
+  .ds-chart--sparkline > .ds-chart__frame {
+    --_h: var(--ds-chart-spark-height, 32px);
+  }
+
+  /* The plot is drawn in SVG coordinates, left to right in every
+     direction (the tooltip and the centre figure follow them). */
+  .ds-chart__svg {
+    display: block;
+    direction: ltr;
+    overflow: visible;
+    font: var(--ds-font-meta);
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Read back by the module: the gap, the widest bar, the seam, the marker. */
+  .ds-chart__probe {
+    position: absolute;
+    top: 0;
+    inset-inline-start: 0;
+    inline-size: var(--_bar);
+    block-size: var(--_marker);
+    padding-block-start: var(--_gap);
+    padding-inline-start: var(--_seam);
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .ds-chart__hint {
+    display: none;
+  }
+
+  /* A chart without a value says so in its frame, without empty axes. */
+  .ds-chart__empty {
+    position: absolute;
+    inset: 0;
+    display: none;
+    place-items: center;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+
+  .ds-chart--empty .ds-chart__empty {
+    display: grid;
+  }
+
+  .ds-chart--empty .ds-chart__svg {
+    visibility: hidden;
+  }
+
+  /* Narrow charts (container-driven): a lower plot. */
+  @container ds-chart (width < 480px) {
+    .ds-chart:not(.ds-chart--sparkline, .ds-chart--donut, .ds-chart--pie, .ds-chart--ring, .ds-chart--gauge) > .ds-chart__frame {
+      height: calc(var(--_h) * 0.75);
+    }
+
+    .ds-chart__tick--category {
+      font: var(--ds-font-caption);
+    }
+  }
+
+  /* Wide donuts, pies and rings: the legend beside the plot, a column of keys with their shares. */
+  @container ds-chart (width >= 480px) {
+    :is(.ds-chart--donut, .ds-chart--pie, .ds-chart--ring) > .ds-chart__frame {
+      flex: 0 0 var(--_h);
+      order: 1;
+    }
+
+    /* From no basis up to one and a half plots wide (the frame's height,
+       computed as the frame does), so a share stays next to its name in a
+       wide card. With a basis of zero the line breaks only below the
+       legend's minimum: it shrinks beside the plot first (a half-width
+       card of 530px keeps it there). */
+    :is(.ds-chart--donut, .ds-chart--pie, .ds-chart--ring) > .ds-chart__legend {
+      flex: 1 1 0;
+      min-inline-size: 10rem;
+      max-inline-size: calc((var(--ds-chart-height, 240px) + var(--ds-size-step, 0) * 40px + var(--ds-density, 0) * 16px) * 1.5);
+      flex-direction: column;
+      order: 2;
+      margin-inline-start: var(--ds-space-6);
+      padding-inline-end: 0;
+    }
+
+    :is(.ds-chart--donut, .ds-chart--pie, .ds-chart--ring) .ds-chart__key {
+      width: 100%;
+    }
+
+    :is(.ds-chart--donut, .ds-chart--pie, .ds-chart--ring) .ds-chart__key-value {
+      margin-inline-start: auto;
+    }
+  }
+
+  .ds-chart__gridline {
+    stroke: var(--ds-chart-grid, var(--ds-line));
+    stroke-width: 1px;
+    shape-rendering: crispEdges;
+  }
+
+  .ds-chart__baseline {
+    stroke: var(--ds-line-2);
+    stroke-width: 1px;
+    shape-rendering: crispEdges;
+  }
+
+  .ds-chart__tick {
+    fill: var(--ds-text-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-chart__axis-title {
+    fill: var(--ds-text-2);
+  }
+
+  /* The hover band of columns, and the crosshair of lines. */
+  .ds-chart__band {
+    fill: currentColor;
+    opacity: 0;
+    transition: opacity var(--ds-dur-instant) var(--ds-ease-in-out);
+  }
+
+  .ds-chart__band--on {
+    opacity: var(--ds-state-hover);
+    transition-duration: var(--ds-dur-fast);
+  }
+
+  .ds-chart__cursor {
+    stroke: var(--ds-outline);
+    stroke-width: 1px;
+    shape-rendering: crispEdges;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-instant) var(--ds-ease-in-out);
+  }
+
+  .ds-chart__cursor--on {
+    opacity: 1;
+    transition-duration: var(--ds-dur-fast);
+  }
+
+  /* ── Marks ── */
+
+  /* A value bar: clipped from --ds-chart-from to --ds-share, never scaled,
+     so its round data end keeps its shape while the share glides. A
+     segment that rests on another leaves the seam; only the outer end of
+     a stack rounds. */
+  .ds-chart__bar {
+    --_r: var(--_radius);
+    --_base: 0px;
+    fill: var(--_pattern-fill, var(--_ink));
+    clip-path: inset(calc((1 - var(--ds-share)) * 100%) 0 calc(var(--ds-chart-from) * 100% + var(--_base)) 0 round var(--_r) var(--_r) 0 0);
+    transition:
+      --ds-share var(--ds-dur-glide) var(--ds-ease-value),
+      --ds-chart-from var(--ds-dur-glide) var(--ds-ease-value),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-chart__bar--down {
+    clip-path: inset(calc((1 - var(--ds-share)) * 100% + var(--_base)) 0 calc(var(--ds-chart-from) * 100%) 0 round 0 0 var(--_r) var(--_r));
+  }
+
+  .ds-chart--bar .ds-chart__bar {
+    clip-path: inset(0 calc((1 - var(--ds-share)) * 100%) 0 calc(var(--ds-chart-from) * 100% + var(--_base)) round 0 var(--_r) var(--_r) 0);
+  }
+
+  .ds-chart--bar .ds-chart__bar--down {
+    clip-path: inset(0 calc((1 - var(--ds-share)) * 100% + var(--_base)) 0 calc(var(--ds-chart-from) * 100%) round var(--_r) 0 0 var(--_r));
+  }
+
+  .ds-chart__bar--inner {
+    --_r: 0px;
+  }
+
+  .ds-chart__bar--on {
+    --_base: var(--_seam);
+  }
+
+  .ds-chart--patterns .ds-chart__bar,
+  .ds-chart--patterns .ds-chart__slice {
+    --_pattern-fill: var(--_pattern);
+  }
+
+  .ds-chart__pattern-ground {
+    fill: var(--_ink);
+  }
+
+  .ds-chart__pattern-ink {
+    fill: var(--ds-surface);
+    opacity: var(--ds-state-stale);
+  }
+
+  .ds-chart__line {
+    fill: none;
+    stroke: var(--_ink);
+    stroke-width: var(--_stroke);
+    stroke-dasharray: var(--_dash);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-chart__area {
+    fill: var(--_ink);
+    fill-opacity: var(--ds-chart-area-opacity, var(--ds-state-dragged));
+    stroke: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-chart--stacked .ds-chart__area {
+    fill-opacity: var(--ds-chart-stack-opacity, var(--ds-state-stale));
+  }
+
+  .ds-chart--patterns .ds-chart__area.ds-chart__series:is(.ds-chart__series--s2, .ds-chart__series--s3, .ds-chart__series--s4) {
+    fill: var(--_pattern);
+  }
+
+  /* Markers and the cursor's dots: the series shape with a ring of the
+     surface, so they read where they cross a line. */
+  .ds-chart__marker,
+  .ds-chart__dot {
+    fill: var(--_ink);
+    stroke: var(--ds-surface);
+    stroke-width: 2px;
+    paint-order: stroke;
+  }
+
+  .ds-chart__series--dim {
+    opacity: var(--ds-state-stale);
+  }
+
+  .ds-chart__track {
+    fill: var(--ds-chart-track);
+  }
+
+  .ds-chart__slice {
+    fill: var(--_pattern-fill, var(--_ink));
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-chart__lines:has(.ds-chart__slice--active) > .ds-chart__slice:not(.ds-chart__slice--active) {
+    opacity: var(--ds-state-stale);
+  }
+
+  .ds-chart__value-arc {
+    --_ink: var(--ds-chart-1);
+  }
+
+  .ds-chart__zone-arc {
+    --_ink: var(--ds-chart-neutral);
+    fill: var(--_ink);
+  }
+
+  /* Thresholds and annotations: a line or a wash, with its word. */
+  .ds-chart__rule {
+    --_ink: var(--ds-outline);
+    stroke: var(--_ink);
+    stroke-width: 1px;
+    stroke-dasharray: 4px 4px;
+    shape-rendering: crispEdges;
+  }
+
+  .ds-chart__zone {
+    --_ink: var(--ds-chart-neutral);
+    fill: var(--_ink);
+    fill-opacity: var(--ds-state-hover);
+  }
+
+  .ds-chart__rule-label {
+    fill: var(--ds-text-2);
+    paint-order: stroke;
+    stroke: var(--ds-surface);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
+
+  /* ── The centre figure of a donut, ring or gauge ── */
+
+  .ds-chart__centre {
+    position: absolute;
+    top: var(--ds-chart-cy, 50%);
+    left: var(--ds-chart-cx, 50%);
+    display: grid;
+    justify-items: center;
+    max-width: max(var(--ds-space-12), calc(var(--ds-chart-hole, 0px) * 0.8));
+    translate: -50% -50%;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .ds-chart__figure {
+    color: var(--ds-text);
+    font: var(--ds-font-headline);
+    white-space: nowrap;
+  }
+
+  .ds-chart__caption {
+    overflow: hidden;
+    max-width: 100%;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-chart--pie .ds-chart__centre {
+    display: none;
+  }
+
+  .ds-chart--gauge .ds-chart__centre {
+    translate: -50% -40%;
+  }
+
+  /* ── The tooltip: follows the cursor inside the frame ── */
+
+  .ds-chart__tip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: var(--ds-z-raised);
+    display: grid;
+    gap: var(--ds-space-1);
+    min-width: calc(var(--ds-space-12) * 2);
+    padding: var(--ds-space-2) var(--ds-space-3);
+    border: 1px solid transparent;
+    border-radius: calc(var(--ds-radius-sm) * var(--ds-shape, 1));
+    background: var(--ds-surface-popover);
+    box-shadow: var(--ds-elev-popover);
+    color: var(--ds-text);
+    font: var(--ds-font-meta);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in-out),
+      visibility 0s linear var(--ds-dur-instant);
+    transition-behavior: allow-discrete;
+  }
+
+  .ds-chart__tip[data-state="open"] {
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      visibility 0s;
+  }
+
+  .ds-chart__tip-title {
+    color: var(--ds-text-2);
+  }
+
+  .ds-chart__tip-row {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: var(--ds-space-2);
+    white-space: nowrap;
+  }
+
+  .ds-chart__tip-key,
+  .ds-chart__tip-gap {
+    width: 16px;
+    height: 4px;
+    overflow: visible;
+  }
+
+  .ds-chart__tip-key .ds-chart__swatch-line {
+    fill: none;
+    stroke: var(--_ink);
+    stroke-width: 2px;
+    stroke-dasharray: var(--_dash);
+    stroke-linecap: round;
+  }
+
+  .ds-chart__tip-key-bar {
+    fill: none;
+    stroke: var(--_ink);
+    stroke-width: 4px;
+  }
+
+  .ds-chart__tip-value {
+    font-weight: var(--ds-weight-label);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  .ds-chart__tip-name {
+    overflow: hidden;
+    max-width: 16em;
+    color: var(--ds-text-2);
+    text-overflow: ellipsis;
+  }
+
+  /* The swatch line of the legend: the series dash, a short sample. */
+  .ds-chart__swatch-line {
+    fill: none;
+    stroke: var(--_ink);
+    stroke-width: 2px;
+    stroke-dasharray: var(--_dash);
+  }
+
+  /* ── Bar gauge: one labelled meter per row ── */
+
+  .ds-chart__rows {
+    display: grid;
+    gap: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-chart__row {
+    --_ink: var(--ds-chart-1);
+    display: grid;
+    gap: var(--ds-space-1);
+  }
+
+  .ds-chart__row-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-chart__row-label {
+    overflow: hidden;
+    color: var(--ds-text);
+    font: var(--ds-font-body);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-chart__row-status {
+    color: var(--ds-text-2);
+  }
+
+  .ds-chart__row-value {
+    margin-inline-start: auto;
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-chart__row-bar {
+    --_h: calc(8px + var(--ds-size-step, 0) * 2px);
+    --_row-radius: min(calc(min(var(--ds-radius-action), calc(var(--_h) / 2)) * var(--ds-shape, 1)), calc(var(--_h) / 2));
+    position: relative;
+    display: block;
+    height: var(--_h);
+    border-radius: var(--_row-radius);
+    background: var(--ds-chart-track);
+    transition: --ds-share var(--ds-dur-glide) var(--ds-ease-value);
+  }
+
+  .ds-chart__row-bar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--_ink);
+    clip-path: inset(0 calc((1 - var(--ds-share)) * 100%) 0 0 round var(--_row-radius));
+  }
+
+  /* Forced colours: the marks in CanvasText, series 2 to 4 dashed and
+     hatched, the grid in GrayText, the shown legend keys Highlight. */
+  @media (forced-colors: active) {
+    .ds-chart__svg,
+    .ds-chart__swatch,
+    .ds-chart__tip-key,
+    .ds-chart__row-bar {
+      forced-color-adjust: none;
+    }
+
+    .ds-chart__series,
+    .ds-chart__row,
+    .ds-chart__value-arc,
+    .ds-chart__zone-arc,
+    .ds-chart__zone,
+    .ds-chart__rule {
+      --_ink: CanvasText;
+    }
+
+    .ds-chart__bar,
+    .ds-chart__slice {
+      --_pattern-fill: var(--_pattern);
+    }
+
+    .ds-chart__series--other {
+      --_ink: GrayText;
+    }
+
+    .ds-chart__pattern-ground {
+      fill: Canvas;
+    }
+
+    .ds-chart__pattern-ink {
+      fill: CanvasText;
+      opacity: 1;
+    }
+
+    .ds-chart__area,
+    .ds-chart--stacked .ds-chart__area {
+      fill-opacity: var(--ds-state-hover);
+    }
+
+    .ds-chart__gridline,
+    .ds-chart__cursor {
+      stroke: GrayText;
+    }
+
+    .ds-chart__baseline {
+      stroke: CanvasText;
+    }
+
+    .ds-chart__tick,
+    .ds-chart__axis-title,
+    .ds-chart__rule-label {
+      fill: CanvasText;
+    }
+
+    .ds-chart__rule-label {
+      stroke: Canvas;
+    }
+
+    .ds-chart__marker,
+    .ds-chart__dot {
+      stroke: Canvas;
+    }
+
+    .ds-chart__band {
+      fill: Highlight;
+    }
+
+    .ds-chart__track,
+    .ds-chart__row-bar {
+      fill: Canvas;
+      background: Canvas;
+      stroke: CanvasText;
+      outline: 1px solid CanvasText;
+    }
+
+    .ds-chart__slice--active {
+      stroke: Highlight;
+      stroke-width: 3px;
+    }
+
+    .ds-chart__tip {
+      border-color: CanvasText;
+    }
+
+    .ds-chart__key[aria-pressed="true"] {
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+    }
+
+    .ds-chart__key[aria-pressed="true"] .ds-chart__swatch {
+      --_ink: HighlightText;
+      --_pattern-fill: HighlightText;
+    }
+
+    .ds-chart__key[aria-pressed="true"] .ds-chart__swatch-marker {
+      stroke: Highlight;
+    }
+
+    .ds-chart__key[aria-pressed="false"] {
+      color: CanvasText;
+    }
+
+    .ds-chart__row-bar::before {
+      background: CanvasText;
+    }
+  }
+
+  /* Forced colours drop the series colours: fills in the text colour,
+     series 2 to 4 hatched, so they stay apart without colour. */
+  @media (forced-colors: active) {
+    .ds-meter {
+      forced-color-adjust: none;
+      background: Canvas;
+      outline: 1px solid CanvasText;
+    }
+
+    .ds-meter::before {
+      background: CanvasText;
+    }
+
+    /* --ds-chart-forced-ink: a component that lays the marks on a system
+       fill of its own says which ink they take there. */
+    .ds-columns__fill,
+    .ds-legend__key {
+      forced-color-adjust: none;
+      background: var(--ds-chart-forced-ink, CanvasText);
+    }
+
+    .ds-legend__key--s2,
+    .ds-columns__col--s2 > .ds-columns__fill {
+      background: repeating-linear-gradient(45deg, CanvasText 0 2px, Canvas 2px 4px);
+    }
+
+    .ds-legend__key--s3,
+    .ds-columns__col--s3 > .ds-columns__fill {
+      background: repeating-linear-gradient(135deg, CanvasText 0 2px, Canvas 2px 4px);
+    }
+
+    .ds-legend__key--s4,
+    .ds-columns__col--s4 > .ds-columns__fill {
+      background: repeating-linear-gradient(90deg, CanvasText 0 2px, Canvas 2px 4px);
+    }
+
+    .ds-legend__key {
+      outline: 1px solid CanvasText;
+    }
+  }
+
+  /* Printed, the fills keep their colours (browsers drop backgrounds by
+     default, which would print empty charts). */
+  @media print {
+    .ds-meter,
+    .ds-meter::before,
+    .ds-columns__fill,
+    .ds-legend__key,
+    .ds-chart,
+    .ds-chart__row-bar,
+    .ds-chart__row-bar::before {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+}

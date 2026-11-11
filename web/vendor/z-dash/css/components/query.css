@@ -1,0 +1,136 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Query input (3.0): a search field whose filters become tokens
+ * ("status:open", "priority:>2"), with suggestions for keys, operators and
+ * values, saved queries and keyboard editing of the tokens. DS.query
+ * (query.js) parses, suggests and writes the tokens; the field box, the
+ * list and the tokens are Combobox's several-values box, its list and
+ * Chips' input chips, so a query lines up with every field.
+ *
+ *   <div class="ds-query" data-ds-query data-ds-query-store="tickets" data-ds-query-name="q" data-ds-query-keys='[...]'>
+ *     <label class="ds-field__label" for="q">Filter tickets</label>
+ *     <div class="ds-query__row">
+ *       <div class="ds-combo ds-combo--multi ds-query__box">
+ *         <span class="ds-query__icon" aria-hidden="true">(search 20)</span>
+ *         <span class="ds-query__tokens">                       (written by DS.query)
+ *           <button class="ds-chip ds-chip--input ds-query__token" type="button" tabindex="-1">
+ *             <span class="ds-chip__body"><span class="ds-chip__label"><span class="ds-sr">Remove filter Status is open</span>
+ *               <span class="ds-query__key">Status:</span><span class="ds-query__value">open</span></span>
+ *               (close 18 .ds-chip__trailing)</span></button></span>
+ *         <input class="ds-input ds-combo__input ds-query__input" id="q">
+ *         <button class="ds-combo__clear" type="button" hidden>(close 20)</button>
+ *         <div class="ds-combo__popup" hidden>
+ *           <div class="ds-combo__list"></div><p class="ds-combo__status" role="status"></p></div></div>
+ *       <button class="ds-btn ds-btn--icon ds-query__save" type="button">(bookmark 20)</button>
+ *     </div>
+ *   </div>
+ *
+ * The tokens' run (.ds-query__tokens) takes no box of its own (display:
+ * contents): the tokens wrap with the typing field in Combobox's box,
+ * which gets its room around chips here too. A token reads key, operator
+ * and value: the key at the label weight ("Status:" for "is"), any other
+ * operator a mark with room on both sides ("≠", ">", "≥", "<", "≤"), the
+ * value regular; a long
+ * value ends in an ellipsis (Chips' --ds-chip-max-width). An invalid
+ * token is an input chip in the error tone (.ds-tone-error on the chip)
+ * with the alert icon and the reason in its name, never colour alone. The
+ * search glyph leads the box; the save button sits beside it and lines up
+ * with its first row.
+ *
+ * Options (src/core/options.css, docs/options.md), on the query or any
+ * ancestor; each is computed where it is used:
+ *   size      .ds-xs ... .ds-xl: the box, the tokens, the list and the
+ *             save button step themselves (Combobox, Chips, Button); the
+ *             glyph's room steps 4px per size step here
+ *   density   .ds-density-*: the box, the tokens and the options (Combobox,
+ *             Chips); the room before the glyph and between the box and the
+ *             save button stay
+ *   shape     .ds-shape-*: the box, the tokens, the list and the button
+ *   touch     .ds-touch: box, tokens, options and the save button at least
+ *             --ds-touch-target (48px)
+ *   tone      none of its own: an invalid token takes the error tone with
+ *             its icon and words
+ *
+ * Hooks: none of its own; the box reads Form's and Combobox's
+ * (--ds-input-*, --ds-combo-*), the tokens Chips' (--ds-chip-*).
+ *
+ * Motion: the list's (Combobox: it grows out of the box on the spring,
+ * leaves with a fade); a token comes and goes at once, its press is the
+ * chip's.
+ *
+ * Forced colours: the box, list, tokens and button are their components';
+ * the glyph takes CanvasText (global.css).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.query {
+  .ds-query {
+    display: grid;
+    gap: var(--ds-space-1);
+    min-width: 0;
+  }
+
+  .ds-query__row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-query__box {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* The tokens wrap with the typing field as the box's own items. */
+  .ds-query__tokens {
+    display: contents;
+  }
+
+  /* Room around the chips, as Combobox gives its own chips. */
+  .ds-query__box:has(> .ds-query__tokens > .ds-chip) {
+    padding-block: calc(var(--ds-space-1) - 1px);
+  }
+
+  /* With tokens, the example query of the placeholder would read as one.
+     From the run's side (not as a child of a box that :has() a chip:
+     Chromium restyles every ancestor of each DOM change anywhere on the
+     page for that form, and lays the whole page out). */
+  .ds-query__box > .ds-query__tokens:has(> .ds-chip) ~ .ds-query__input::placeholder {
+    color: transparent;
+  }
+
+  .ds-query__icon {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: calc(var(--ds-space-8) + var(--ds-size-step, 0) * 4px);
+    margin-inline-end: calc(-1 * var(--ds-space-1));
+    color: var(--ds-text-2);
+    pointer-events: none;
+  }
+
+  .ds-query__key {
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-query__op {
+    padding-inline: var(--ds-space-1);
+  }
+
+  /* "Status: open": the colon is the key's, a space follows it. */
+  .ds-query__key + .ds-query__value {
+    margin-inline-start: var(--ds-space-1);
+  }
+
+  .ds-query__value {
+    overflow-wrap: anywhere;
+  }
+
+  .ds-query__save {
+    flex: none;
+  }
+}

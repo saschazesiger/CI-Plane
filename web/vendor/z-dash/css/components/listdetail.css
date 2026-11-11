@@ -1,0 +1,276 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * List-detail layout: a list, the detail of what is picked in it and,
+ * optionally, a sub-detail (a related record, a log line, a reply), as
+ * columns that fold to fewer as the layout narrows, down to one with a back
+ * button on a phone (js: DS.listdetail). Each column scrolls on its own.
+ *
+ *   <div class="ds-listdetail" data-ds-listdetail role="group" aria-label="Devices">
+ *     <section class="ds-listdetail__list" aria-labelledby="ld-list-title">
+ *       <header class="ds-listdetail__head"><h2 class="ds-listdetail__title" id="ld-list-title">Devices</h2></header>
+ *       <ul class="ds-list ds-list--interactive"> ... <a class="ds-list__action" href="#d42" data-ds-listdetail-show="detail">LAPTOP-0042</a> ... </ul>
+ *     </section>
+ *     <section class="ds-listdetail__detail" aria-labelledby="ld-detail-title">
+ *       <header class="ds-listdetail__head">
+ *         <button class="ds-btn ds-btn--icon ds-btn--quiet ds-listdetail__back" type="button" aria-label="Back to devices">(arrowLeft 20)</button>
+ *         <h2 class="ds-listdetail__title" id="ld-detail-title">LAPTOP-0042</h2>
+ *       </header>
+ *       <div class="ds-listdetail__body"> ... </div>
+ *     </section>
+ *     <section class="ds-listdetail__sub" aria-labelledby="ld-sub-title">
+ *       <header class="ds-listdetail__head">
+ *         <button class="ds-btn ds-btn--icon ds-btn--quiet ds-listdetail__back" type="button" aria-label="Back to LAPTOP-0042">(arrowLeft 20)</button>
+ *         <h2 class="ds-listdetail__title" id="ld-sub-title">Ticket #42</h2>
+ *         <button class="ds-btn ds-btn--icon ds-btn--quiet ds-listdetail__close" type="button" aria-label="Close the ticket">(close 20)</button>
+ *       </header> ...
+ *     </section>
+ *   </div>
+ *
+ * Columns:
+ *   .ds-listdetail__list     the list, --ds-listdetail-list-width (320px)
+ *   .ds-listdetail__detail   the detail: takes the rest, at least
+ *                            --ds-listdetail-detail-min (400px) beside
+ *                            another column
+ *   .ds-listdetail__sub      optional: the sub-detail,
+ *                            --ds-listdetail-sub-width (360px), shown only
+ *                            at the sub level
+ * Parts:
+ *   .ds-listdetail__head     a column's header row, sticky at its top: a back
+ *                            button, the title, actions at the end
+ *   .ds-listdetail__title    the column's title, one line with an ellipsis
+ *   .ds-listdetail__body     padded content of a column
+ *   .ds-listdetail__back     up one level: shown only while the column
+ *                            before it is hidden (a phone; the detail while
+ *                            the sub-detail pushes the list out)
+ *   .ds-listdetail__close    up one level as well: shown only while the
+ *                            column before it shows (the sub-detail beside
+ *                            its detail)
+ *   A .ds-list right in a column loses its frame and runs to its edges.
+ *
+ * What shows follows the level (data-state: "list" until something is
+ * picked, "detail", "sub") and the layout's own width, which DS.listdetail
+ * measures (so it folds inside a sheet or a narrow card as on a phone; no
+ * size container, which would re-anchor the popups inside it). It writes
+ * data-columns (how many fit) and data-shown (the levels that show):
+ *   one column       narrower than the list and the detail's minimum
+ *                    (--ds-listdetail-list-width + --ds-listdetail-detail-min,
+ *                    720px): the level's own, with its back button
+ *   two columns      the list and the detail; at the sub level the detail
+ *                    and the sub-detail (the detail's back button brings the
+ *                    list back)
+ *   three columns    from that plus --ds-listdetail-sub-width (1080px): the
+ *                    sub-detail beside both
+ * Before the script runs, a window under 720px shows the list alone, or the
+ * level data-ds-listdetail names.
+ *
+ * Variants:
+ *   .ds-listdetail             no frame: it fills its place (the content
+ *                              panel), hairlines between the columns
+ *   .ds-listdetail--outlined   the hairline frame and the card radius
+ *                              (--ds-listdetail-radius, --ds-radius-card,
+ *                              times --ds-shape) on --ds-surface
+ *
+ * Height: --ds-listdetail-height (100%: it fills a parent of a set height).
+ *
+ * Options (src/core/options.css, docs/options.md), computed here:
+ *   density   .ds-density-*: the padding of the head and the body, 2px per
+ *             step, and the head's height, 4px per step (56px at the
+ *             comfortable density)
+ *   shape     .ds-shape-*: the frame of --outlined
+ *   size      not read: it is a layout; a size class reaches the controls
+ *             in it
+ *   touch     .ds-touch: the head at least the touch target high (its back
+ *             button is a target)
+ *   tone      not read
+ *
+ * Motion: a column that comes into view by a change of level slides in
+ * from the end and fades (DS.motion.enter, 'slide': ds-shift-in with
+ * ds-fade-in over --ds-dur-slow, the movement on --ds-ease-spatial); going
+ * back (data-direction="back") it comes from the start. The column that
+ * goes is gone at once. Nothing plays when the layout folds by a resize.
+ *
+ * Forced colours: the hairlines and the frame are borders, so they stay.
+ *
+ * Hooks: --ds-listdetail-height, --ds-listdetail-list-width,
+ * --ds-listdetail-detail-min, --ds-listdetail-sub-width, --ds-listdetail-line, --ds-listdetail-radius,
+ * --ds-listdetail-head-height, --ds-listdetail-padding. --_head and --_pad
+ * are private.
+ *
+ * No progressive features.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.listdetail {
+  .ds-listdetail {
+    display: flex;
+    min-inline-size: 0;
+    min-block-size: 0;
+    block-size: var(--ds-listdetail-height, 100%);
+    overflow: hidden;
+    background: var(--ds-surface);
+  }
+
+  .ds-listdetail--outlined {
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-listdetail-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+  }
+
+  .ds-listdetail__list,
+  .ds-listdetail__detail,
+  .ds-listdetail__sub {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    min-block-size: 0;
+    overflow: auto;
+  }
+
+  .ds-listdetail__list {
+    flex: 0 0 var(--ds-listdetail-list-width, 320px);
+  }
+
+  .ds-listdetail__detail {
+    flex: 1 1 0;
+    min-inline-size: min(100%, var(--ds-listdetail-detail-min, 400px));
+  }
+
+  .ds-listdetail__sub {
+    flex: 0 0 var(--ds-listdetail-sub-width, 360px);
+  }
+
+  .ds-listdetail__detail,
+  .ds-listdetail__sub {
+    border-inline-start: 1px solid var(--ds-listdetail-line, var(--ds-line));
+  }
+
+  /* Back from a level comes from the start; the default (deeper) from the end. */
+  .ds-listdetail[data-direction="back"] > :is(.ds-listdetail__list, .ds-listdetail__detail, .ds-listdetail__sub) {
+    --ds-motion-distance: calc(-1 * var(--ds-distance-xl));
+  }
+
+  .ds-listdetail__head {
+    --_head: max(var(--ds-target-min, 0px), calc(var(--ds-listdetail-head-height, 56px) + var(--ds-density, 0) * 4px));
+    position: sticky;
+    inset-block-start: 0;
+    z-index: var(--ds-z-raised);
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-block-size: var(--_head);
+    padding-block: 0;
+    padding-inline: calc(var(--ds-listdetail-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px);
+    border-block-end: 1px solid var(--ds-listdetail-line, var(--ds-line));
+    background: var(--ds-surface);
+  }
+
+  .ds-listdetail__title {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--ds-text);
+    font: var(--ds-font-subtitle);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* An icon button at the start sits on the padding's edge, its icon in
+     line with the text below it. */
+  .ds-listdetail__back {
+    flex: none;
+    margin-inline-start: calc(-1 * var(--ds-space-2));
+  }
+
+  .ds-listdetail__close {
+    flex: none;
+    margin-inline-end: calc(-1 * var(--ds-space-2));
+  }
+
+  .ds-listdetail__body {
+    --_pad: calc(var(--ds-listdetail-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px);
+    padding: var(--_pad);
+  }
+
+  /* A list that fills a column runs to its edges: the column is its frame. */
+  .ds-listdetail > * > .ds-list {
+    border: 0;
+    border-radius: 0;
+  }
+
+  /* What shows (data-shown, written by DS.listdetail from the layout's own
+     width and the level): the columns it names; a back button where the
+     column before it is out, a close button where it shows. */
+  .ds-listdetail__back {
+    display: none;
+  }
+
+  .ds-listdetail[data-shown]:not([data-shown~="list"]) > .ds-listdetail__list,
+  .ds-listdetail[data-shown]:not([data-shown~="detail"]) > .ds-listdetail__detail,
+  .ds-listdetail[data-shown]:not([data-shown~="sub"]) > .ds-listdetail__sub {
+    display: none;
+  }
+
+  .ds-listdetail[data-shown]:not([data-shown~="list"]) > .ds-listdetail__detail .ds-listdetail__back,
+  .ds-listdetail[data-shown]:not([data-shown~="detail"]) > .ds-listdetail__sub .ds-listdetail__back {
+    display: revert-layer;
+  }
+
+  .ds-listdetail[data-shown]:not([data-shown~="list"]) > .ds-listdetail__detail .ds-listdetail__close,
+  .ds-listdetail[data-shown]:not([data-shown~="detail"]) > .ds-listdetail__sub .ds-listdetail__close {
+    display: none;
+  }
+
+  /* Nothing picked: the detail has nothing to close. */
+  .ds-listdetail:not([data-state="detail"], [data-state="sub"]) > .ds-listdetail__detail .ds-listdetail__close {
+    display: none;
+  }
+
+  /* The first column that shows has no hairline before it. */
+  .ds-listdetail[data-shown]:not([data-shown~="list"]) > .ds-listdetail__detail,
+  .ds-listdetail[data-shown]:not([data-shown~="list"], [data-shown~="detail"]) > .ds-listdetail__sub {
+    border-inline-start: 0;
+  }
+
+  /* One column: the level's own takes the whole width. */
+  .ds-listdetail[data-columns="1"] > :is(.ds-listdetail__list, .ds-listdetail__detail, .ds-listdetail__sub) {
+    flex: 1 1 0;
+  }
+
+  /* Before the script (and without it): the sub-detail waits, a narrow
+     window shows the list alone (or the level data-ds-listdetail names). */
+  .ds-listdetail:not([data-shown], [data-ds-listdetail="sub"]) > .ds-listdetail__sub {
+    display: none;
+  }
+
+  @media (max-width: 719.98px) {
+    .ds-listdetail:not([data-shown]) > :is(.ds-listdetail__list, .ds-listdetail__detail, .ds-listdetail__sub) {
+      flex: 1 1 0;
+      border-inline-start: 0;
+    }
+
+    .ds-listdetail:not([data-shown]):is([data-ds-listdetail="detail"], [data-ds-listdetail="sub"]) > .ds-listdetail__list,
+    .ds-listdetail:not([data-shown], [data-ds-listdetail="detail"]) > .ds-listdetail__detail {
+      display: none;
+    }
+  }
+
+  @media print {
+    .ds-listdetail {
+      block-size: auto;
+    }
+
+    .ds-listdetail__list,
+    .ds-listdetail__detail,
+    .ds-listdetail__sub {
+      overflow: visible;
+    }
+
+    .ds-listdetail__head {
+      position: static;
+    }
+  }
+}

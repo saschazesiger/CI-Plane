@@ -1,0 +1,318 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Sources and citations: numbered markers in an answer's text that open a
+ * card with their source, and the list of every source under it.
+ *
+ *   <p>Eleven laptops leave warranty before March<button class="ds-cite" type="button"
+ *      aria-controls="src-1-card" aria-label="Source 1: Warranty register" data-ds-cite>1</button>.</p>
+ *
+ *   <div class="ds-cite__card" id="src-1-card" popover="manual" hidden>
+ *     <p class="ds-cite__source"><img class="ds-cite__icon" src="..." alt="">example.com</p>
+ *     <a class="ds-cite__title" href="https://example.com/warranty">Warranty register 2026</a>
+ *     <p class="ds-cite__snippet">The warranty of LAPTOP-0042 ends on 28 February 2027 ...</p>
+ *   </div>
+ *
+ *   <ol class="ds-cite-list" aria-label="Sources">
+ *     <li class="ds-cite-list__item" id="src-1">
+ *       <span class="ds-cite-list__number">1</span>
+ *       <span class="ds-cite-list__body"><a class="ds-cite__title" href="...">Warranty register 2026</a>
+ *         <span class="ds-cite__source">example.com</span></span>
+ *     </li>
+ *   </ol>
+ *
+ * The marker (.ds-cite): a small pill with the number in the caption type,
+ * tabular, on --ds-cite-bg (--ds-surface-high) in --ds-text-2, a little
+ * raised from the baseline. Its hit area reaches at least 24px (and
+ * --ds-target-min under .ds-touch) through ::after, without moving the
+ * line. Hover lays --ds-state-hover of its colour over it (::before),
+ * the press --ds-state-pressed in --ds-dur-micro; open (aria-expanded,
+ * which cite.js writes) it turns --ds-accent / --ds-on-accent. Keyboard
+ * focus: the ring, solid from the first frame, snapping in from offset +
+ * width. Like a text link it has no ripple and no press morph.
+ *
+ * The card (.ds-cite__card): a popup in the top layer (popover="manual"),
+ * opened and closed through DS.overlay, placed under the marker (above it
+ * without room; --ds-cite-x and --ds-cite-y, written by cite.js), at most
+ * --ds-cite-card-width wide: the source (__source: an optional 16px
+ * __icon, a favicon or a glyph, and the site in the meta type), the title
+ * (__title, a link in the label type), an optional snippet (__snippet,
+ * three lines at most) and anything else the page adds.
+ *
+ * The list (.ds-cite-list): the sources in order, each a __number (the
+ * same pill as the marker) and a __body with the title and the source.
+ *
+ * Options (src/core/options.css, docs/options.md):
+ *   size      .ds-xs ... .ds-xl: the marker, 2px per step (18px at md);
+ *             its type stays the caption
+ *   density   the list's rows, 2px of room per step
+ *   shape     the marker's and the card's corners times --ds-shape (the
+ *             marker stays a pill at the default)
+ *   touch     .ds-touch: the marker's hit area is --ds-target-min
+ *   tone      not read: a source shows no meaning
+ *
+ * Hooks: --ds-cite-size (18px, the marker's md height), --ds-cite-bg
+ * (--ds-surface-high), --ds-cite-card-width (320px), --ds-cite-card-radius
+ * (--ds-radius-card).
+ *
+ * Motion: the card's entrance and exit are the popups' (transitions keyed
+ * on data-state by DS.overlay): it fades in on --ds-dur-fast and grows
+ * from --ds-scale-popup at the marker on the spring (--ds-dur-medium),
+ * and fades out in --ds-dur-instant. The marker's layers fade on
+ * --ds-dur-fast.
+ *
+ * Forced colours: the marker keeps a CanvasText edge (open: Highlight,
+ * HighlightText), the card its transparent outline as its edge.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.cite {
+  .ds-cite {
+    --_h: max(14px, calc(var(--ds-cite-size, 18px) + var(--ds-size-step, 0) * 2px));
+    --_reach: max(0px, calc((max(24px, var(--ds-target-min, 0px)) - var(--_h)) / 2));
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: var(--_h);
+    height: var(--_h);
+    margin: 0;
+    margin-inline-start: var(--ds-space-1);
+    padding: 0 var(--ds-space-1);
+    border: 1px solid transparent;
+    border-radius: min(calc(var(--ds-radius-action) * var(--ds-shape, 1)), calc(var(--_h) / 2));
+    background: var(--ds-cite-bg, var(--ds-surface-high));
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    vertical-align: .15em;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* The state layer. */
+  .ds-cite::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* The hit area: at least 24px (the touch target under .ds-touch). */
+  .ds-cite::after {
+    content: "";
+    position: absolute;
+    inset: calc(-1 * var(--_reach));
+  }
+
+  @media (hover: hover) {
+    .ds-cite:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-cite:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  .ds-cite:active::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-cite:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-cite[aria-expanded="true"] {
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+  }
+
+  /* The card: a popup in the top layer. */
+  .ds-cite__card {
+    position: fixed;
+    inset: var(--ds-cite-y, 0px) auto auto var(--ds-cite-x, 0px);
+    z-index: var(--ds-z-popover);
+    display: grid;
+    gap: var(--ds-space-1);
+    box-sizing: border-box;
+    width: max-content;
+    max-width: min(var(--ds-cite-card-width, 320px), calc(100vw - 2 * var(--ds-space-2)));
+    max-height: calc(100vh - 2 * var(--ds-space-2));
+    margin: 0;
+    padding: var(--ds-space-3) var(--ds-space-4);
+    overflow-y: auto;
+    border: 0;
+    border-radius: calc(var(--ds-cite-card-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    background: var(--ds-surface-popover);
+    color: var(--ds-text);
+    box-shadow: var(--ds-elev-popover);
+    font: var(--ds-font-body);
+    /* Invisible; forced colours paint it, so the card keeps an edge. */
+    outline: 1px solid transparent;
+    transform-origin: var(--ds-motion-origin, 50% 0%);
+  }
+
+  .ds-cite__card[data-placement="top"] {
+    transform-origin: var(--ds-motion-origin, 50% 100%);
+  }
+
+  .ds-cite__card[hidden] {
+    display: none;
+  }
+
+  /* Driven by DS.overlay: transitions keyed on data-state, so a card closed
+     mid-way turns back from where it is. */
+  .ds-cite__card[data-state] {
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  /* The exit only fades, in --ds-dur-instant; the scale goes back once the
+     card is invisible. Closed, it takes no pointer. */
+  .ds-cite__card[data-state="closed"] {
+    opacity: 0;
+    scale: var(--ds-scale-popup);
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in-out),
+      scale 0ms var(--ds-ease-in-out) var(--ds-dur-instant);
+  }
+
+  .ds-cite__card > * {
+    margin: 0;
+  }
+
+  .ds-cite__source {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-width: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    overflow-wrap: anywhere;
+  }
+
+  .ds-cite__icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+  }
+
+  .ds-cite__title {
+    color: var(--ds-link);
+    font: var(--ds-font-label);
+    text-decoration-line: underline;
+    text-decoration-color: var(--ds-link-underline);
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+    text-underline-offset: var(--ds-link-underline-offset);
+    overflow-wrap: anywhere;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      text-decoration-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  @media (hover: hover) {
+    .ds-cite__title:hover {
+      text-decoration-color: var(--ds-link-underline-hover);
+    }
+  }
+
+  .ds-cite__title:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-cite__snippet {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--ds-text-2);
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+
+  /* The list of sources. */
+  .ds-cite-list {
+    --_room: max(0px, calc(var(--ds-space-2) + var(--ds-density, 0) * 2px));
+    display: grid;
+    gap: var(--_room);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-cite-list__item {
+    display: flex;
+    align-items: baseline;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-cite-list__number {
+    --_h: max(14px, calc(var(--ds-cite-size, 18px) + var(--ds-size-step, 0) * 2px));
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: var(--_h);
+    height: var(--_h);
+    padding: 0 var(--ds-space-1);
+    border: 1px solid transparent;
+    border-radius: min(calc(var(--ds-radius-action) * var(--ds-shape, 1)), calc(var(--_h) / 2));
+    background: var(--ds-cite-bg, var(--ds-surface-high));
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .ds-cite-list__body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  @media (forced-colors: active) {
+    .ds-cite,
+    .ds-cite-list__number {
+      border-color: CanvasText;
+    }
+
+    .ds-cite::before {
+      display: none;
+    }
+
+    .ds-cite[aria-expanded="true"] {
+      forced-color-adjust: none;
+      border-color: Highlight;
+      background: Highlight;
+      color: HighlightText;
+    }
+  }
+}

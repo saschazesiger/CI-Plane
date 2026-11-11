@@ -16,10 +16,15 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Vendored Dashboard-Style is untouched
-        run: sh web/vendor/dashboard-style/tools/verify.sh web/vendor/dashboard-style
-      - name: Interface follows the Dashboard-Style project rules
-        run: node web/vendor/dashboard-style/tools/check-project.mjs --config web/ds-check.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Vendored Z-Dash is untouched
+        run: sh web/vendor/z-dash/tools/verify.sh web/vendor/z-dash
+      - name: Interface follows the Z-Dash project rules
+        run: node web/vendor/z-dash/tools/check-project.mjs --config web/ds-check.json
+      - name: Theme keeps its contrast, light and dark
+        run: node web/vendor/z-dash/tools/check-theme.mjs web/theme.css --with web/vendor/z-dash/themes/dark.css
       - run: go vet ./...
       - run: go test -race ./...
       - name: Build image

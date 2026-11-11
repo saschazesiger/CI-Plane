@@ -1,0 +1,64 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Menu button: a button that opens a menu, with a chevron at its end that
+ * turns while the menu is open. With a menu of radio items it is a choice
+ * ("Sort: Name"): the button shows the chosen label.
+ *
+ *   <button class="ds-btn ds-menu-btn" type="button" aria-haspopup="menu" aria-expanded="false"
+ *           aria-controls="sort-menu" data-ds-menubutton="#sort-menu">
+ *     Sort: <span class="ds-menu-btn__value">Name</span>(chevronDown 16, .ds-chevron .ds-menu-btn__chevron)
+ *   </button>
+ *   <div class="ds-menu" id="sort-menu" role="menu" aria-label="Sort by" data-ds-menu-checks hidden>...</div>
+ *
+ * Any button look (.ds-btn, --filled, --tonal, --quiet, --text ...). An
+ * icon-only menu button (moreVertical) has no chevron and needs no class of
+ * this file: .ds-btn--icon with data-ds-menubutton. A menu trigger does not
+ * take the pressed tint while open (button.css); the turned chevron and
+ * aria-expanded say it.
+ *
+ *   .ds-menu-btn             the trigger: the end padding before a chevron
+ *                            pulls in like a leading icon's (12px at md, 4px
+ *                            more per size above, never more than the side
+ *                            padding)
+ *   .ds-menu-btn__value      the chosen label: one line, an ellipsis when
+ *                            the button is narrower than its words
+ *   .ds-menu-btn__chevron    the chevron (with .ds-chevron, which turns it
+ *                            under aria-expanded="true" in --ds-dur-medium
+ *                            on the spring, motion.css)
+ *
+ * Behaviour (DS.menubutton, menubutton.js): opens and closes the menu
+ * through DS.overlay (click, Enter, Space; ArrowDown on the first item,
+ * ArrowUp on the last), fills in aria-haspopup, aria-expanded and
+ * aria-controls, mirrors the checked radio into .ds-menu-btn__value.
+ *
+ * Options: the button's (size, density, shape, touch); the chevron's end
+ * padding steps with size like the side padding.
+ *
+ * Forced colours: the button's; the chevron is currentColor.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.menubutton {
+  .ds-menu-btn {
+    max-inline-size: 100%;
+  }
+
+  /* A chevron at the end sits closer to the edge, as a leading icon does at
+     the start (never more than the side padding). */
+  .ds-menu-btn:has(> .ds-menu-btn__chevron:last-child) {
+    padding-inline-end: min(calc(var(--ds-btn-padding-x, var(--ds-space-4)) + var(--ds-size-step, 0) * 4px), calc(var(--ds-space-3) + max(var(--ds-size-step, 0), 0) * 4px));
+  }
+
+  .ds-menu-btn__value {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-menu-btn__chevron {
+    flex-shrink: 0;
+  }
+}

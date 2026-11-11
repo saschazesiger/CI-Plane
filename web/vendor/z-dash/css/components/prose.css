@@ -1,0 +1,556 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Rendered rich text: .ds-prose for text the page does not mark up itself
+ * (Markdown through DS.markdown, a help article, a release note). A pre in
+ * it is a code block: code.css styles it as .ds-code-block (prose requires
+ * code); this file keeps only its place in the rhythm.
+ *
+ *   <div class="ds-prose"> <h2>...</h2> <p>...</p> <ul><li>...</li></ul> <pre><code>...</code></pre> <table>...</table> </div>
+ *   <div class="ds-prose ds-prose--dense"> ... </div>        (the body role: in a card, a side sheet)
+ *   <div class="ds-prose ds-prose--compact"> ... </div>      (a chat bubble: the body role, one heading size, tight blocks)
+ *
+ * .ds-prose styles only bare elements inside it (every rule is under
+ * :where(.ds-prose) and skips an element with a class that starts with ds-,
+ * so a class of the page always wins and a component inside prose keeps its
+ * look, wherever its stylesheet stands in the cascade): a rhythm of
+ * --ds-prose-gap between blocks (their margins reset first), headings on the
+ * type roles (h1 headline, h2 subtitle, h3 and h4 the label weight at the
+ * reading size),
+ * lists indented --ds-space-5, strong in --ds-prose-strong-weight, links
+ * underlined like every link, a pre as a code block (code.css), a table
+ * with hairline rows, a --ds-text-2 head and tabular figures that scrolls
+ * sideways when it is wider (a cell's data-align="start|center|end", as
+ * DS.markdown writes a GFM table's alignment, aligns it), a quote on
+ * --ds-surface-high, images at most as wide as the text, inline code a
+ * chip, a kbd a key (as .ds-kbd), a mark on the tint. Font:
+ * --ds-prose-font (--ds-font-reading); --dense takes --ds-font-body. Long
+ * words hyphenate where the browser can, or break.
+ *
+ * Task lists: a list item that starts with a checkbox (<li><input
+ * type="checkbox" disabled checked> text</li>, in a <label> or a <p> too,
+ * the way Markdown renderers write them) loses its bullet and takes the
+ * checkbox in the bullet's place; wrapped lines stay in line with the text.
+ * The box is drawn on the input like a .ds-checkbox, without its motion:
+ * rendered text is read-only unless the page wires it (disabled does not dim
+ * it here: it is how Markdown says read-only, and the state must read).
+ *
+ * Callouts: a note in the text, with its word and icon:
+ *   <div class="ds-prose__callout ds-tone-warning" role="note">
+ *     <p class="ds-prose__callout-title">(alert 16)Warning</p>
+ *     <p>...</p>
+ *   </div>
+ * A tone class on the callout itself (.ds-tone-*) colours the block; without
+ * one it has the quote's surface, also inside an element with a tone (a
+ * note would read as that tone). The word says what it is, so meaning never
+ * rests on the colour.
+ *
+ * Footnotes: <section class="ds-prose__footnotes"> <ol>...</ol> </section>,
+ * the meta role under a hairline. A reference is
+ * <sup class="ds-prose__fnref"><a href="#fn-1" id="fnref-1">1</a></sup>
+ * (a small figure that leaves the line height alone); each note ends with
+ * <a class="ds-prose__fnback" href="#fnref-1" aria-label="Back to reference 1">(cornerUpLeft 16)</a>.
+ * The note a reference jumps to (:target) takes the tint, so the eye finds
+ * it; the number and the jump say the same.
+ *
+ * Heading anchors: <h2 id="setup"><a class="ds-prose__anchor"
+ * href="#setup">Setup(link 16)</a></h2>: the heading's text links to
+ * itself, so its name stays its text; it keeps the heading's look, and the
+ * icon (aria-hidden) shows while the heading is hovered or the link has the
+ * focus (opacity only).
+ *
+ * .ds-prose--compact, for a chat bubble or a narrow panel: the body role,
+ * every heading at the body size in the label weight, blocks --ds-space-1
+ * apart, quotes, callouts, code (code.css) and table cells with less
+ * padding.
+ *
+ * Options (src/core/options.css, docs/options.md), on the prose or any
+ * ancestor; each is computed here:
+ *   density   .ds-density-*: 1px off the gap between blocks per step, 2px
+ *             off the padding of quotes, callouts, code (code.css) and table
+ *             cells;
+ *             --compact, whose padding is tight already, 1px, and its table
+ *             cells keep their side padding; the gap is read on the prose,
+ *             so a density class on a child leaves the gap above it alone;
+ *             the text stays
+ *   shape     .ds-shape-*: multiplies the radius of quotes, callouts, inline
+ *             code, kbd and mark (code blocks: code.css)
+ *   tone      .ds-tone-*: on a callout only
+ *   size      not read: text keeps its role (--dense and --compact choose it)
+ *   touch     not read: the only targets are links in text, which the
+ *             target-size rule exempts, and read-only task checkboxes
+ *
+ * Hooks: --ds-prose-gap (--ds-space-2), --ds-prose-font
+ * (--ds-font-reading), --ds-prose-strong-weight (--ds-weight-label),
+ * --ds-prose-radius (--ds-radius-card).
+ *
+ * Motion: the anchor icon fades in on --ds-dur-fast and out on
+ * --ds-dur-instant; focus rings snap as everywhere.
+ *
+ * Forced colours: quotes and callouts keep their edges (a transparent
+ * outline that the forced colours paint); a mark takes Mark and MarkText;
+ * a kbd keeps its border.
+ *
+ * Print: prose tables wrap and unclip; anchor icons go.
+ *
+ * Progressive:
+ * - hyphenate-limit-chars (hyphens: auto breaks only words of 18
+ *   characters or more, keeping 8 on each side; a string with no
+ *   hyphenation point, such as a URL, still breaks): without it long
+ *   words break anywhere (overflow-wrap) instead of hyphenating.
+ * - text-wrap: pretty (paragraphs avoid a lone last word): without it
+ *   lines wrap as usual.
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar under a
+ *   wide table): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.prose {
+  .ds-prose {
+    min-width: 0;
+    color: var(--ds-text);
+    font: var(--ds-prose-font, var(--ds-font-reading));
+    overflow-wrap: anywhere;
+    /* Computed here and read by the blocks: a density class on one of them
+       changes that block and not the gap above it. */
+    --_prose-gap: calc(var(--ds-prose-gap, var(--ds-space-2)) + var(--ds-density, 0) * 1px);
+  }
+
+  .ds-prose--dense {
+    --ds-prose-font: var(--ds-font-body);
+  }
+
+  @supports (hyphenate-limit-chars: 1) {
+    /* Hyphenation points come first; break-word splits only a string with
+       no other break (a URL, a hash, a path). */
+    .ds-prose {
+      overflow-wrap: break-word;
+      hyphens: auto;
+      hyphenate-limit-chars: 18 8 8;
+    }
+  }
+
+  /* The rhythm: margins reset, then one gap between blocks. */
+  :where(.ds-prose) > * {
+    margin-block: 0;
+  }
+
+  :where(.ds-prose) > * + * {
+    margin-block-start: var(--_prose-gap);
+  }
+
+  :where(.ds-prose) :is(h1, h2, h3, h4, h5, h6):where(:not([class^="ds-"], [class*=" ds-"])) {
+    margin-block: 0;
+    color: var(--ds-text);
+    letter-spacing: 0;
+    text-wrap: balance;
+  }
+
+  /* A heading opens a section: more room above it than between paragraphs. */
+  :where(.ds-prose) > * + :is(h1, h2, h3, h4, h5, h6):where(:not([class^="ds-"], [class*=" ds-"])) {
+    margin-block-start: var(--ds-space-5);
+  }
+
+  :where(.ds-prose) h1:where(:not([class^="ds-"], [class*=" ds-"])) {
+    font: var(--ds-font-headline);
+  }
+
+  :where(.ds-prose) h2:where(:not([class^="ds-"], [class*=" ds-"])) {
+    font: var(--ds-font-subtitle);
+  }
+
+  :where(.ds-prose) :is(h3, h4, h5, h6):where(:not([class^="ds-"], [class*=" ds-"])) {
+    font: inherit;
+    font-weight: var(--ds-weight-label);
+  }
+
+  :where(.ds-prose) p:where(:not([class^="ds-"], [class*=" ds-"])) {
+    text-wrap: pretty;
+  }
+
+  :where(.ds-prose) :is(ul, ol):where(:not([class^="ds-"], [class*=" ds-"])) {
+    padding-inline-start: var(--ds-space-5);
+  }
+
+  :where(.ds-prose) li > :is(ul, ol):where(:not([class^="ds-"], [class*=" ds-"])) {
+    margin-block-start: var(--ds-space-1);
+  }
+
+  :where(.ds-prose) li:where(:not([class^="ds-"], [class*=" ds-"])) + li:where(:not([class^="ds-"], [class*=" ds-"])) {
+    margin-block-start: var(--ds-space-1);
+  }
+
+  :where(.ds-prose) :is(strong, b):where(:not([class^="ds-"], [class*=" ds-"])) {
+    font-weight: var(--ds-prose-strong-weight, var(--ds-weight-label));
+  }
+
+  :where(.ds-prose) a:where(:not([class^="ds-"], [class*=" ds-"])) {
+    color: var(--ds-link);
+    text-decoration-line: underline;
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+    text-underline-offset: var(--ds-link-underline-offset);
+    text-decoration-color: var(--ds-link-underline);
+  }
+
+  :where(.ds-prose) img:where(:not([class^="ds-"], [class*=" ds-"])) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  :where(.ds-prose) blockquote:where(:not([class^="ds-"], [class*=" ds-"])) {
+    margin-inline: 0;
+    padding: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px) calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+    border-radius: calc(var(--ds-prose-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    background: var(--ds-surface-high);
+    color: var(--ds-text);
+  }
+
+  /* A callout: its word and icon on a line of their own, on the quote's
+     surface. */
+  .ds-prose__callout {
+    padding: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px) calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+    border-radius: calc(var(--ds-prose-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    background: var(--ds-surface-high);
+    color: var(--ds-text);
+  }
+
+  /* The tone is read only from the callout's own class: an inherited one would
+     turn a plain note into an error. */
+  .ds-prose__callout:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    background: var(--ds-tone-container, var(--ds-surface-high));
+    color: var(--ds-on-tone-container, var(--ds-text));
+  }
+
+  .ds-prose__callout > * {
+    margin-block: 0;
+  }
+
+  .ds-prose__callout > * + * {
+    margin-block-start: var(--ds-space-1);
+  }
+
+  .ds-prose__callout-title {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    font-weight: var(--ds-prose-strong-weight, var(--ds-weight-label));
+  }
+
+  .ds-prose__callout-title > svg {
+    flex: none;
+  }
+
+  /* Links and inline code take the block's ink: the tint is a surface of its
+     own, on which the link colour's contrast is not promised. */
+  .ds-prose__callout :where(a:not([class^="ds-"], [class*=" ds-"])) {
+    color: inherit;
+  }
+
+  /* Footnotes: the meta role under a hairline, the list in the prose's own
+     indent. */
+  .ds-prose__footnotes {
+    padding-block-start: var(--ds-space-3);
+    border-block-start: 1px solid var(--ds-line);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-prose__footnotes > :is(ol, ul) {
+    margin-block: 0;
+  }
+
+  /* A task list: the checkbox stands where the bullet stood (the list's
+     indent), so items with and without one line up and wrapped lines hang.
+     Three forms: the input directly in the item, or in its first <p> or
+     <label>. */
+  :where(.ds-prose) li:where(:has(> input[type="checkbox"]:first-child, > :is(p, label):first-child > input[type="checkbox"]:first-child)) {
+    position: relative;
+    margin-inline-start: calc(-1 * var(--ds-space-5));
+    padding-inline-start: var(--ds-space-5);
+    list-style: none;
+  }
+
+  :where(.ds-prose) input:where(li > [type="checkbox"]:first-child, li > :is(p, label):first-child > [type="checkbox"]:first-child) {
+    position: absolute;
+    /* 1lh is the text's line only with the text's font (an input has its own). */
+    font: inherit;
+    inset-block-start: calc((1lh - var(--ds-space-4)) / 2);
+    inset-inline-start: 0;
+    margin: 0;
+  }
+
+  :where(.ds-prose) input:where(li > [type="checkbox"]:first-child, li > :is(p, label):first-child > [type="checkbox"]:first-child):where(:not([class^="ds-"], [class*=" ds-"])) {
+    appearance: none;
+    box-sizing: border-box;
+    width: var(--ds-space-4);
+    height: var(--ds-space-4);
+    border: 2px solid var(--ds-text-2);
+    border-radius: calc(var(--ds-radius-check) * var(--ds-shape, 1));
+    background: transparent;
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  :where(.ds-prose) input:where(li > [type="checkbox"]:first-child, li > :is(p, label):first-child > [type="checkbox"]:first-child):where(:not([class^="ds-"], [class*=" ds-"])):focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  :where(.ds-prose) input:where(li > [type="checkbox"]:first-child, li > :is(p, label):first-child > [type="checkbox"]:first-child):where(:not([class^="ds-"], [class*=" ds-"])):checked {
+    border-color: var(--ds-primary);
+    background: var(--ds-primary);
+  }
+
+  /* The check: two borders, turned, so a strict Content-Security-Policy that
+     blocks a data: mask (docs/install.md) never hides it. */
+  :where(.ds-prose) input:where(li > [type="checkbox"]:first-child, li > :is(p, label):first-child > [type="checkbox"]:first-child):where(:not([class^="ds-"], [class*=" ds-"])):checked::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    width: 6px;
+    height: 10px;
+    margin: auto;
+    border: 0 solid var(--ds-on-primary);
+    border-inline-end-width: 2px;
+    border-block-end-width: 2px;
+    translate: 0 -1px;
+    rotate: 45deg;
+  }
+
+  :where(.ds-prose) hr:where(:not([class^="ds-"], [class*=" ds-"])) {
+    border: 0;
+    border-top: 1px solid var(--ds-line);
+  }
+
+  /* A table of rendered text: hairline rows, a quiet head, tabular figures;
+     wider than the text, it scrolls on its own. */
+  :where(.ds-prose) table:where(:not([class^="ds-"], [class*=" ds-"])) {
+    position: relative;
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font: var(--ds-font-body);
+    font-variant-numeric: tabular-nums;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+  }
+
+  :where(.ds-prose) :is(th, td):where(:not([class^="ds-"], [class*=" ds-"])) {
+    padding: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px) calc(var(--ds-space-3) + var(--ds-density, 0) * 2px);
+    border-bottom: 1px solid var(--ds-line);
+    text-align: start;
+    vertical-align: top;
+  }
+
+  :where(.ds-prose) th:where(:not([class^="ds-"], [class*=" ds-"])) {
+    color: var(--ds-text-2);
+    font: var(--ds-font-label);
+  }
+
+  /* A pre in prose is a code block (code.css draws it); its place in the
+     rhythm is the prose's: margins reset, then the gap. */
+  :where(.ds-prose) pre:where(:not([class^="ds-"], [class*=" ds-"])) {
+    margin: 0;
+  }
+
+  :where(.ds-prose) > * + pre {
+    margin-block-start: var(--_prose-gap);
+  }
+
+  /* Code inside a pre or a link is just text: no inline chip per line. */
+  :where(.ds-prose) :where(pre, a) code {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+  }
+
+  /* Inline code in prose takes the size of the text around it. */
+  :where(.ds-prose) :not(pre) > code:where(:not([class^="ds-"], [class*=" ds-"])) {
+    padding: 0 var(--ds-space-1);
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-code-bg);
+    font-family: var(--ds-font-mono);
+    font-size: inherit;
+  }
+
+  /* A key: the code font in a hairline box, as .ds-kbd. */
+  :where(.ds-prose) kbd:where(:not([class^="ds-"], [class*=" ds-"])) {
+    display: inline-block;
+    min-width: var(--ds-space-5);
+    padding: 0 var(--ds-space-1);
+    border: 1px solid var(--ds-line-2);
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-surface);
+    color: var(--ds-text-2);
+    font: var(--ds-font-code);
+    text-align: center;
+  }
+
+  /* Marked text (a search hit, a highlight): on the tint. */
+  :where(.ds-prose) mark:where(:not([class^="ds-"], [class*=" ds-"])) {
+    padding-inline: 2px;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+  }
+
+  /* The alignment of a column (DS.markdown writes a GFM table's). */
+  :where(.ds-prose) :is(th, td):where(:not([class^="ds-"], [class*=" ds-"]))[data-align="center"] {
+    text-align: center;
+  }
+
+  :where(.ds-prose) :is(th, td):where(:not([class^="ds-"], [class*=" ds-"]))[data-align="end"] {
+    text-align: end;
+  }
+
+  /* Heading anchors: the heading's text links to itself; the icon shows on
+     hover and focus. */
+  .ds-prose__anchor {
+    color: inherit;
+    text-decoration: none;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-prose__anchor:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-prose__anchor > svg {
+    margin-inline-start: var(--ds-space-2);
+    color: var(--ds-text-2);
+    vertical-align: -0.125em;
+    opacity: 0;
+    transition: opacity var(--ds-dur-instant) var(--ds-ease-out);
+  }
+
+  .ds-prose__anchor:focus-visible > svg {
+    opacity: 1;
+    transition-duration: var(--ds-dur-fast);
+  }
+
+  @media (hover: hover) {
+    :is(h1, h2, h3, h4, h5, h6):hover > .ds-prose__anchor > svg {
+      opacity: 1;
+      transition-duration: var(--ds-dur-fast);
+    }
+  }
+
+  /* A footnote reference: a small figure that leaves the line alone. */
+  .ds-prose__fnref {
+    position: relative;
+    inset-block-start: -0.5em;
+    font: var(--ds-font-caption);
+    line-height: 1;
+    vertical-align: baseline;
+  }
+
+  .ds-prose__fnref > a,
+  .ds-prose__fnback {
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    color: var(--ds-link);
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-prose__fnref > a {
+    padding-inline: 1px;
+    text-decoration: none;
+  }
+
+  .ds-prose__fnref > a:focus-visible,
+  .ds-prose__fnback:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-prose__fnback > svg {
+    vertical-align: -0.2em;
+  }
+
+  /* The note a reference jumped to: the tint, so the eye finds it. */
+  .ds-prose__footnotes li:target {
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+  }
+
+  /*
+   * Compact, for a chat bubble or a narrow panel: the body role, one heading
+   * size and tight blocks. After the rules it tightens; the same (zero)
+   * specificity, so the order in this file decides and a page's class wins.
+   * Its padding is tight already: 1px per density step instead of 2px, and a
+   * cell keeps its side padding (2px per step would close a cell's 4px).
+   */
+  .ds-prose--compact {
+    --ds-prose-font: var(--ds-font-body);
+    --_prose-gap: calc(var(--ds-prose-gap, var(--ds-space-1)) + var(--ds-density, 0) * 1px);
+  }
+
+  :where(.ds-prose--compact) :is(h1, h2, h3, h4, h5, h6):where(:not([class^="ds-"], [class*=" ds-"])) {
+    font: inherit;
+    font-weight: var(--ds-weight-label);
+  }
+
+  :where(.ds-prose--compact) > * + :is(h1, h2, h3, h4, h5, h6):where(:not([class^="ds-"], [class*=" ds-"])) {
+    margin-block-start: var(--ds-space-3);
+  }
+
+  :where(.ds-prose--compact) blockquote:where(:not([class^="ds-"], [class*=" ds-"])),
+  .ds-prose--compact .ds-prose__callout {
+    padding: calc(var(--ds-space-2) + var(--ds-density, 0) * 1px) calc(var(--ds-space-3) + var(--ds-density, 0) * 1px);
+  }
+
+  :where(.ds-prose--compact) :is(th, td):where(:not([class^="ds-"], [class*=" ds-"])) {
+    padding: calc(var(--ds-space-1) + var(--ds-density, 0) * 1px) var(--ds-space-2);
+  }
+
+  @media (forced-colors: active) {
+    /* A task box: the system's choice colours, its check in their opposite. */
+    :where(.ds-prose) input:where(li > [type="checkbox"]:first-child, li > :is(p, label):first-child > [type="checkbox"]:first-child):where(:not([class^="ds-"], [class*=" ds-"])) {
+      forced-color-adjust: none;
+      border-color: CanvasText;
+      background: Canvas;
+    }
+
+    :where(.ds-prose) input:where(li > [type="checkbox"]:first-child, li > :is(p, label):first-child > [type="checkbox"]:first-child):where(:not([class^="ds-"], [class*=" ds-"])):checked {
+      border-color: Highlight;
+      background: Highlight;
+    }
+
+    :where(.ds-prose) input:where(li > [type="checkbox"]:first-child, li > :is(p, label):first-child > [type="checkbox"]:first-child):where(:not([class^="ds-"], [class*=" ds-"])):checked::before {
+      border-color: HighlightText;
+    }
+
+    :where(.ds-prose) blockquote:where(:not([class^="ds-"], [class*=" ds-"])),
+    .ds-prose__callout {
+      outline: 1px solid transparent;
+    }
+
+    :where(.ds-prose) mark:where(:not([class^="ds-"], [class*=" ds-"])) {
+      forced-color-adjust: none;
+      background: Mark;
+      color: MarkText;
+    }
+  }
+
+  @media print {
+    :where(.ds-prose) table:where(:not([class^="ds-"], [class*=" ds-"])) {
+      overflow: visible;
+      white-space: pre-wrap;
+    }
+
+    .ds-prose__anchor > svg {
+      display: none;
+    }
+  }
+}

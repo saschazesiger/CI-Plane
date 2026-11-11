@@ -1,0 +1,139 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Print: what goes on paper and how it breaks into pages. Every component
+ * already prints itself sensibly (the frame's bars and drawer stay off,
+ * scrollers unroll, tables repeat their header); these classes are for
+ * the page's own content.
+ *
+ *   <p class="ds-print-only">Printed on 2026-11-04 by Ada Lovelace</p>
+ *   <div class="ds-cluster ds-print-hide">screen-only actions</div>
+ *   <section class="ds-print-break-before">starts a new sheet</section>
+ *   <figure class="ds-print-avoid">kept on one sheet</figure>
+ *   <div class="ds-print-exact">a chart whose fills carry meaning</div>
+ *   <div class="ds-print-urls">links print their address after them</div>
+ *
+ *   <article class="ds-print-page">                  a printable document (a report,
+ *     <header>...</header> <table class="ds-table">   an invoice): a sheet on screen,
+ *     ...                                             the paper's full width in print
+ *   </article>
+ *
+ *   .ds-print-only     hidden on screen, shown on paper
+ *   .ds-print-hide     shown on screen, hidden on paper
+ *   .ds-print-break-before, .ds-print-break-after   a new sheet before or after it
+ *   .ds-print-avoid    never split across two sheets (a figure, a card, a
+ *                      total with its last rows)
+ *   .ds-print-exact    prints its fills and colours as shown (the browser
+ *                      drops backgrounds to save ink otherwise)
+ *   .ds-print-urls     every http(s) link inside prints its address after
+ *                      its text
+ *   .ds-print-page     on screen a sheet of paper (--ds-print-page-width,
+ *                      the surface, a soft shadow); in print the paper's
+ *                      width, no frame, the light scheme of the theme
+ *                      (light-dark() roles), headings kept with what
+ *                      follows, figures and code whole, no line alone at
+ *                      the top or foot of a sheet
+ *
+ * Hiding is display: none with !important, as the hidden attribute is.
+ *
+ * Options: shape multiplies the sheet's radius on screen; size, density,
+ * tone and touch are its content's own.
+ *
+ * Hooks: --ds-print-page-width (210mm, an A4 sheet), --ds-print-page-pad
+ * (--ds-space-10, the sheet's margin on screen; paper keeps the
+ * browser's page margins).
+ *
+ * Forced colours: the sheet keeps a transparent outline that becomes its
+ * edge where the shadow goes.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.print {
+  .ds-print-page {
+    box-sizing: border-box;
+    max-inline-size: var(--ds-print-page-width, 210mm);
+    margin-inline: auto;
+    padding: var(--ds-print-page-pad, var(--ds-space-10));
+    border-radius: calc(var(--ds-radius-card) * var(--ds-shape, 1));
+    background: var(--ds-surface);
+    color: var(--ds-text);
+    box-shadow: var(--ds-elev-1);
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* A sheet on a phone keeps a usable margin. */
+  @container (width < 600px) {
+    .ds-print-page {
+      padding: var(--ds-print-page-pad, var(--ds-space-5));
+    }
+  }
+
+  @media not print {
+    .ds-print-only {
+      display: none !important;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-print-page {
+      outline: 1px solid transparent;
+    }
+  }
+
+  @media print {
+    .ds-print-hide {
+      display: none !important;
+    }
+
+    .ds-print-break-before {
+      break-before: page;
+    }
+
+    .ds-print-break-after {
+      break-after: page;
+    }
+
+    .ds-print-avoid {
+      break-inside: avoid;
+    }
+
+    .ds-print-exact {
+      print-color-adjust: exact;
+    }
+
+    /* The address runs inline after the text, even where a component lays
+       the link's ::after out as a box (the stretched link of an
+       interactive card): paper has no click target to stretch. */
+    .ds-print-urls a[href^="http"]::after {
+      content: " (" attr(href) ")";
+      position: static;
+      inset: auto;
+      display: inline;
+      border-radius: 0;
+      background: none;
+      overflow-wrap: anywhere;
+    }
+
+    /* Paper: the full width of the sheet, no frame; the theme's light
+       scheme, since paper is light whatever the screen shows. */
+    .ds-print-page {
+      max-inline-size: none;
+      margin: 0;
+      padding: 0;
+      border-radius: 0;
+      box-shadow: none;
+      color-scheme: light;
+    }
+
+    .ds-print-page :is(h1, h2, h3, h4, h5, h6) {
+      break-after: avoid;
+      break-inside: avoid;
+    }
+
+    .ds-print-page :is(figure, img, pre, blockquote) {
+      break-inside: avoid;
+    }
+  }
+}

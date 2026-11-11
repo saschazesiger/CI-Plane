@@ -1,0 +1,497 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Filter chips on native checkboxes or radios: the input stays in the form
+ * and in the tab order, visually hidden; selection shows the tint and a
+ * check, never the tint alone.
+ *
+ *   <fieldset class="ds-chips">
+ *     <legend class="ds-sr">Status</legend>
+ *     <label class="ds-chip">
+ *       <input class="ds-chip__input" type="checkbox" name="status" value="open">
+ *       <span class="ds-chip__body"><svg class="ds-chip__check" ...>(check, 18px)</svg><span>Open</span></span>
+ *     </label>
+ *     <span class="ds-chips__divider" aria-hidden="true"></span>
+ *   </fieldset>
+ *
+ * Selecting opens the room of the check: an empty slot before the label
+ * (.ds-chip__body::after, the only property that moves is its width)
+ * grows to the check's size on --ds-ease-out (it pushes layout, so it
+ * never overshoots) and the neighbours on the line follow the reflow
+ * every frame. The check lies over the slot (never a flex item) and draws
+ * itself from the short arm after --ds-dur-micro (stroke-dashoffset, the
+ * glyph needs pathLength="1" like the icon set's check). Deselecting
+ * reverses it: the check leaves first, the slot closes after
+ * --ds-dur-micro; radio chips grow and shrink at once, so a pair keeps
+ * its width. Transitions only: a chip rendered selected stays still.
+ * Across a wrap the chips glide by FLIP when DS.ripple.attach() wires the
+ * row (a programmatic `checked` change, or a page without the script,
+ * still jumps to the new line); meanwhile the row carries data-ds-glide
+ * and every chip an opaque backing (--ds-chips-backdrop, the colour behind
+ * the row, written by the script), so crossing chips never show through;
+ * the toggled chip opens with its neighbour (clip-path on the body, its
+ * label translated, both by the script), so the two never overlap.
+ *
+ * Press: the state layer in --ds-dur-micro (also while js/ripple.js holds
+ * .ds-pressed) and the ripple; chips are not pills, so they do not morph.
+ * A disabled chip shows no hover, press or ripple and takes the button's
+ * disabled model (--ds-disabled-fill outline or container, --ds-disabled-ink
+ * label and check, --ds-disabled-opacity), fading on --ds-dur-fast.
+ * Keyboard focus: the ring is solid from the first frame and snaps from
+ * offset + width to the offset (outline-offset, --ds-dur-fast), with the
+ * focus layer (--ds-state-focus).
+ *
+ * aria-disabled="true" on the input looks and acts like disabled (the
+ * click is blocked by the action guard); its focus layer stays.
+ *
+ * Action and input chips are buttons that act at once (a suggestion, an
+ * active filter that removes itself), in a role="group" row:
+ *
+ *   <div class="ds-chips" role="group" aria-label="Active filters">
+ *     <button class="ds-chip ds-chip--input" type="button" data-tip="Building C, second floor">
+ *       <span class="ds-chip__body"><span class="ds-chip__label"><span class="ds-sr">Remove filter </span>Building C, second floor</span>(close 18 .ds-chip__trailing)</span></button>
+ *     <button class="ds-chip" type="button"><span class="ds-chip__body">(user 18 .ds-chip__icon)<span class="ds-chip__label">Only my devices</span></span></button>
+ *   </div>
+ *
+ *   .ds-chip--input   the tint (--ds-chip-input-bg, -color, -border); the
+ *                     whole chip removes its value
+ *   .ds-chips--wrap   on the row: labels wrap inside the chip (long
+ *                     suggestions); a one-line chip keeps its height
+ *
+ * The body keeps every visual; no check slot; 16px padding, 8px next to a
+ * leading icon or a trailing glyph (--ds-chip-check-size); the label ends
+ * in an ellipsis once the body reaches --ds-chip-max-width (240px). Hover,
+ * the focus ring (on the chip, snapping), the press in --ds-dur-micro and
+ * the disabled model like a filter chip; no morph. A chip that stays on or
+ * off is a filter chip, never a button with aria-pressed. A row whose chips
+ * all went (.ds-chips:empty) takes no room.
+ *
+ * Options (src/core/options.css, docs/options.md), on the chip or any
+ * ancestor; each is computed here, in the chip's own rule:
+ *   size      .ds-xs ... .ds-xl: 8px of height per step (16, 24, 32, 40, 48px,
+ *             never below its own line), 4px of side padding and 2px of check
+ *             and icon per step, the type role of the size
+ *   density   .ds-density-*: 4px of height per step; not the side padding
+ *   shape     .ds-shape-*: multiplies the radius, at most half the height
+ *   touch     .ds-touch: at least --ds-touch-target (48px) high
+ *   tone      .ds-tone-* on the chip itself (an inherited tone stays out, so a
+ *             chip in a tinted region keeps its look): a selected filter chip,
+ *             an input chip and an action chip take the tone's container and
+ *             its ink; a resting filter chip stays neutral. The word on the
+ *             chip carries the meaning, the tone repeats it.
+ *
+ * Hooks: --ds-chip-height (32px), --ds-chip-padding-x (16px), --ds-chip-radius
+ * (--ds-radius-chip), --ds-chip-font, --ds-chip-check-size (18px),
+ * --ds-chip-disabled-border, --ds-chip-disabled-bg (selected),
+ * --ds-chip-input-bg, --ds-chip-input-color, --ds-chip-input-border
+ * (--ds-accent, --ds-on-accent), --ds-chip-max-width (240px). The glide
+ * backing reads --ds-chips-backdrop (the script's), else --ds-flip-backdrop.
+ * The computed values (--_box, --_radius, --_pad, --_near, --_check, --_tint,
+ * --_on-tint) are private: never set them.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.chip {
+  .ds-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+
+  /* A row whose chips all went (the last filter removed) takes no room. */
+  .ds-chips:empty {
+    display: none;
+  }
+
+  .ds-chips__divider {
+    width: 1px;
+    height: 20px;
+    margin: 0 var(--ds-space-2);
+    background: var(--ds-line);
+  }
+
+  /* Narrow screens wrap the chips; a divider would dangle at a line end. */
+  @media (max-width: 720px) {
+    .ds-chips__divider {
+      display: none;
+    }
+  }
+
+  .ds-chip {
+    /* The options, computed here (docs/options.md); the body and its parts
+       inherit them. The height: the hook plus 8px per size step and 4px per
+       density step; never below the touch minimum. */
+    --_box: max(var(--ds-target-min, 0px), calc(var(--ds-chip-height, 32px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    /* The corners times the shape, at most half the box. */
+    --_radius: min(calc(var(--ds-chip-radius, var(--ds-radius-chip)) * var(--ds-shape, 1)), calc(var(--_box) / 2));
+    /* Side padding: 4px per size step, density leaves it alone; next to an
+       icon, a trailing glyph or the check slot it is 8px less (at least 4px). */
+    --_pad: calc(var(--ds-chip-padding-x, var(--ds-space-4)) + var(--ds-size-step, 0) * 4px);
+    --_near: max(var(--ds-space-1), calc(var(--_pad) - var(--ds-space-2)));
+    --_check: calc(var(--ds-chip-check-size, 18px) + var(--ds-size-step, 0) * 2px);
+    position: relative;
+    display: inline-flex;
+    cursor: pointer;
+  }
+
+  /* The tone of the chip itself: its fills read these two (never an inherited
+     tone: a chip in a tinted region keeps its look). */
+  .ds-chip:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --_tint: var(--ds-tone-container);
+    --_on-tint: var(--ds-on-tone-container);
+  }
+
+  /* The native input stays in the form and in the tab order, visually hidden. */
+  .ds-chip__input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .ds-chip__body {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    /* Never below its own line, in the smallest size and density. */
+    height: var(--_box);
+    min-height: calc(1lh + 2px);
+    /* The same in both states: the gap after the empty slot gives the
+       label its 16px; selected the slot adds the check's room. */
+    padding-block: 0;
+    padding-inline: var(--_near) var(--_pad);
+    border: 1px solid var(--ds-line-2);
+    border-radius: var(--_radius);
+    color: var(--ds-text-2);
+    font: var(--ds-chip-font, var(--ds-size-font, var(--ds-font-chip)));
+    white-space: nowrap;
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* State layer in the content colour. */
+  .ds-chip__body::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* Hover and press only for an input that can change (a disabled chip
+     shows neither; js/ripple.js gives it no ripple). */
+  @media (hover: hover) {
+    .ds-chip:hover .ds-chip__input:not(:disabled, [aria-disabled="true"]) + .ds-chip__body::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  /* Keyboard focus: the layer appears with the ring and fades out on blur. */
+  .ds-chip__input:focus-visible + .ds-chip__body::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  .ds-chip:active .ds-chip__input:not(:disabled, [aria-disabled="true"]) + .ds-chip__body::before,
+  .ds-chip.ds-pressed .ds-chip__input:not(:disabled, [aria-disabled="true"]) + .ds-chip__body::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-chip:has(.ds-chip__input:is(:disabled, [aria-disabled="true"])) {
+    cursor: not-allowed;
+  }
+
+  /* The slot: the room of the check, first in the row (order), 0 wide at
+     rest. Its width is the only thing that moves when the chip toggles;
+     it closes after the check has begun to leave. */
+  .ds-chip__body::after {
+    content: '';
+    order: -1;
+    flex-shrink: 0;
+    width: 0;
+    transition: width var(--ds-dur-medium) var(--ds-ease-out) var(--ds-dur-micro);
+  }
+
+  .ds-chip__input:checked + .ds-chip__body::after {
+    width: var(--_check);
+    transition-delay: 0s;
+  }
+
+  /* Radio chips trade the selection: one slot opens while the other
+     closes, at once, so the pair keeps its width. */
+  .ds-chip__input[type="radio"] + .ds-chip__body::after {
+    transition-delay: 0s;
+  }
+
+  /* DS.ripple.attach() measures the final layout of a toggle (a wrap?)
+     with the slots at their end width for one frame. */
+  .ds-chips[data-ds-snap] .ds-chip__body::after {
+    transition: none;
+  }
+
+  /* While chips glide across a wrap (DS.ripple.attach()), each chip rests on
+     an opaque backing in the colour behind the row, under its body: a chip
+     that crosses another, transparent or still fading to its fill, never
+     shows the other one through it. At once on and off; at rest it matches
+     what is behind the row. */
+  .ds-chips[data-ds-glide] .ds-chip {
+    border-radius: var(--_radius);
+    background-color: var(--ds-chips-backdrop, var(--ds-flip-backdrop, var(--ds-surface)));
+  }
+
+  /* The check lies over the slot, never a flex item, and fades: in at once
+     (--ds-dur-micro, before the stroke starts), out with the stroke. The
+     drawn stroke (pathLength="1") runs on the <svg>, and its path inherits
+     it: from the short arm, after the check's fade-in; out faster and
+     accelerating. Set on the path itself, Chromium missed the change of
+     :checked (its style invalidation does not reach a [pathLength]
+     selector on the camelCase SVG attribute), so the check drew late. */
+  .ds-chip__check {
+    position: absolute;
+    top: calc(50% - var(--_check) / 2);
+    inset-inline-start: var(--_near);
+    width: var(--_check);
+    height: var(--_check);
+    opacity: 0;
+    stroke-dashoffset: 1;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in),
+      stroke-dashoffset var(--ds-dur-fast) var(--ds-ease-in);
+  }
+
+  .ds-chip__check [pathLength] {
+    stroke-dasharray: 1;
+  }
+
+  .ds-chip__input:checked + .ds-chip__body {
+    border-color: var(--_tint, var(--ds-accent));
+    background: var(--_tint, var(--ds-accent));
+    color: var(--_on-tint, var(--ds-on-accent));
+  }
+
+  .ds-chip__input:checked + .ds-chip__body .ds-chip__check {
+    opacity: 1;
+    stroke-dashoffset: 0;
+    transition:
+      opacity var(--ds-dur-micro) var(--ds-ease-in-out),
+      stroke-dashoffset var(--ds-dur-medium) var(--ds-ease-out) var(--ds-dur-micro);
+  }
+
+  .ds-chip__input:focus-visible + .ds-chip__body {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  /* Disabled: the button model. The outline (or, selected, the container)
+     takes the neutral fill and the label and check the disabled ink; a
+     theme that dims instead (--ds-disabled-opacity, the fill and ink set
+     to `initial`) keeps the chip's own colours. */
+  .ds-chip__input:is(:disabled, [aria-disabled="true"]) + .ds-chip__body {
+    border-color: var(--ds-chip-disabled-border, var(--ds-disabled-fill, var(--ds-line-2)));
+    color: var(--ds-disabled-ink, var(--ds-text-2));
+    opacity: var(--ds-disabled-opacity, var(--ds-state-disabled));
+  }
+
+  .ds-chip__input:checked:is(:disabled, [aria-disabled="true"]) + .ds-chip__body {
+    border-color: var(--ds-chip-disabled-bg, var(--ds-disabled-fill, var(--ds-accent)));
+    background: var(--ds-chip-disabled-bg, var(--ds-disabled-fill, var(--ds-accent)));
+    color: var(--ds-disabled-ink, var(--ds-on-accent));
+  }
+
+  /*
+   * Action and input chips: a <button> (or a link) that acts at once. The
+   * element's own look is reset; the body keeps every visual. No check
+   * slot; the padding follows a leading icon or a trailing glyph. Not a
+   * pill, so no morph; a chip that stays on or off is a filter chip.
+   */
+  :is(button, a).ds-chip {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--_radius);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  :is(button, a).ds-chip > .ds-chip__body {
+    max-width: var(--ds-chip-max-width, 240px);
+    padding-inline: var(--_pad);
+  }
+
+  :is(button, a).ds-chip > .ds-chip__body:has(> .ds-chip__icon:first-child) {
+    padding-inline-start: var(--_near);
+  }
+
+  :is(button, a).ds-chip > .ds-chip__body:has(> .ds-chip__trailing:last-child) {
+    padding-inline-end: var(--_near);
+  }
+
+  :is(button, a).ds-chip > .ds-chip__body::after {
+    content: none;
+  }
+
+  .ds-chip__icon,
+  .ds-chip__trailing {
+    flex-shrink: 0;
+    width: var(--_check);
+    height: var(--_check);
+  }
+
+  .ds-chip__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @media (hover: hover) {
+    :is(button, a).ds-chip:not(:disabled, [aria-disabled="true"]):hover > .ds-chip__body::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  :is(button, a).ds-chip:focus-visible > .ds-chip__body::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  :is(button, a).ds-chip:not(:disabled, [aria-disabled="true"]):is(:active, .ds-pressed) > .ds-chip__body::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  :is(button, a).ds-chip:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  :is(button, a).ds-chip:is(:disabled, [aria-disabled="true"]) {
+    cursor: not-allowed;
+  }
+
+  :is(button, a).ds-chip:is(:disabled, [aria-disabled="true"]) > .ds-chip__body {
+    border-color: var(--ds-chip-disabled-border, var(--ds-disabled-fill, var(--ds-line-2)));
+    color: var(--ds-disabled-ink, var(--ds-text-2));
+    opacity: var(--ds-disabled-opacity, var(--ds-state-disabled));
+  }
+
+  /* An input chip: an active filter or a picked value; the whole chip removes it. */
+  .ds-chip--input > .ds-chip__body {
+    border-color: var(--_tint, var(--ds-chip-input-border, var(--ds-accent)));
+    background: var(--_tint, var(--ds-chip-input-bg, var(--ds-accent)));
+    color: var(--_on-tint, var(--ds-chip-input-color, var(--ds-on-accent)));
+  }
+
+  /* An action chip with a tone of its own takes it like an input chip. */
+  :is(button, a).ds-chip:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error):not(:disabled, [aria-disabled="true"]) > .ds-chip__body {
+    border-color: var(--_tint);
+    background: var(--_tint);
+    color: var(--_on-tint);
+  }
+
+  .ds-chip--input:is(:disabled, [aria-disabled="true"]) > .ds-chip__body {
+    border-color: var(--ds-chip-disabled-bg, var(--ds-disabled-fill, var(--ds-chip-input-border, var(--ds-accent))));
+    background: var(--ds-chip-disabled-bg, var(--ds-disabled-fill, var(--ds-chip-input-bg, var(--ds-accent))));
+    color: var(--ds-disabled-ink, var(--ds-chip-input-color, var(--ds-on-accent)));
+  }
+
+  /* Wrapping chips (long suggestions): the label wraps inside the chip; a
+     one-line chip keeps its height, and the corners stay soft. */
+  .ds-chips--wrap .ds-chip__body {
+    height: auto;
+    min-height: max(var(--_box), calc(1lh + 2px));
+    padding-block: max(0px, calc((var(--_box) - 1lh) / 2 - 1px));
+    white-space: normal;
+  }
+
+  .ds-chips--wrap .ds-chip__label {
+    overflow: visible;
+    overflow-wrap: anywhere;
+  }
+
+  /* Forced colors: the selected fill would be dropped, so a selected chip
+     takes the system highlight; the check (stroke currentColor) follows
+     in HighlightText. */
+  @media (forced-colors: active) {
+    .ds-chip__input:checked + .ds-chip__body {
+      forced-color-adjust: none;
+      border-color: Highlight;
+      background: Highlight;
+      color: HighlightText;
+    }
+
+    .ds-chip__input:checked:focus-visible + .ds-chip__body,
+    .ds-chip__input[aria-disabled="true"]:focus-visible + .ds-chip__body {
+      outline-color: CanvasText;
+    }
+
+    /* Disabled in GrayText; selected, a GrayText container with the check
+       and label in Canvas (like the disabled switch). */
+    .ds-chip__input:is(:disabled, [aria-disabled="true"]) + .ds-chip__body {
+      forced-color-adjust: none;
+      border-color: GrayText;
+      background: Canvas;
+      color: GrayText;
+    }
+
+    .ds-chip__input:checked:is(:disabled, [aria-disabled="true"]) + .ds-chip__body {
+      border-color: GrayText;
+      background: GrayText;
+      color: Canvas;
+    }
+
+    /* An input chip keeps a real edge (its fill is dropped), as does an action
+       chip with a tone; a blocked action or input chip turns GrayText. */
+    .ds-chip--input > .ds-chip__body,
+    :is(button, a).ds-chip:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error):not(:disabled, [aria-disabled="true"]) > .ds-chip__body {
+      border-color: CanvasText;
+    }
+
+    :is(button, a).ds-chip:is(:disabled, [aria-disabled="true"]) > .ds-chip__body {
+      forced-color-adjust: none;
+      border-color: GrayText;
+      background: Canvas;
+      color: GrayText;
+    }
+  }
+
+  /* In a card's head row (card.css, an earlier sublayer) a chip hangs out of
+     the title's line by its own height. */
+  .ds-card__row > .ds-chip {
+    margin-block: calc((var(--ds-card-title-line, 24px) - max(var(--ds-target-min, 0px), calc(var(--ds-chip-height, 32px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px))) / 2);
+  }
+
+  /* A chip in a current list row (list.css) takes the system colours again
+     in forced colours, as the row's other controls do. */
+  @media (forced-colors: active) {
+    .ds-list__item:is([aria-current]:not([aria-current="false"]), :has(.ds-list__action[aria-current]:not([aria-current="false"]))) .ds-chip {
+      forced-color-adjust: auto;
+    }
+  }
+}

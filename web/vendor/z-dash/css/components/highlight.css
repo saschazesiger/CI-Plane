@@ -1,0 +1,100 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Syntax highlighting (D13): the tokens DS.highlight writes, each a span
+ * coloured by a code role. Text-level: it styles nothing but the token
+ * spans, so it works in a .ds-code-block, a pre in .ds-prose, a code
+ * block of DS.code or any element of the page.
+ *
+ *   <pre class="ds-code-block"><code data-ds-highlight="json">{ "id": 42 }</code></pre>
+ *   (DS.highlight writes) <span class="ds-highlight__property">"id"</span>: <span class="ds-highlight__number">42</span>
+ *
+ * Kinds and the role each reads (a theme sets the roles, never a token
+ * class):
+ *   keyword                 --ds-code-keyword
+ *   string, regex           --ds-code-string
+ *   number, constant        --ds-code-number   (true, null, a hex colour)
+ *   comment                 --ds-code-comment
+ *   function, tag           --ds-code-function (a call, a definition, an
+ *                                               HTML or XML tag name)
+ *   type                    --ds-code-type     (a class, a built-in type, a
+ *                                               CSS class or id selector)
+ *   property, attribute,    --ds-code-property (an object key, a CSS
+ *   variable                                    property, an attribute, $VAR)
+ *   meta                    --ds-code-meta     (a decorator, a doctype, a
+ *                                               shell prompt, diff headers)
+ *   inserted, deleted       --ds-code-inserted, --ds-code-deleted (diff
+ *                                               lines; their + and - stay,
+ *                                               so a change never rests on
+ *                                               the colour)
+ *   punctuation             --ds-text-2
+ *   operator                the text colour
+ * The code roles are colour roles of tokens.css, with their dark values in
+ * themes/dark.css and their contrast values in themes/contrast.css: each
+ * reaches 4.5:1 on --ds-code-bg in the light and the dark scheme, 7:1
+ * under themes/contrast.css (the tests check the pairs).
+ *
+ * Options: none. The tokens keep the size, weight and font of the code
+ * around them (.ds-code-block's code role); size, density, shape and tone
+ * are the block's.
+ *
+ * Forced colours: every token takes the text colour (the system's), so the
+ * code reads as plain text; diff lines keep their + and -.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.highlight {
+  .ds-highlight__keyword {
+    color: var(--ds-code-keyword);
+  }
+
+  .ds-highlight__string,
+  .ds-highlight__regex {
+    color: var(--ds-code-string);
+  }
+
+  .ds-highlight__number,
+  .ds-highlight__constant {
+    color: var(--ds-code-number);
+  }
+
+  .ds-highlight__comment {
+    color: var(--ds-code-comment);
+  }
+
+  .ds-highlight__function,
+  .ds-highlight__tag {
+    color: var(--ds-code-function);
+  }
+
+  .ds-highlight__type {
+    color: var(--ds-code-type);
+  }
+
+  .ds-highlight__property,
+  .ds-highlight__attribute,
+  .ds-highlight__variable {
+    color: var(--ds-code-property);
+  }
+
+  .ds-highlight__meta {
+    color: var(--ds-code-meta);
+  }
+
+  .ds-highlight__inserted {
+    color: var(--ds-code-inserted);
+  }
+
+  .ds-highlight__deleted {
+    color: var(--ds-code-deleted);
+  }
+
+  .ds-highlight__punctuation {
+    color: var(--ds-text-2);
+  }
+
+  .ds-highlight__operator {
+    color: inherit;
+  }
+}

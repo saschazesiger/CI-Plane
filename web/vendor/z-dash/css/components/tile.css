@@ -1,0 +1,413 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Key figures: tonal tiles that fill their row, up to four (.ds-tiles--3:
+ * three), at least --ds-tile-min-width (176px) each, in any container (a
+ * page, a dialog, a sheet, beside the drawer).
+ *
+ *   <div class="ds-tiles">
+ *     <div class="ds-tile">
+ *       <p class="ds-tile__label">[icon] <span>Open items</span></p>
+ *       <p class="ds-tile__value"><span class="ds-tile__figure">128</span><span class="ds-tile__unit">GB</span></p>
+ *       <p class="ds-tile__delta ds-tone-success">[icon arrowUp 16]<span>12% more</span></p>
+ *       <p class="ds-tile__note">Target 140</p>
+ *       <div class="ds-tile__trend">[a sparkline: .ds-columns--mini, or the project's own]</div>
+ *
+ * The value never wraps and never takes a colour: on narrow tiles it gets
+ * smaller instead (a broken number reads as another number). Status goes
+ * into the label as an icon. A tile that opens something is a <button
+ * class="ds-tile"> or <a class="ds-tile">: a 6% state layer, the press
+ * in --ds-dur-micro (also while js/ripple.js holds .ds-pressed) with the
+ * ripple, and keyboard focus with the focus layer and a ring that is solid
+ * from the first frame and snaps from offset + width to the offset
+ * (outline-offset, --ds-dur-fast); no lift, no scale. While pressed it
+ * turns squarer (16px to --ds-tile-radius-pressed, 12px) in
+ * --ds-dur-micro and springs back over --ds-dur-medium, like a card. A
+ * disabled or aria-disabled tile shows no hover or press layer and does
+ * not morph; an aria-disabled one keeps its focus layer.
+ *
+ * Values (docs/motion.md, "Data motion"): every new value goes through
+ * DS.motion.countUp(el, next) (el the value, or its .ds-tile__figure when
+ * it has a unit), which counts from the figure on screen
+ * (the first call from 0) on --ds-ease-value over --ds-dur-glide,
+ * retargets mid-count and gives assistive technology the final value. A
+ * meter or progress bar set in the same task lands on the same frame. The
+ * note changes at once.
+ *
+ * A tile that filters by its figure is a toggle: aria-pressed (or
+ * aria-checked, aria-selected) on the <button class="ds-tile">. Selected it
+ * takes --ds-tile-selected-bg (--ds-accent) with --ds-on-accent ink and a
+ * static inset ring (a border of --ds-focus-width in --ds-selected-ring,
+ * --ds-primary, on its ::after), so the focus ring stays free and both
+ * read at once. The colours change on --ds-dur-fast, the ring shows at
+ * once. Add a check or the label weight: never the tint alone. Forced
+ * colours: Highlight / HighlightText.
+ *
+ * A value that does not fit ends in an ellipsis (the last resort: shorten
+ * figures, the full value in data-tip). .ds-tile__value--empty: a value
+ * that is missing ("No data"), in --ds-text-2 with the display font.
+ *
+ * The unit (.ds-tile__unit, inside the value): a short unit after the
+ * figure ("GB", "ms", "%"), in the subtitle type and --ds-text-2, so the
+ * figure stays the thing to read. With a unit the figure has an element
+ * of its own, .ds-tile__figure, and countUp() runs on that: it writes
+ * textContent, which on the value would take the unit with it.
+ *
+ * The target (.ds-tile__target): a .ds-meter (with a .ds-meter__threshold
+ * at the target's share, meter.css) and one line of words under it,
+ * .ds-tile__target-text ("92% of the target of 140"). The meter has its own
+ * name and value text; the words say whether the target is met, never the
+ * mark or the colour alone.
+ *
+ * The delta (.ds-tile__delta): how the figure moved, always an arrow and a
+ * word. Without a tone it stays quiet; a .ds-tone-* on the delta itself
+ * (the page decides whether up is good) lays it on the tone's tint. The
+ * value itself never takes the colour. The trend (.ds-tile__trend): a slot
+ * at the foot of the tile for a sparkline in --ds-tile-trend-color, so the
+ * sparklines of a row line up whatever stands above them.
+ *
+ * Options (src/core/options.css, docs/options.md), on the tile, the row or
+ * any ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: the value's size, an eighth of the display
+ *             size per step; never the label, the note or the padding
+ *   density   .ds-density-*: the padding 2px per step, the row's gap 2px
+ *             per step; never the type
+ *   shape     .ds-shape-*: multiplies the rest and the pressed radius
+ *   touch     .ds-touch: a clickable tile at least --ds-touch-target high
+ *   tone      .ds-tone-* on .ds-tile__delta only
+ *
+ * Hooks: --ds-tile-radius, --ds-tile-radius-pressed, --ds-tile-padding
+ * (--ds-space-5, on a phone --ds-space-4; the head 4px less), --ds-tile-min-width
+ * (176px), --ds-tiles-columns (4), --ds-tile-value-line (44px at the default
+ * type scale), --ds-tile-trend-color (--ds-chart-1),
+ * --ds-tile-selected-bg, --ds-selected-ring. It sets --ds-chart-forced-ink
+ * in forced colours, for the marks of a sparkline (chart's hook, read there).
+ *
+ * On narrow tiles the value shrinks with the tile (container units).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.tile {
+  /* Intrinsic columns: as many tiles per row as fit at their smallest width,
+     never more than --ds-tiles-columns, each row filled. */
+  .ds-tiles {
+    --_gap: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, max(var(--ds-tile-min-width, 176px), (100% - (var(--ds-tiles-columns, 4) - 1) * var(--_gap)) / var(--ds-tiles-columns, 4))), 1fr));
+    gap: var(--_gap);
+  }
+
+  .ds-tiles--3 {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, max(var(--ds-tile-min-width, 176px), (100% - 2 * var(--_gap)) / 3)), 1fr));
+  }
+
+  .ds-tile {
+    /* Its value scales with the tile (cqi, below). */
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    --_pad: calc(var(--ds-tile-padding, var(--ds-space-5)) + var(--ds-density, 0) * 2px);
+    --_radius: calc(var(--ds-tile-radius, var(--ds-radius-lg)) * var(--ds-shape, 1));
+    min-width: 0;
+    padding: calc(var(--_pad) - var(--ds-space-1)) var(--_pad) var(--_pad);
+    border-radius: var(--_radius);
+    background: var(--ds-surface-low);
+  }
+
+  @media (max-width: 600px) {
+    .ds-tiles {
+      --_gap: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px);
+    }
+
+    .ds-tile {
+      --_pad: calc(var(--ds-tile-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px);
+    }
+  }
+
+  .ds-tile__label {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+
+  .ds-tile__label svg {
+    flex-shrink: 0;
+  }
+
+  .ds-tile__value {
+    --_size: calc(var(--ds-size-display) * (1 + var(--ds-size-step, 0) / 8));
+    --_line: calc(var(--ds-tile-value-line, calc(var(--ds-size-display) * 11 / 9)) * (1 + var(--ds-size-step, 0) / 8));
+    margin: var(--ds-space-2) 0 0;
+    color: var(--ds-text);
+    font: var(--ds-font-display);
+    /* Tiles of a row are equally wide, so their values keep one size. */
+    font-size: min(var(--_size), 26cqi);
+    /* The display role's 44/36, or the theme's own through the hook, also on
+       the size steps: the line height inside --ds-font-display cannot be read
+       here to step it. */
+    line-height: var(--_line);
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    /* The last resort of a value too wide for its tile. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* A value that is missing: quieter, still in the display font (.ds-muted would replace the font). */
+  .ds-tile__value--empty {
+    color: var(--ds-text-2);
+  }
+
+  /* Clickable tile: the element's own button or link look is reset. */
+  :is(button, a).ds-tile {
+    position: relative;
+    isolation: isolate;
+    width: 100%;
+    min-height: var(--ds-target-min, 0px);
+    margin: 0;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* The press morph: squarer while pressed (never rounder than at rest);
+     the layer follows through border-radius: inherit. */
+  :is(button, a).ds-tile:active:not(:disabled, [aria-disabled="true"]),
+  :is(button, a).ds-tile.ds-pressed:not(:disabled, [aria-disabled="true"]) {
+    border-radius: min(calc(var(--ds-tile-radius-pressed, var(--ds-radius-md)) * var(--ds-shape, 1)), var(--_radius));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-micro) var(--ds-ease-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  :is(button, a).ds-tile::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    :is(button, a).ds-tile:hover::before {
+      opacity: var(--ds-state-hover-lg);
+    }
+  }
+
+  :is(button, a).ds-tile:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  :is(button, a).ds-tile:active::before,
+  :is(button, a).ds-tile.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  /* A blocked tile (disabled, aria-disabled) shows neither hover nor press,
+     like its morph above; an aria-disabled tile keeps its focus layer. */
+  @media (hover: hover) {
+    :is(button, a).ds-tile:is(:disabled, [aria-disabled="true"]):hover::before {
+      opacity: 0;
+    }
+  }
+
+  :is(button, a).ds-tile:is(:disabled, [aria-disabled="true"]):is(:active, .ds-pressed)::before {
+    opacity: 0;
+  }
+
+  :is(button, a).ds-tile[aria-disabled="true"]:focus-visible::before {
+    opacity: var(--ds-state-focus);
+  }
+
+  :is(button, a).ds-tile:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  /* On the tonal tile the quieter text colour is text-2, never text-3. */
+  .ds-tile__note {
+    margin: var(--ds-space-1) 0 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* How the figure moved: an arrow and a word. Quiet without a tone. */
+  .ds-tile__delta {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: var(--ds-space-1);
+    max-width: 100%;
+    margin: var(--ds-space-1) 0 0;
+    color: var(--_delta-ink, var(--ds-text-2));
+    font: var(--ds-font-caption);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-tile__delta svg {
+    flex: none;
+  }
+
+  /* On the delta itself: an inherited tone would colour every delta in a
+     tinted region. The tint and its ink are a tested pair of each palette. */
+  .ds-tile__delta:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    padding: 2px var(--ds-space-2);
+    border-radius: calc(var(--ds-radius-chip) * var(--ds-shape, 1));
+    background: var(--ds-tone-container);
+    color: var(--ds-on-tone-container);
+  }
+
+  /* A unit after the figure: quieter, and as large as it can be beside a
+     figure that shrinks with its tile. */
+  /* The figure beside a unit: what countUp() writes. Tabular, as the value. */
+  .ds-tile__figure {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-tile__unit {
+    margin-inline-start: var(--ds-space-1);
+    color: var(--ds-text-2);
+    font: var(--ds-font-subtitle);
+    letter-spacing: 0;
+  }
+
+  /* The target: a meter and its words, under the figure. */
+  .ds-tile__target {
+    display: grid;
+    gap: var(--ds-space-1);
+    margin-top: var(--ds-space-2);
+  }
+
+  .ds-tile__target-text {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A meter under the figure: how far it is to its target. */
+  .ds-tile > .ds-meter {
+    margin-top: var(--ds-space-2);
+  }
+
+  /* The foot of the tile: the sparklines of a row line up. */
+  .ds-tile__trend {
+    min-width: 0;
+    margin-top: auto;
+    padding-top: var(--ds-space-2);
+    color: var(--ds-tile-trend-color, var(--ds-chart-1));
+  }
+
+  .ds-tile__trend svg {
+    display: block;
+    width: 100%;
+  }
+
+  /* Selected (a filter by this figure): the tint and a static inset ring on
+     the free ::after (the state layer is ::before), so the focus ring stays
+     free; the ring shows at once, the colours glide. */
+  :is(button, a).ds-tile:is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"]) {
+    --_delta-ink: var(--ds-on-accent);
+    background: var(--ds-tile-selected-bg, var(--ds-accent));
+    color: var(--ds-on-accent);
+  }
+
+  :is(button, a).ds-tile:is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"]) :is(.ds-tile__label, .ds-tile__value, .ds-tile__note) {
+    color: var(--ds-on-accent);
+  }
+
+  :is(button, a).ds-tile:is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"])::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: var(--ds-focus-width) solid var(--ds-selected-ring, var(--ds-primary));
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  @media (forced-colors: active) {
+    :is(button, a).ds-tile:is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"]) {
+      --_delta-ink: HighlightText;
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+    }
+
+    /* forced-color-adjust inherits: a toned delta and a sparkline drop their
+       own colours for the selection's. */
+    :is(button, a).ds-tile:is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"]) .ds-tile__delta {
+      background: transparent;
+      color: HighlightText;
+    }
+
+    :is(button, a).ds-tile:is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"]) .ds-tile__trend {
+      --ds-chart-forced-ink: HighlightText;
+      color: HighlightText;
+    }
+
+    :is(button, a).ds-tile:is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"]) :is(.ds-tile__label, .ds-tile__value, .ds-tile__note) {
+      color: HighlightText;
+    }
+
+    :is(button, a).ds-tile:is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"])::after {
+      border-color: Highlight;
+    }
+
+    :is(button, a).ds-tile:is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"]):focus-visible {
+      outline-color: CanvasText;
+    }
+
+    :is(button, a).ds-tile[aria-disabled="true"] {
+      forced-color-adjust: none;
+      background: Canvas;
+      color: GrayText;
+    }
+
+    :is(button, a).ds-tile[aria-disabled="true"] :is(.ds-tile__label, .ds-tile__value, .ds-tile__note, .ds-tile__delta, .ds-tile__trend) {
+      background: transparent;
+      color: GrayText;
+    }
+
+    :is(button, a).ds-tile[aria-disabled="true"] .ds-tile__trend {
+      --ds-chart-forced-ink: GrayText;
+    }
+
+    /* It stays focusable; unforced, its ring would keep the brand colour. */
+    :is(button, a).ds-tile[aria-disabled="true"]:focus-visible {
+      outline-color: CanvasText;
+    }
+  }
+
+  /* Print: a short tile is never split across pages. */
+  @media print {
+    .ds-tile {
+      break-inside: avoid;
+    }
+  }
+}

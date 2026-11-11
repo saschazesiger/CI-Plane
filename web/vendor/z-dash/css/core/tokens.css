@@ -1,0 +1,665 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Z-Dash tokens.
+ *
+ * Every token lives on `.ds-theme`, never on :root: the system can run
+ * inside a foreign page (an embedded widget) without touching that page's
+ * variables. A full app puts class="ds-theme" on <html>. The exceptions
+ * are the @property registrations at the top level: --ds-time-scale, the
+ * runtime properties the loading indicators animate (below it), the
+ * share of a chart mark (--ds-share) and the ends of a cut edge's fade
+ * (--ds-scroll-edge-start, --ds-scroll-edge-end).
+ *
+ * Three layers:
+ *   1. Scales: motion, spacing, state layers, layers (z), radius scale.
+ *      The same everywhere, so components move and respond alike. Themes
+ *      never set motion tokens: motion is one scheme for every product, and
+ *      DS.motion reads the computed tokens.
+ *   2. Semantic roles: palette, type roles, radius roles, elevation, focus,
+ *      links, layout sizes. The values below are the neutral default theme;
+ *      a project theme overrides them (themes/example.css lists them all).
+ *   3. Component hooks (--ds-btn-*, --ds-card-pad, ...): read by one
+ *      component with a fallback, set by a theme or on an element.
+ *
+ * Custom properties resolve var() where they are declared. Roles that are
+ * built from other tokens (type roles from --ds-font, --ds-link from
+ * --ds-primary, --ds-focus-ring from --ds-surface, and the color-mix()
+ * roles: --ds-primary-hover and --ds-primary-pressed from --ds-primary,
+ * --ds-link-underline from --ds-link, --ds-fill-round, --ds-disabled-fill
+ * and --ds-disabled-ink from --ds-text) follow a theme only when the theme
+ * sets its values on the .ds-theme element itself, as this file does. Set
+ * on a descendant, those derived roles keep the old value.
+ *
+ * Besides custom properties, one rule sets color-scheme from
+ * --ds-color-scheme on :where(.ds-theme), at the end of the layer.
+ *
+ * Floor: Safari 17.5, Chrome/Edge 123, Firefox 130; no CSS nesting.
+ * Every stylesheet declares the layer order and puts its rules in one of
+ * them (this file in ds.tokens), so unlayered project CSS always wins.
+ *
+ * scripts/motion-curves.mjs writes the linear() values and the block
+ * between the "generated: progress-masks" markers; never edit them by hand.
+ *
+ * Progressive:
+ * - linear() (the spring of --ds-ease-spatial and the exact Material
+ *   emphasized path, behind @supports): without it the cubic-bezier
+ *   fallbacks apply (--ds-ease-out, the emphasized approximation).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+/*
+ * Slow motion for the styleguide and the browser tests: every duration and
+ * delay below is multiplied by it. Registered and inheriting, but never
+ * declared on .ds-theme, so a nested .ds-theme cannot reset it; only the
+ * styleguide and the tests set it, on the .ds-theme element or above.
+ * Components and themes never do (tested).
+ */
+@property --ds-time-scale {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
+/*
+ * Runtime properties of the loading indicators, registered so they
+ * interpolate: the page sets --ds-progress (a share, 0 ... 1) and it
+ * glides; the loop keyframes of motion.css animate the others. Not motion
+ * hooks: the progress and skeleton values inherit on purpose, because they
+ * are animated on a parent and read by its children and pseudo-elements,
+ * which keeps every part in lockstep. The spinner's angles stay on the
+ * spinner itself.
+ */
+@property --ds-progress {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --ds-progress-head-1 {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 0%;
+}
+
+@property --ds-progress-head-2 {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 0%;
+}
+
+@property --ds-progress-tail-1 {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 0%;
+}
+
+@property --ds-progress-tail-2 {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 0%;
+}
+
+@property --ds-spinner-arc {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 10deg;
+}
+
+@property --ds-spinner-start {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --ds-skeleton-x {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+/*
+ * The share of a chart mark (a meter, a column; 0 ... 1), set by the page
+ * on the mark (style.setProperty). Registered so it glides: the mark's
+ * fill is clipped at it (never scaled, so its round end keeps its shape)
+ * and a column's value rides on it. Inherits, so the mark's parts follow
+ * the value of the mark. Not --ds-progress, which drives the whole
+ * progress choreography.
+ */
+@property --ds-share {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+/*
+ * The two ends of a cut edge's fade (0 ... 1), as numbers: the scroller,
+ * the combobox list, the listbox and the choice list mask their scrolling
+ * box with them. Registered here, once, so they interpolate (the
+ * scroll-linked keyframes and the attribute transitions) in whatever set
+ * of single files a page links; they do not inherit, so a scroller inside
+ * a scroller keeps its own.
+ */
+@property --ds-scroll-edge-start {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --ds-scroll-edge-end {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@layer ds.tokens {
+  .ds-theme {
+    /* ── 1. Motion: durations ───────────────────────────
+     * Every duration and delay is calc(<value> * var(--ds-time-scale, 1)):
+     * read it with DS.motion (the computed calc()), not parseInt.
+     * micro    press-in of layers and radius, tiny ticks
+     * instant  pressed state, popup exits
+     * fast     colour, small exits (the default .ds-leave), focus snap
+     * base     toggles, exits of panels and dialogs
+     * medium   content entrances, small spatial movement (handle, chip,
+     *          check), menu entrances
+     * slow     dialogs, FLIP, the indicator cap
+     * long     sheets, modal drawer, container transform; never routine UI
+     * glide    values that travel: progress, countUp() (js/motion.js)
+     */
+    --ds-dur-micro: calc(50ms * var(--ds-time-scale, 1));
+    --ds-dur-instant: calc(100ms * var(--ds-time-scale, 1));
+    --ds-dur-fast: calc(150ms * var(--ds-time-scale, 1));
+    --ds-dur-base: calc(200ms * var(--ds-time-scale, 1));
+    --ds-dur-medium: calc(250ms * var(--ds-time-scale, 1));
+    --ds-dur-slow: calc(350ms * var(--ds-time-scale, 1));
+    --ds-dur-long: calc(450ms * var(--ds-time-scale, 1));
+    --ds-dur-glide: calc(600ms * var(--ds-time-scale, 1));
+
+    /* ── Motion: easings ────────────────────────────────
+     * Effects (opacity, colour) and values: within [0, 1], never decreasing.
+     *   in-out      M3 standard: effects, on-screen changes
+     *   out         M3 emphasized decelerate: the spring's fallback, and
+     *               sizes that push layout (they never overshoot)
+     *   in          M3 standard accelerate: small exits, leaving fades
+     *   exit        M3 emphasized accelerate: large surfaces leaving
+     *               (movement only)
+     *   emphasized  movement that starts and ends on screen; the exact M3
+     *               path below where supported
+     *   value       progress bars and countUp(), so figures and bars land
+     *               together
+     * Spatial: the spring for movement that floats (translate, scale,
+     * clip-path). Its linear() below peaks at most at 1.05 and settles; it is
+     * normalised to its settle time, so one curve serves every duration.
+     * Sizes that push layout never use it.
+     */
+    --ds-ease-in-out: cubic-bezier(.2, 0, 0, 1);
+    --ds-ease-out: cubic-bezier(.05, .7, .1, 1);
+    --ds-ease-in: cubic-bezier(.3, 0, 1, 1);
+    --ds-ease-exit: cubic-bezier(.3, 0, .8, .15);
+    --ds-ease-emphasized: cubic-bezier(.2, 0, 0, 1);
+    --ds-ease-spatial: var(--ds-ease-out);
+    --ds-ease-value: var(--ds-ease-in-out);
+
+    /* ── Motion: choreography ───────────────────────────
+     * Distances of entering elements (4-12 px, 24 px for side sheets, a full
+     * width for a sheet that covers the screen); start scales of content and
+     * dialogs (enter), menus and the combobox list (popup), tooltips
+     * (tooltip) and small markers such as badges (small); the step between
+     * staggered items (at most six, first render only), the delays before
+     * loading indicators may show (fast loads show nothing; js/motion.js
+     * LOADER_DELAY_MS mirrors --ds-delay-loader), how long a loader that
+     * showed stays at least (LOADER_MIN_VISIBLE_MS mirrors --ds-hold-loader),
+     * how long a button shows its success face (DS.motion.busy()) and the
+     * tooltip delays of DS.overlay.tooltips(): the wait before one shows,
+     * the window after a hide in which the next shows at once (warm-up) and
+     * the grace before one hides, so the pointer can move onto it
+     * (js/overlay.js TOOLTIP_DELAY_MS, TOOLTIP_SKIP_MS, TOOLTIP_HIDE_MS).
+     */
+    --ds-distance-sm: 4px;
+    --ds-distance-md: 8px;
+    --ds-distance-lg: 12px;
+    --ds-distance-xl: 24px;
+    --ds-distance-sheet: 100%;
+    --ds-scale-enter: .98;
+    --ds-scale-popup: .95;
+    --ds-scale-tooltip: .9;
+    --ds-scale-small: .6;
+    --ds-stagger: calc(30ms * var(--ds-time-scale, 1));
+    --ds-delay-loader: calc(200ms * var(--ds-time-scale, 1));
+    --ds-delay-boot: calc(400ms * var(--ds-time-scale, 1));
+    --ds-hold-loader: calc(450ms * var(--ds-time-scale, 1));
+    --ds-hold-success: calc(600ms * var(--ds-time-scale, 1));
+    --ds-hold-status: calc(900ms * var(--ds-time-scale, 1));
+    --ds-delay-tooltip: calc(500ms * var(--ds-time-scale, 1));
+    --ds-delay-tooltip-skip: calc(300ms * var(--ds-time-scale, 1));
+    --ds-delay-tooltip-hide: calc(100ms * var(--ds-time-scale, 1));
+    /* Submenu hover intent: a resting pointer opens it after the first, a
+       pointer that moved on to another item closes it after the second.
+       A touch held this long opens a context menu. */
+    --ds-delay-submenu: calc(100ms * var(--ds-time-scale, 1));
+    --ds-delay-submenu-close: calc(300ms * var(--ds-time-scale, 1));
+    --ds-delay-long-press: calc(500ms * var(--ds-time-scale, 1));
+    /* A backdrop or scrim click this soon after the open does not close
+       (shorter than the dialog's --ds-dur-slow entrance; DISMISS_DELAY_MS). */
+    --ds-delay-dismiss: calc(300ms * var(--ds-time-scale, 1));
+
+    /* Loops of loading indicators: they always run at their token speed.
+     * spin           one turn of the spinner (the M3 rotation period)
+     * spin-fast      one turn of the spinner in a status chip
+     * arc            one loop of the spinner's arc: four 1333ms cycles of
+     *                growing and shrinking (ds-spinner-arc)
+     * indeterminate  one cycle of the two-segment indeterminate bar
+     * loader         one round of the shape loader: 7 shapes x 650ms
+     * skeleton       one pass of the skeleton wave (sweep, then rest)
+     * wave           one wavelength of the travelling progress wave
+     */
+    --ds-loop-spin: calc(1568ms * var(--ds-time-scale, 1));
+    --ds-loop-spin-fast: calc(.8s * var(--ds-time-scale, 1));
+    --ds-loop-arc: calc(5332ms * var(--ds-time-scale, 1));
+    --ds-loop-indeterminate: calc(1800ms * var(--ds-time-scale, 1));
+    --ds-loop-loader: calc(4550ms * var(--ds-time-scale, 1));
+    --ds-loop-skeleton: calc(2s * var(--ds-time-scale, 1));
+    --ds-loop-wave: calc(1.2s * var(--ds-time-scale, 1));
+
+    /* ── Progress waves ─────────────────────────────────
+     * The masks that make progress wavy (scripts/motion-curves.mjs writes
+     * them): one wavelength of a 4px sine stroke, ±3px, as a tile of
+     * --ds-progress-wave-length x 10px for the linear bar, and a closed
+     * wavy ring for the 40px determinate spinner.
+     */
+    /* generated: progress-masks */
+    --ds-progress-wave-length: 40px;
+    --ds-progress-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='10' viewBox='0 0 40 10'%3E%3Cpath d='M-5 7.12C-3.33 6.57 -1.67 5.79 0 5C1.67 4.21 3.33 3.43 5 2.88C6.67 2.32 8.33 2 10 2C11.67 2 13.33 2.32 15 2.88C16.67 3.43 18.33 4.21 20 5C21.67 5.79 23.33 6.57 25 7.12C26.67 7.68 28.33 8 30 8C31.67 8 33.33 7.68 35 7.12C36.67 6.57 38.33 5.79 40 5C41.67 4.21 43.33 3.43 45 2.88' fill='none' stroke='black' stroke-width='4'/%3E%3C/svg%3E");
+    --ds-progress-ring-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M20 3.6C21.23 2.76 22.69 2.15 24.01 2.45C25.32 2.75 26.37 3.94 27.12 5.22C27.86 6.51 28.36 7.74 29.23 8.43C30.09 9.12 31.4 9.34 32.82 9.77C34.24 10.21 35.63 10.98 36.22 12.19C36.8 13.4 36.53 14.97 35.99 16.35C35.45 17.73 34.8 18.89 34.8 20C34.8 21.11 35.45 22.27 35.99 23.65C36.53 25.03 36.8 26.6 36.22 27.81C35.63 29.02 34.24 29.79 32.82 30.23C31.4 30.66 30.09 30.88 29.23 31.57C28.36 32.26 27.86 33.49 27.12 34.78C26.37 36.06 25.32 37.25 24.01 37.55C22.69 37.85 21.23 37.24 20 36.4C18.77 35.56 17.79 34.68 16.71 34.43C15.63 34.18 14.35 34.55 12.88 34.78C11.42 35 9.83 34.91 8.78 34.07C7.72 33.23 7.29 31.71 7.18 30.23C7.07 28.74 7.15 27.42 6.67 26.42C6.19 25.42 5.1 24.66 4.01 23.65C2.92 22.64 2 21.35 2 20C2 18.65 2.92 17.36 4.01 16.35C5.1 15.34 6.19 14.58 6.67 13.58C7.15 12.58 7.07 11.26 7.18 9.77C7.29 8.29 7.72 6.77 8.78 5.93C9.83 5.09 11.42 5 12.88 5.22C14.35 5.45 15.63 5.82 16.71 5.57C17.79 5.32 18.77 4.44 20 3.6Z' fill='none' stroke='black' stroke-width='4'/%3E%3C/svg%3E");
+    /* end generated: progress-masks */
+    /* Short bars and arcs are flat (M3 Expressive flattens the wave at
+       small shares): the wave fades in from the share wave-start over the
+       next wave-ramp of the share (flat up to 6%, wavy from 11%). */
+    --ds-progress-wave-start: .06;
+    --ds-progress-wave-ramp: .05;
+
+    /* ── State layers ───────────────────────────────────
+     * Opacity of the content colour laid over a control (::before). Large
+     * targets (rows, navigation items) take the lighter hover. Keyboard
+     * focus lays its own layer under the ring (focus); a press stays on top
+     * of it. Disabled content dims to 38%; stale content (about to be
+     * replaced) to 55%.
+     */
+    --ds-state-hover: .08;
+    --ds-state-hover-lg: .06;
+    --ds-state-focus: .10;
+    --ds-state-pressed: .10;
+    --ds-state-dragged: .16;
+    --ds-state-disabled: .38;
+    --ds-state-stale: .55;
+
+    /* ── Spacing (4 px grid) ──────────────────────────── */
+    --ds-space-1: 4px;
+    --ds-space-2: 8px;
+    --ds-space-3: 12px;
+    --ds-space-4: 16px;
+    --ds-space-5: 20px;
+    --ds-space-6: 24px;
+    --ds-space-7: 28px;
+    --ds-space-8: 32px;
+    --ds-space-10: 40px;
+    --ds-space-12: 48px;
+
+    /* ── Layers (inside one stacking context) ───────────
+     * pinned   a pinned first table column, above the raised controls of
+     *          the cells that scroll under it
+     * sticky-pinned  the corner cell of a sticky header over a pinned column
+     * popover  menus and listboxes
+     * drawer   side sheets and the modal navigation drawer
+     * dialog   dialogs, above an open side sheet (they may ask from inside one)
+     * toast    snackbars, tooltips, the skip link
+     */
+    --ds-z-raised: 1;
+    --ds-z-pinned: calc(var(--ds-z-raised) + 1);
+    --ds-z-sticky: 20;
+    --ds-z-sticky-pinned: calc(var(--ds-z-sticky) + 1);
+    --ds-z-popover: 40;
+    --ds-z-drawer: 50;
+    --ds-z-dialog: calc(var(--ds-z-drawer) + 1);
+    --ds-z-toast: 60;
+
+    /* ── 2. Palette (neutral default) ───────────────────
+     * Surfaces: white panels on a cool grey backdrop; hierarchy comes from
+     * tonal surfaces, hairlines and type, not shadows.
+     *   backdrop         the page behind the panels (top bar, drawer)
+     *   surface          panels, cards, dialogs, tables
+     *   surface-low      tiles, filled cards, code, read-only fields
+     *   surface-high     filled fields (search, toolbar selects), neutral chips
+     *   surface-highest  tracks (switch, spinner), skeletons, hovered filled fields
+     */
+    --ds-backdrop: #f0f4f9;
+    --ds-surface: #ffffff;
+    --ds-surface-low: #f8fafd;
+    --ds-surface-high: #e9eef6;
+    --ds-surface-highest: #dde3ea;
+
+    /* Floating surfaces: overlay for the dialog box and the side sheet
+       panel, popover for menus, the combobox list and the skip link. The
+       same white by default; a dark theme lifts them a tone above the page,
+       where a shadow no longer shows. */
+    --ds-surface-overlay: var(--ds-surface);
+    --ds-surface-popover: var(--ds-surface);
+
+    /* The colour scheme of the theme (light or dark): the browser draws
+       scrollbars, native pickers and form controls to match. Set it with
+       the palette; :where(.ds-theme) applies it below. */
+    --ds-color-scheme: light;
+
+    /* The band of the skeleton wave that passes over the bones. */
+    --ds-skeleton-highlight: var(--ds-surface-high);
+
+    /* The shimmer on the words of a status line (.ds-shimmer): the colour
+       of the glint, a copy of the text on top (white in light and dark),
+       and the mask at the crest of its band, of which only the alpha counts
+       (the glint's strength: 55% of the text). */
+    --ds-shimmer-glint: #ffffff;
+    --ds-shimmer-peak: color-mix(in srgb, var(--ds-text) 55%, transparent);
+
+    /* Text. --ds-text-3 reaches 4.5:1 on white only; on any tinted surface
+       the quieter text is --ds-text-2. */
+    --ds-text: #1f1f1f;
+    --ds-text-2: #444746;
+    --ds-text-3: #747775;
+
+    /* Lines: passive structure (cards, dividers, rows), outlines of
+       interactive controls (outlined buttons, chips), field borders. */
+    --ds-line: #dde3ea;
+    --ds-line-2: #c4c7c5;
+    --ds-outline: #747775;
+
+    /* Primary: the strongest action, focus, switches, progress, links. The
+       hover and pressed values are references for components that cannot
+       lay a state layer (a solid button drawn by a project). Derived: they
+       follow --ds-primary (hover mixes in 8% of --ds-on-primary, pressed 15%
+       black); a theme sets them only to differ. */
+    --ds-primary: #0b57d0;
+    --ds-on-primary: #ffffff;
+    --ds-primary-hover: color-mix(in srgb, var(--ds-primary), var(--ds-on-primary) 8%);
+    --ds-primary-pressed: color-mix(in srgb, var(--ds-primary), #000 15%);
+    /* The primary container: the tint of the primary tone (.ds-tone-primary
+       on a badge, an alert, a chip), with its text. The same tones as the
+       accent by default; a theme with an accent of its own keeps this one
+       on the primary hue. */
+    --ds-primary-container: #d3e3fd;
+    --ds-on-primary-container: #041e49;
+
+    /* The one tint: active navigation, selected chips, the tonal button,
+       tracks of progress, text selection. It is too light against white to
+       carry a state alone: a selection always adds a check, a weight or an
+       aria attribute. */
+    --ds-accent: #d3e3fd;
+    --ds-on-accent: #041e49;
+    --ds-on-accent-icon: var(--ds-on-accent);
+
+    /* Label colour of outlined and text buttons. */
+    --ds-action-ink: var(--ds-primary);
+
+    /* Status: text on its container, always with an icon. The warning
+       surface is a quieter fill for full-width banners. Each tone also has
+       the text that sits on its full colour (--ds-on-error ...), for a
+       filled mark: a count badge, the filled error button of a destructive
+       confirmation (docs/options.md, "Tone"). Info is the neutral notice
+       (a sky blue apart from the primary hue). */
+    --ds-error: #b3261e;
+    --ds-on-error: #ffffff;
+    --ds-error-container: #f9dedc;
+    --ds-on-error-container: #8c1d18;
+    --ds-success: #146c2e;
+    --ds-on-success: #ffffff;
+    --ds-success-container: #c4eed0;
+    --ds-on-success-container: #0f5223;
+    --ds-warning: #8f4e06;
+    --ds-on-warning: #ffffff;
+    --ds-warning-container: #feefc3;
+    --ds-on-warning-container: #8f4e06;
+    --ds-warning-surface: #fdf6e7;
+    --ds-info: #00639b;
+    --ds-on-info: #ffffff;
+    --ds-info-container: #cee5ff;
+    --ds-on-info-container: #004a76;
+
+    /* Inverse surfaces: snackbar, tooltip. */
+    --ds-inverse: #303030;
+    --ds-on-inverse: #f2f2f2;
+    --ds-inverse-primary: #a8c7fa;
+
+    /* Scrim behind dialogs and sheets, never blurred. A dialog over another
+       open modal (a sheet, the modal drawer) adds the lighter nested one, so
+       the two together come to about 43% instead of 54%. */
+    --ds-scrim: rgba(0, 0, 0, .32);
+    --ds-scrim-nested: rgba(0, 0, 0, .16);
+
+    /* The disc behind round icon buttons (.ds-btn--disc): 8% of the text
+       colour (derived; set it only to differ). */
+    --ds-fill-round: color-mix(in srgb, var(--ds-text) 8%, transparent);
+
+    /* Inline code. */
+    --ds-code-bg: var(--ds-surface-low);
+
+    /* Syntax colours (the token spans of DS.highlight, the tint of a
+       diff's lines): each at 4.5:1 on --ds-code-bg, at fixed hues, so a
+       keyword looks the same in every product. A change never rests on the
+       colour: the + and - of a diff stay. */
+    --ds-code-keyword: #8430ce;
+    --ds-code-string: #146c2e;
+    --ds-code-number: #9c4300;
+    --ds-code-comment: #5f6368;
+    --ds-code-function: #0b57d0;
+    --ds-code-type: #00696b;
+    --ds-code-property: #a3195b;
+    --ds-code-meta: #4c5a92;
+    --ds-code-inserted: #146c2e;
+    --ds-code-deleted: #b3261e;
+
+    /* Charts (meters, columns, legends): four series in a fixed order,
+       never cycled (more fold into "Other"), each at 3:1 on the surfaces
+       and on the track; the neutral series for the rest of a highlighted
+       one; the tones only on single-series marks, always with words.
+       Text never takes a series colour. */
+    --ds-chart-1: var(--ds-primary);
+    --ds-chart-2: #c76a00;
+    --ds-chart-3: #00897b;
+    --ds-chart-4: #9334e6;
+    --ds-chart-track: var(--ds-surface-high);
+    --ds-chart-neutral: var(--ds-outline);
+    --ds-chart-warning: var(--ds-warning);
+    --ds-chart-error: var(--ds-error);
+
+    /* Disabled controls: the neutral Material look (a 12% container and
+       38% content) instead of dimming the whole control, so a filled button
+       does not fade into a pale brand colour. A theme that prefers dimming
+       sets --ds-disabled-opacity: var(--ds-state-disabled) and
+       --ds-disabled-fill / --ds-disabled-ink to `initial` (each control then
+       keeps its own fill and ink). Fill and ink are derived from --ds-text
+       (12% and 38%), so a theme that sets the text colour gets them too. */
+    --ds-disabled-opacity: 1;
+    --ds-disabled-fill: color-mix(in srgb, var(--ds-text) 12%, transparent);
+    --ds-disabled-ink: color-mix(in srgb, var(--ds-text) 38%, transparent);
+
+    /* ── Links ──────────────────────────────────────────
+     * Always underlined: colour alone does not tell a link from text. The
+     * thickness and offset are the same everywhere (themes recolour only),
+     * so links in text, text buttons and tables stay alike. The resting
+     * underline is the link colour at 40% (derived; set it only to differ).
+     */
+    --ds-link: var(--ds-primary);
+    --ds-link-underline: color-mix(in srgb, var(--ds-link) 40%, transparent);
+    --ds-link-underline-hover: var(--ds-link);
+    --ds-link-underline-thickness: 1px;
+    --ds-link-underline-offset: 3px;
+
+    /* ── Focus ──────────────────────────────────────────
+     * A 2 px ring, solid from the first frame. The outline form for
+     * controls: it rests (invisible) at offset + width and snaps in to the
+     * offset, a transition of outline-offset on --ds-dur-fast; the
+     * box-shadow form for media and floating buttons.
+     */
+    --ds-focus: var(--ds-primary);
+    --ds-focus-width: 2px;
+    --ds-focus-offset: 2px;
+    --ds-focus-outline: var(--ds-focus-width) solid var(--ds-focus);
+    --ds-focus-ring: 0 0 0 2px var(--ds-surface), 0 0 0 4px var(--ds-focus);
+
+    /* ── Radii ──────────────────────────────────────────
+     * The scale (xs ... 2xl) and the roles components read. Every action is
+     * fully round (--ds-radius-action). Pressed, an action turns squarer
+     * (--ds-radius-action-pressed) and springs back on release; cards and
+     * radio cards take --ds-radius-card-pressed. A pressed radius is never
+     * rounder than the rest radius, so a square theme stays square. A theme
+     * that wants square containers sets the scale to 0 and keeps the action
+     * radius.
+     */
+    --ds-radius-xs: 4px;
+    --ds-radius-sm: 8px;
+    --ds-radius-md: 12px;
+    --ds-radius-lg: 16px;
+    --ds-radius-xl: 20px;
+    --ds-radius-2xl: 28px;
+    --ds-radius-action: 9999px;
+    --ds-radius-action-pressed: 12px;
+    --ds-radius-panel: var(--ds-radius-xl);
+    --ds-radius-card: var(--ds-radius-md);
+    --ds-radius-card-pressed: var(--ds-radius-sm);
+    --ds-radius-dialog: var(--ds-radius-lg);
+    --ds-radius-chip: var(--ds-radius-sm);
+    --ds-radius-field: var(--ds-radius-sm);
+    /* The drawn box of a checkbox (radios are round). */
+    --ds-radius-check: 2px;
+
+    /* ── Type ───────────────────────────────────────────
+     * Headings are regular weight; the label weight is for buttons, labels
+     * and emphasis in UI copy. Sizes in px only: a host page may change the
+     * root font size.
+     */
+    --ds-font: 'Google Sans', Roboto, 'Segoe UI', system-ui, sans-serif;
+    --ds-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+    --ds-weight-regular: 400;
+    --ds-weight-title: 400;
+    --ds-weight-label: 500;
+    /* Multiplies the size and line height of every type role. Theme-level:
+       the roles resolve it here, on .ds-theme, so it does not nest
+       (docs/options.md). */
+    --ds-type-scale: 1;
+    /* Size of the display role, for a component that caps or scales it
+       (key figures shrink with their tile). */
+    --ds-size-display: calc(36px * var(--ds-type-scale));
+
+    /*
+     * Type roles as `font` shorthands: one declaration sets size, line
+     * height, weight and family, which also beats host rules that target
+     * elements. The shorthand resets font-variant-numeric: figures set
+     * tabular-nums after it. Tracking is always 0.
+     *   headline  page title
+     *   title     dialog, sheet and section titles, product name
+     *   subtitle  card titles
+     *   reading   running text to read (messages, long notes)
+     *   input     typed text on phones (at least 16px at any --ds-type-scale:
+     *             iOS zooms into smaller fields)
+     *   body      default UI text, fields
+     *   dense     table cells
+     *   label     buttons, labels, navigation, column heads
+     *   chip      chips
+     *   meta      hints, timestamps, notes
+     *   caption   status chips, field labels, counters
+     *   display   key figures (tabular)
+     *   code      code blocks
+     */
+    --ds-font-headline: var(--ds-weight-title) calc(24px * var(--ds-type-scale))/calc(32px * var(--ds-type-scale)) var(--ds-font);
+    --ds-font-title: var(--ds-weight-title) calc(22px * var(--ds-type-scale))/calc(28px * var(--ds-type-scale)) var(--ds-font);
+    --ds-font-subtitle: var(--ds-weight-label) calc(16px * var(--ds-type-scale))/calc(24px * var(--ds-type-scale)) var(--ds-font);
+    --ds-font-reading: var(--ds-weight-regular) calc(16px * var(--ds-type-scale))/calc(24px * var(--ds-type-scale)) var(--ds-font);
+    --ds-font-input: var(--ds-weight-regular) max(16px, calc(16px * var(--ds-type-scale)))/max(24px, calc(24px * var(--ds-type-scale))) var(--ds-font);
+    --ds-font-body: var(--ds-weight-regular) calc(14px * var(--ds-type-scale))/calc(20px * var(--ds-type-scale)) var(--ds-font);
+    --ds-font-dense: var(--ds-weight-regular) calc(14px * var(--ds-type-scale))/calc(20px * var(--ds-type-scale)) var(--ds-font);
+    --ds-font-label: var(--ds-weight-label) calc(14px * var(--ds-type-scale))/calc(20px * var(--ds-type-scale)) var(--ds-font);
+    --ds-font-chip: var(--ds-weight-label) calc(14px * var(--ds-type-scale))/calc(20px * var(--ds-type-scale)) var(--ds-font);
+    --ds-font-meta: var(--ds-weight-regular) calc(12px * var(--ds-type-scale))/calc(16px * var(--ds-type-scale)) var(--ds-font);
+    --ds-font-caption: var(--ds-weight-label) calc(12px * var(--ds-type-scale))/calc(16px * var(--ds-type-scale)) var(--ds-font);
+    --ds-font-display: var(--ds-weight-regular) var(--ds-size-display)/calc(44px * var(--ds-type-scale)) var(--ds-font);
+    --ds-font-code: var(--ds-weight-regular) calc(13px * var(--ds-type-scale))/calc(20px * var(--ds-type-scale)) var(--ds-font-mono);
+
+    /* ── Elevation ──────────────────────────────────────
+     * Only floating layers cast shadows. The three Material levels, and the
+     * roles components read:
+     *   hover    clickable cards when a theme sets --ds-card-hover-shadow,
+     *            and filled buttons on hover (level 1)
+     *   popover  menus, listboxes, the skip link (level 2)
+     *   overlay  dialogs, side sheets, the modal drawer, snackbars (level 3)
+     */
+    --ds-elev-1: 0 1px 2px 0 rgba(60, 64, 67, .3), 0 1px 3px 1px rgba(60, 64, 67, .15);
+    --ds-elev-2: 0 1px 2px 0 rgba(60, 64, 67, .3), 0 2px 6px 2px rgba(60, 64, 67, .15);
+    --ds-elev-3: 0 1px 3px 0 rgba(60, 64, 67, .3), 0 4px 8px 3px rgba(60, 64, 67, .15);
+    --ds-elev-hover: var(--ds-elev-1);
+    --ds-elev-popover: var(--ds-elev-2);
+    --ds-elev-overlay: var(--ds-elev-3);
+
+    /* ── Layout ─────────────────────────────────────────
+     * Sizes of the app frame (components/shell.css, components/page.css).
+     *   topbar-height  the top app bar
+     *   drawer-width   the navigation drawer
+     *   drawer-rail-width  the drawer as a rail (icons only, data-drawer-collapsed)
+     *   content-max    widest page content
+     *   measure        reading measure of running text (leads, notes)
+     *   toast-room     room kept free at a page's end for a two-line snackbar
+     *   touch-target   the smallest target under .ds-touch (--ds-target-min,
+     *                  options.css; the target hooks of utilities.css)
+     */
+    --ds-topbar-height: 64px;
+    --ds-drawer-width: 256px;
+    --ds-drawer-rail-width: 72px;
+    --ds-content-max: 1280px;
+    --ds-measure: 76ch;
+    --ds-toast-room: 64px;
+    --ds-touch-target: 48px;
+
+    /* ── Options (src/core/options.css, docs/options.md) ─
+     * The defaults of the option classes: plain numbers that inherit.
+     *   size-step   -2 ... 2 (.ds-xs ... .ds-xl): 8px of a control's height
+     *               per step, its padding and its type role
+     *   density     0 ... -3 (.ds-density-*): 4px of a control's or a row's
+     *               height per step
+     *   shape       0 ... 1.5 (.ds-shape-*): multiplies every radius
+     *   target-min  the smallest block size of a control (.ds-touch sets
+     *               it to --ds-touch-target)
+     * A component computes its sizes from them in its own rule; no role
+     * here reads them (a role resolves its var() on .ds-theme, so a nested
+     * option class would change nothing; tested). A theme may set them
+     * (themes/compact.css sets the density); a nested .ds-theme starts from
+     * these values again.
+     */
+    --ds-size-step: 0;
+    --ds-density: 0;
+    --ds-shape: 1;
+    --ds-target-min: 0px;
+  }
+
+  /*
+   * The one property in this file that is not a custom property: the
+   * theme's colour scheme, so scrollbars, native pickers and form controls
+   * of the browser match the palette. Zero specificity, so a page or a
+   * component that sets color-scheme itself still wins.
+   */
+  :where(.ds-theme) {
+    color-scheme: var(--ds-color-scheme);
+  }
+
+  /*
+   * The sampled curves, written by scripts/motion-curves.mjs (never by hand):
+   * the spring of --ds-ease-spatial (damping ratio 0.75, peak about 1.028)
+   * and the exact Material 3 emphasized path. Engines without linear()
+   * (Safari up to 17.1) keep the cubic-bezier values above.
+   */
+  @supports (transition-timing-function: linear(0, 1)) {
+    .ds-theme {
+      --ds-ease-spatial: linear(0, 0.007 1.5%, 0.03 3.3%, 0.077 5.5%, 0.151 8.1%, 0.27 11.7%, 0.506 18.5%, 0.637 22.7%, 0.738 26.5%, 0.817 30.1%, 0.88 33.6%, 0.934 37.6%, 0.975 41.8%, 1.005 46.7%, 1.023 52.6%, 1.028 60.2%, 1.015 77.3%, 1.002 97.2%, 1);
+      --ds-ease-emphasized: linear(0, 0.007 3%, 0.03 6%, 0.066 8.6%, 0.112 10.8%, 0.162 12.5%, 0.217 13.9%, 0.273 15%, 0.333 15.9%, 0.393 16.6%, 0.479 17.5%, 0.549 18.4%, 0.602 19.3%, 0.648 20.3%, 0.697 21.7%, 0.743 23.5%, 0.79 26%, 0.835 29.5%, 0.876 34%, 0.913 40.1%, 0.946 48.5%, 0.972 59.4%, 0.991 74.6%, 1 96.7%, 1);
+    }
+  }
+}

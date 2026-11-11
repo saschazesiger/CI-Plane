@@ -1,0 +1,194 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Sliding indicator (js/indicator.js). The component that uses it gives it
+ * a look (background, and its corners through --ds-indicator-radius); this
+ * file only moves it.
+ *
+ * The pill is drawn by clip-path on a box, never by animating width/height:
+ * the box (--ds-indicator-x/-y/-w/-h, moved by translate) jumps, the four
+ * edges of the clip (--ds-indicator-t/-r/-b/-l, registered lengths) glide.
+ * At rest the box is the active item and the clip insets are 0px: a plain
+ * rounded pill. A glide makes the box the union of the pill it leaves and
+ * the item it goes to, widened on the travel axis by an overshoot margin
+ * (data-glide), and moves the edges from the one to the other on the
+ * spatial spring. The leading edge leads and the trailing edge follows
+ * --ds-indicator-lag later (data-dir), so the pill stretches toward its
+ * target; the leading edge passes it by at most 5 % of the travel and
+ * settles. The trailing edge runs on --ds-ease-in-out, which never
+ * overshoots: the pill never gets shorter than its item and never slides
+ * past it (--ds-indicator-ease-t/-r/-b/-l, the curve of each edge, are
+ * set by the data-dir rules; component internal). The travel
+ * time grows with the distance (from --ds-dur-medium, capped at
+ * --ds-dur-slow): js writes it as --ds-indicator-dur on the track, where
+ * the labels of the items read it too. The radius springs like a pill's
+ * after a press morph, also while the pill rests (the drawer squares the
+ * pill under a pressed active item).
+ *
+ *   <nav class="ds-has-indicator">
+ *     <span class="ds-indicator ..." aria-hidden="true" data-ds-keep></span> ...items...
+ *   </nav>
+ *   (DS.indicator.create(), or data-ds-indicator and DS.init(), inserts the
+ *   span and the class.)
+ *
+ * State on the span, written by js:
+ *   data-glide               a glide runs: the box is the union, no own radius
+ *   data-dir                 left, right, up or down: the travel; the edge
+ *                            on the other side trails
+ *   data-empty               no active item: faded out, contracted to the
+ *                            centre (it grows from there when one appears)
+ *   .ds-indicator--instant   placed without a glide (public)
+ *
+ * Property of the indicator's class:
+ *   --ds-indicator-radius    the pill's corners (a component class sets it;
+ *                            js copies a plain border-radius of a project
+ *                            class into it at rest). It does not inherit, so
+ *                            it is set on that class, never on .ds-theme
+ *
+ * Motion hook (themes never set it):
+ *   --ds-indicator-lag       how long the trailing edge waits (default
+ *                            --ds-dur-micro)
+ *
+ * Options (src/core/options.css): the pill has no size of its own. Size,
+ * density and .ds-touch change the items, and js places the pill on what
+ * it measures (a resize at once, without a glide). The shape comes with its
+ * radius: a component's class computes --ds-indicator-radius with
+ * --ds-shape in its own rule, and js copies a project class's plain
+ * border-radius with --ds-shape as a live factor; this file never
+ * multiplies. No tone: a pill shows a choice, no status.
+ *
+ * Forced colours: no pill, for any class; the items show the selection by
+ * the system colours of their own component.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+/* The edges and the radius transition as lengths. */
+@property --ds-indicator-t {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --ds-indicator-r {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --ds-indicator-b {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --ds-indicator-l {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --ds-indicator-radius {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@layer ds.components.indicator {
+  .ds-has-indicator {
+    position: relative;
+    isolation: isolate;
+  }
+
+  /* Box and clip; the order of the transition lists (edges, radius,
+     opacity) is the one every rule below keeps. */
+  /* Physical on purpose (D9): DS.indicator writes viewport-measured x and
+     y, from the top left corner. */
+  .ds-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: -1;
+    width: var(--ds-indicator-w, 0);
+    height: var(--ds-indicator-h, 0);
+    translate: var(--ds-indicator-x, 0) var(--ds-indicator-y, 0);
+    /* max(): a radius going to 0 passes it on the spring, and a negative one
+       makes the whole clip-path invalid, so the union would paint. */
+    clip-path: inset(var(--ds-indicator-t) var(--ds-indicator-r) var(--ds-indicator-b) var(--ds-indicator-l) round max(0px, var(--ds-indicator-radius)));
+    pointer-events: none;
+    transition-property: --ds-indicator-t, --ds-indicator-r, --ds-indicator-b, --ds-indicator-l, --ds-indicator-radius, opacity;
+    transition-duration:
+      var(--ds-indicator-dur, var(--ds-dur-medium)),
+      var(--ds-indicator-dur, var(--ds-dur-medium)),
+      var(--ds-indicator-dur, var(--ds-dur-medium)),
+      var(--ds-indicator-dur, var(--ds-dur-medium)),
+      var(--ds-dur-medium),
+      var(--ds-dur-fast);
+    transition-timing-function:
+      var(--ds-indicator-ease-t, var(--ds-ease-spatial)),
+      var(--ds-indicator-ease-r, var(--ds-ease-spatial)),
+      var(--ds-indicator-ease-b, var(--ds-ease-spatial)),
+      var(--ds-indicator-ease-l, var(--ds-ease-spatial)),
+      var(--ds-ease-spatial),
+      var(--ds-ease-in-out);
+    transition-delay: 0s;
+  }
+
+  /* The trailing edge follows: the edge opposite the travel waits, then
+     closes in without overshoot (on the spring it would also pass its
+     target, and near the end of a long jump the pill would be shorter than
+     the item and slide off it). The curve goes through a variable, so a
+     rule that restates the curve list (the drawer's pressed pill) keeps it. */
+  .ds-indicator[data-dir="right"] {
+    --ds-indicator-ease-l: var(--ds-ease-in-out);
+    transition-delay: 0s, 0s, 0s, var(--ds-indicator-lag, var(--ds-dur-micro)), 0s, 0s;
+  }
+
+  .ds-indicator[data-dir="left"] {
+    --ds-indicator-ease-r: var(--ds-ease-in-out);
+    transition-delay: 0s, var(--ds-indicator-lag, var(--ds-dur-micro)), 0s, 0s, 0s, 0s;
+  }
+
+  .ds-indicator[data-dir="down"] {
+    --ds-indicator-ease-t: var(--ds-ease-in-out);
+    transition-delay: var(--ds-indicator-lag, var(--ds-dur-micro)), 0s, 0s, 0s, 0s, 0s;
+  }
+
+  .ds-indicator[data-dir="up"] {
+    --ds-indicator-ease-b: var(--ds-ease-in-out);
+    transition-delay: 0s, 0s, var(--ds-indicator-lag, var(--ds-dur-micro)), 0s, 0s, 0s;
+  }
+
+  /* While the box is the union of two items, a radius of its own would cut
+     into the painted pill (js also sets it inline: unlayered project CSS
+     beats this rule). */
+  .ds-has-indicator > .ds-indicator[data-glide] {
+    border-radius: 0;
+  }
+
+  /* Placed without a glide: the edges jump. A radius change (a press morph)
+     still springs, and a fade in progress continues. */
+  .ds-indicator--instant {
+    transition-property: --ds-indicator-radius, opacity;
+    transition-duration: var(--ds-dur-medium), var(--ds-dur-fast);
+    transition-timing-function: var(--ds-ease-spatial), var(--ds-ease-in-out);
+    transition-delay: 0s;
+  }
+
+  .ds-indicator[data-empty] {
+    opacity: 0;
+  }
+
+  /* The active item went away: the pill contracts to its centre, quickly
+     and accelerating, while it fades. */
+  .ds-indicator[data-glide][data-empty]:not(.ds-indicator--instant) {
+    transition-duration: var(--ds-dur-fast), var(--ds-dur-fast), var(--ds-dur-fast), var(--ds-dur-fast), var(--ds-dur-medium), var(--ds-dur-fast);
+    transition-timing-function: var(--ds-ease-in), var(--ds-ease-in), var(--ds-ease-in), var(--ds-ease-in), var(--ds-ease-spatial), var(--ds-ease-in);
+  }
+
+  @media (forced-colors: active) {
+    .ds-indicator {
+      display: none;
+    }
+  }
+}

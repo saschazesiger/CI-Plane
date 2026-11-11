@@ -1,0 +1,231 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Audio level meter: the live level of a microphone (or any signal) as a
+ * bar, with a peak marker that holds and falls, and a word when it is too
+ * loud. The page supplies the level: an AnalyserNode (levelmeter.js reads
+ * it every frame) or a value from 0 to 1.
+ *
+ *   <div class="ds-levelmeter [ds-levelmeter--segmented | --vertical]" data-ds-levelmeter>
+ *     <span class="ds-levelmeter__label" id="mic-label">Microphone</span>
+ *     <div class="ds-levelmeter__track" role="meter" aria-labelledby="mic-label"
+ *          aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+ *       <span class="ds-levelmeter__fill"></span>
+ *       <span class="ds-levelmeter__peak"></span>
+ *     </div>
+ *     <span class="ds-levelmeter__note" aria-live="polite"></span>
+ *   </div>
+ *
+ * Parts:
+ *   .ds-levelmeter__label  the name, above the track (labels above), the
+ *                          label type
+ *   .ds-levelmeter__track  the meter (role="meter"): the track in
+ *                          --ds-levelmeter-track (--ds-accent); the script
+ *                          writes aria-valuenow (0 ... 100, a few times a
+ *                          second) and aria-valuetext ("-18 dB")
+ *   .ds-levelmeter__fill   the level, scaled from the start of the track by
+ *                          --ds-levelmeter-level (0 ... 1, written by the
+ *                          script every frame) in --ds-levelmeter-fill
+ *                          (--ds-primary)
+ *   .ds-levelmeter__peak   the highest recent level, a mark that holds for
+ *                          --ds-hold-status and then falls (the script
+ *                          writes --ds-levelmeter-peak, and hidden while
+ *                          nothing was heard)
+ *   .ds-levelmeter__note   a word for the state, written by the script:
+ *                          "Too loud" while the signal clips (levelmeterLoud)
+ *
+ * Variants:
+ *   (none)                 one bar
+ *   --segmented            the track cut into segments (a mask of
+ *                          --ds-levelmeter-segment and a 2px gap), so it
+ *                          reads as a meter at a glance
+ *   --vertical             upright: the level grows upwards over
+ *                          --ds-levelmeter-length (96px)
+ *
+ * States: data-state="loud" (written by the script on .ds-levelmeter while
+ * the signal clips, a sample peak at -1 dBFS): the fill and the peak in --ds-error and the note says
+ * it in words, never the colour alone. aria-disabled="true" on the track
+ * (the page's, a muted microphone): the disabled model, and the script
+ * shows no level.
+ *
+ * Options (docs/options.md), computed here into --_t:
+ *   size      .ds-xs ... .ds-xl on it or any ancestor: the thickness 2px per
+ *             step (2 ... 10px around the 6px md, --ds-levelmeter-height)
+ *   shape     the ends of the track times --ds-shape (round at the
+ *             default, square at 0); segments keep the same radius
+ *   density   the label's and note's distance from the track, 2px per step
+ *   tone      on .ds-levelmeter itself: the fill in --ds-tone, the track in
+ *             --ds-tone-container (the "loud" state still wins)
+ *   touch     not read: a meter is no target
+ *
+ * Direction: a meter runs left to right whatever the writing direction,
+ * like the scale it shows: the fill grows from the left, the peak mark is
+ * placed from the left (left: 0) and the segments run that way (the
+ * physical exceptions in meta.json).
+ *
+ * Hooks: --ds-levelmeter-height (6px, the md thickness),
+ * --ds-levelmeter-length (96px, --vertical), --ds-levelmeter-fill
+ * (--ds-primary), --ds-levelmeter-track (--ds-accent),
+ * --ds-levelmeter-segment (6px, --segmented). Runtime properties (the
+ * script's): --ds-levelmeter-level, --ds-levelmeter-peak.
+ *
+ * Motion: the level is live data and changes every frame without a
+ * transition (the script's ballistics: it rises at once and falls over
+ * --ds-dur-glide per full scale; the peak holds --ds-hold-status, then
+ * falls the same way); the loud colour comes and goes on --ds-dur-fast.
+ *
+ * Forced colours: the track keeps a CanvasText outline, the fill is
+ * Highlight, the peak CanvasText, loud stays a word.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.levelmeter {
+  .ds-levelmeter {
+    --_t: max(2px, calc(var(--ds-levelmeter-height, 6px) + var(--ds-size-step, 0) * 2px));
+    --_end: min(calc(var(--ds-radius-action) * var(--ds-shape, 1)), calc(var(--_t) / 2));
+    --_fill: var(--ds-levelmeter-fill, var(--ds-primary));
+    --_track: var(--ds-levelmeter-track, var(--ds-accent));
+    --_gap: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px);
+    display: grid;
+    gap: var(--_gap);
+    min-inline-size: 0;
+    color: var(--ds-text);
+  }
+
+  .ds-levelmeter:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --_fill: var(--ds-levelmeter-fill, var(--ds-tone));
+    --_track: var(--ds-levelmeter-track, var(--ds-tone-container));
+  }
+
+  .ds-levelmeter__label {
+    font: var(--ds-font-label);
+  }
+
+  .ds-levelmeter__note {
+    min-block-size: 1lh;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-levelmeter__track {
+    position: relative;
+    overflow: hidden;
+    block-size: var(--_t);
+    border-radius: var(--_end);
+    background: var(--_track);
+    container-type: inline-size;
+  }
+
+  .ds-levelmeter__fill {
+    position: absolute;
+    inset: 0;
+    background: var(--_fill);
+    transform-origin: 0 50%;
+    scale: var(--ds-levelmeter-level, 0) 1;
+    transition: background-color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-levelmeter__peak {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    inline-size: max(2px, calc(var(--_t) / 2));
+    background: var(--_fill);
+    translate: calc(var(--ds-levelmeter-peak, 0) * (100cqi - 100%)) 0;
+    transition: background-color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* Without .ds-base a hidden peak (nothing heard yet) would show. */
+  .ds-levelmeter__peak[hidden] {
+    display: none;
+  }
+
+  .ds-levelmeter[data-state="loud"] {
+    --_fill: var(--ds-error);
+  }
+
+  .ds-levelmeter[data-state="loud"] > .ds-levelmeter__note {
+    color: var(--ds-error);
+  }
+
+  /* Segments: the track and what it holds cut by one mask. */
+  .ds-levelmeter--segmented > .ds-levelmeter__track {
+    --_seg: var(--ds-levelmeter-segment, 6px);
+    border-radius: 0;
+    background: none;
+    mask: repeating-linear-gradient(to right, currentColor 0 var(--_seg), transparent var(--_seg) calc(var(--_seg) + 2px));
+  }
+
+  .ds-levelmeter--segmented > .ds-levelmeter__track::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--_track);
+  }
+
+  /* Upright: the level grows from the bottom. */
+  .ds-levelmeter--vertical {
+    justify-items: center;
+  }
+
+  .ds-levelmeter--vertical > .ds-levelmeter__track {
+    inline-size: var(--_t);
+    block-size: var(--ds-levelmeter-length, 96px);
+    container-type: size;
+  }
+
+  .ds-levelmeter--vertical .ds-levelmeter__fill {
+    transform-origin: 50% 100%;
+    scale: 1 var(--ds-levelmeter-level, 0);
+  }
+
+  .ds-levelmeter--vertical .ds-levelmeter__peak {
+    inset-block: auto 0;
+    inset-inline: 0;
+    inline-size: auto;
+    block-size: max(2px, calc(var(--_t) / 2));
+    translate: 0 calc(var(--ds-levelmeter-peak, 0) * (100% - 100cqb));
+  }
+
+  .ds-levelmeter--vertical.ds-levelmeter--segmented > .ds-levelmeter__track {
+    mask: repeating-linear-gradient(to top, currentColor 0 var(--_seg), transparent var(--_seg) calc(var(--_seg) + 2px));
+  }
+
+  /* Muted (the page's aria-disabled): the disabled model, no level. */
+  .ds-levelmeter:has(> .ds-levelmeter__track[aria-disabled="true"]) {
+    color: var(--ds-disabled-ink);
+  }
+
+  .ds-levelmeter__track[aria-disabled="true"] {
+    background: var(--ds-disabled-fill);
+  }
+
+  .ds-levelmeter__track[aria-disabled="true"] > :is(.ds-levelmeter__fill, .ds-levelmeter__peak) {
+    visibility: hidden;
+  }
+
+  @media (forced-colors: active) {
+    .ds-levelmeter__track {
+      forced-color-adjust: none;
+      outline: 1px solid CanvasText;
+      background: Canvas;
+    }
+
+    .ds-levelmeter__fill {
+      background: Highlight;
+    }
+
+    .ds-levelmeter__peak {
+      background: CanvasText;
+    }
+
+    .ds-levelmeter--segmented > .ds-levelmeter__track::before {
+      background: Canvas;
+    }
+
+    .ds-levelmeter__track[aria-disabled="true"] {
+      outline-color: GrayText;
+    }
+  }
+}

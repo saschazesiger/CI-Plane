@@ -1,0 +1,314 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Layout: the primitives a page arranges its parts with, on the gap
+ * tokens. Each works by its intrinsic size (no media query and no
+ * container needed), so it fits a phone, a side sheet and a wide page
+ * alike. The one-column stack is .ds-stack of the page component.
+ *
+ *   <div class="ds-cluster">button, chip, badge ...</div>     a row that wraps
+ *   <div class="ds-cluster ds-cluster--between">title, actions</div>
+ *   <button class="ds-btn ds-push">...</button>    pushes itself and what follows to the row's end
+ *
+ *   <div class="ds-split">                            side and main, stacked once main would be narrower than --ds-split-min
+ *     <aside class="ds-split__side">filters</aside>
+ *     <div class="ds-split__main">results</div>
+ *   </div>
+ *   (the side may come second: at the end on one line, below main once stacked)
+ *
+ *   <div class="ds-switcher">a, b, c</div>           a row of equal parts that turns into a column at once
+ *   <div class="ds-measure">text, form</div>          a centred column at the reading measure
+ *   <div class="ds-cover">                            fills the height; __main sits in the middle
+ *     <header>...</header><div class="ds-cover__main">...</div><footer>...</footer>
+ *   </div>
+ *   <div class="ds-frame ds-frame--4-3"><img src="..." alt="..."></div>   media cropped to a ratio
+ *   <div class="ds-grid">card, card, card ...</div>  auto-fit columns at least --ds-grid-min wide
+ *
+ * Modifiers:
+ *   .ds-cluster--end, --center, --between   where the row's items go
+ *   .ds-cluster--top, --baseline            how they line up across (default: centred)
+ *   .ds-cluster--nowrap                     one line; a .ds-truncate title (or its wrapper) gives way, the rest keep their width
+ *   .ds-split--stretch                      side and main as tall as the taller one (default: top)
+ *   .ds-switcher--top                       parts keep their own height (default: as tall as the tallest)
+ *   .ds-measure--wide                       --ds-content-max instead of the reading measure
+ *   .ds-measure--intrinsic                  centres its children at their own width
+ *   .ds-cover--screen                       at least the dynamic viewport high
+ *   .ds-frame--square, --4-3, --3-4, --16-9 (default), --21-9
+ *   .ds-grid--fill                          keeps empty tracks: a lone card stays a card wide
+ *   .ds-grid--max-2, --max-3, --max-4, --max-6   at most so many columns
+ *
+ * Options: density tightens the default gaps by 2px a step (the padding
+ * of blocks, conventions section 3), never below 0; a .ds-gap-* class
+ * (spacing) sets an exact gap; a gap hook sets the base that density
+ * steps from. Shape multiplies the frame's
+ * radius. Size, tone and touch are the children's own: a primitive has no
+ * height or meaning.
+ *
+ * Hooks: --ds-cluster-gap (--ds-space-2), --ds-split-gap,
+ * --ds-switcher-gap, --ds-grid-gap (--ds-space-4), --ds-split-side
+ * (18rem, the side's width while beside main), --ds-split-min (50%, the
+ * narrowest main before they stack), --ds-switcher-at (30rem, the width
+ * under which the parts stack), --ds-measure-max (--ds-measure),
+ * --ds-measure-pad (0), --ds-cover-min (100%), --ds-cover-pad
+ * (--ds-space-4), --ds-frame-ratio (16 / 9), --ds-frame-radius
+ * (--ds-radius-md), --ds-grid-min (16rem).
+ *
+ * No motion: a primitive never animates its layout.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.layout {
+  /* ── Cluster: a row that wraps ────────────────── */
+
+  .ds-cluster {
+    --_gap: max(0px, calc(var(--ds-cluster-gap, var(--ds-space-2)) + var(--ds-density, 0) * 2px));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--_gap);
+    min-width: 0;
+  }
+
+  .ds-cluster--end {
+    justify-content: flex-end;
+  }
+
+  .ds-cluster--center {
+    justify-content: center;
+  }
+
+  .ds-cluster--between {
+    justify-content: space-between;
+  }
+
+  .ds-cluster--top {
+    align-items: flex-start;
+  }
+
+  .ds-cluster--baseline {
+    align-items: baseline;
+  }
+
+  /* One line instead of wrapping. With a .ds-truncate title in it, only
+     the title (or the item that holds it) gives way: every other item
+     keeps its width, even one wider than its content (an icon button, an
+     avatar). Without one, the items shrink as flex items do, to their
+     longest word. A cluster that holds a title says so to its items
+     (--_cluster-shrink: 0, inherited); a selector that styles the items of
+     a cluster that :has() a title, or an item after one that does, makes
+     Chromium restyle the whole page on each change of an attribute
+     anywhere. An item that is another nowrap cluster passes the 0 on to
+     its own items: they keep their width as it keeps its own. */
+  .ds-cluster--nowrap {
+    flex-wrap: nowrap;
+  }
+
+  .ds-cluster--nowrap:has(.ds-truncate) {
+    --_cluster-shrink: 0;
+  }
+
+  .ds-cluster--nowrap > :not(.ds-truncate, :has(.ds-truncate)) {
+    flex-shrink: var(--_cluster-shrink, 1);
+  }
+
+  .ds-cluster--nowrap > :has(.ds-truncate) {
+    min-width: 0;
+  }
+
+  /* An auto margin takes the free space of its line: this item and what
+     follows go to the end. */
+  .ds-push {
+    margin-inline-start: auto;
+  }
+
+  /* ── Split: a side and the main column ─────────── */
+
+  /* Both grow; main grows far more, so the side keeps --ds-split-side
+     while they share a line. Once main would fall under --ds-split-min of
+     the line, it wraps below and both take the full width. */
+  .ds-split {
+    --_gap: max(0px, calc(var(--ds-split-gap, var(--ds-space-4)) + var(--ds-density, 0) * 2px));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--_gap);
+    min-width: 0;
+  }
+
+  .ds-split--stretch {
+    align-items: stretch;
+  }
+
+  .ds-split__side {
+    flex-grow: 1;
+    flex-basis: var(--ds-split-side, 18rem);
+    min-width: 0;
+  }
+
+  /* The basis is the narrowest main: side, gap and main fit on one line
+     only while main gets --ds-split-min; the growth goes almost all to
+     main. No min-width carries it, so a component that sets one on the
+     same element (a .ds-stack main) changes nothing. */
+  .ds-split__main {
+    flex: 999 1 min(100%, var(--ds-split-min, 50%));
+    min-width: 0;
+  }
+
+  /* ── Switcher: equal parts in a row or a column ── */
+
+  /* Above --ds-switcher-at the basis is negative (every part on one line,
+     equal); below it, huge (each part on a line of its own): the row
+     turns into a column at once, never with two above one. */
+  .ds-switcher {
+    --_gap: max(0px, calc(var(--ds-switcher-gap, var(--ds-space-4)) + var(--ds-density, 0) * 2px));
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--_gap);
+    min-width: 0;
+  }
+
+  .ds-switcher--top {
+    align-items: flex-start;
+  }
+
+  .ds-switcher > * {
+    flex-grow: 1;
+    flex-basis: calc((var(--ds-switcher-at, 30rem) - 100%) * 999);
+    min-width: 0;
+  }
+
+  /* More than four parts never share a row: they would be too narrow to
+     read, so five or more always stack. */
+  .ds-switcher > :nth-last-child(n+5),
+  .ds-switcher > :nth-last-child(n+5) ~ * {
+    flex-basis: 100%;
+  }
+
+  /* ── Measure: a centred column ─────────────────── */
+
+  .ds-measure {
+    box-sizing: content-box;
+    max-inline-size: var(--ds-measure-max, var(--ds-measure));
+    margin-inline: auto;
+    padding-inline: var(--ds-measure-pad, 0px);
+  }
+
+  .ds-measure--wide {
+    max-inline-size: var(--ds-measure-max, var(--ds-content-max));
+  }
+
+  .ds-measure--intrinsic {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ── Cover: fills the height, its main part centred ── */
+
+  .ds-cover {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ds-space-4);
+    min-block-size: var(--ds-cover-min, 100%);
+    padding: var(--ds-cover-pad, var(--ds-space-4));
+  }
+
+  .ds-cover--screen {
+    min-block-size: 100dvh;
+  }
+
+  /* Auto margins share the free height around it: centred, while a head
+     and a foot keep to the edges. */
+  .ds-cover__main {
+    margin-block: auto;
+  }
+
+  /* ── Frame: media cropped to a ratio ───────────── */
+
+  .ds-frame {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: var(--ds-frame-ratio, 16 / 9);
+    overflow: hidden;
+    border-radius: calc(var(--ds-frame-radius, var(--ds-radius-md)) * var(--ds-shape, 1));
+    background: var(--ds-surface-low);
+  }
+
+  .ds-frame--square {
+    aspect-ratio: 1;
+  }
+
+  .ds-frame--4-3 {
+    aspect-ratio: 4 / 3;
+  }
+
+  .ds-frame--3-4 {
+    aspect-ratio: 3 / 4;
+  }
+
+  .ds-frame--16-9 {
+    aspect-ratio: 16 / 9;
+  }
+
+  .ds-frame--21-9 {
+    aspect-ratio: 21 / 9;
+  }
+
+  /* Media fill the frame and crop to it; anything else is centred. */
+  .ds-frame > :is(img, video, iframe, canvas, picture) {
+    inline-size: 100%;
+    block-size: 100%;
+    border: 0;
+    object-fit: cover;
+  }
+
+  .ds-frame > picture > img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  /* ── Grid: auto-fit columns ────────────────────── */
+
+  /* As many columns as fit at --ds-grid-min (never wider than the grid,
+     so a phone gets one). --max-n raises the track's floor just above a
+     share of n + 1, so n + 1 columns never fit, whatever the gap. */
+  .ds-grid {
+    --_gap: max(0px, calc(var(--ds-grid-gap, var(--ds-space-4)) + var(--ds-density, 0) * 2px));
+    --_track: var(--ds-grid-min, 16rem);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--_track)), 1fr));
+    gap: var(--_gap);
+    min-width: 0;
+  }
+
+  .ds-grid--fill {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--_track)), 1fr));
+  }
+
+  .ds-grid--max-2 {
+    --_track: max(var(--ds-grid-min, 16rem), 100% / 3 + 1px);
+  }
+
+  .ds-grid--max-3 {
+    --_track: max(var(--ds-grid-min, 16rem), 100% / 4 + 1px);
+  }
+
+  .ds-grid--max-4 {
+    --_track: max(var(--ds-grid-min, 16rem), 100% / 5 + 1px);
+  }
+
+  .ds-grid--max-6 {
+    --_track: max(var(--ds-grid-min, 16rem), 100% / 7 + 1px);
+  }
+
+  /* Forced colours: a frame keeps an edge where its fill turns Canvas. */
+  @media (forced-colors: active) {
+    .ds-frame {
+      outline: 1px solid transparent;
+    }
+  }
+}

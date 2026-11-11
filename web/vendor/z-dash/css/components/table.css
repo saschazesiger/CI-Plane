@@ -1,0 +1,1656 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Data tables (Material 3): a 48px header in the label style, 52px rows
+ * divided by the passive hairline, a quiet hover. Numbers right-aligned
+ * and tabular. Inside a card the table runs to the card's
+ * edges, so the row hover spans the whole width and the first column lines
+ * up with the card text. The wrapper scrolls sideways on narrow screens; a
+ * sticky header needs a wrapper that also scrolls down: a bounded wrapper
+ * (.ds-table--sticky-head with --ds-table-max-height, a stacking context of
+ * its own, whose end hands the wheel on to the page) or the full-page table
+ * (.ds-table-wrap--fill, which keeps the wheel).
+ *
+ *   <div class="ds-table-wrap">
+ *     <table class="ds-table [ds-table--wide]">
+ *       <thead><tr><th>Name</th><th class="ds-num">Count</th><th class="ds-col--secondary">Owner</th></tr></thead>
+ *       <tbody><tr><td class="ds-col--text">...</td><td class="ds-num">12</td><td class="ds-col--secondary">...</td></tr></tbody>
+ *       <tfoot><tr><th scope="row">Total</th><td class="ds-num">128</td><td class="ds-col--secondary"></td></tr></tfoot>
+ *
+ *   .ds-col--text       a text column that keeps a readable width
+ *   .ds-col--secondary  dropped on phones (and in .ds-table--wide when the
+ *                       content area is narrow); in a card the last
+ *                       column still shown keeps the card's gutter
+ *   .ds-link-btn        a button that reads like a link (opens a detail;
+ *                       button.css)
+ *   .ds-table--zebra    every other body row in --ds-table-zebra (a detail
+ *                       row goes with its trigger; selection and the state
+ *                       layers lie over it)
+ *   .ds-table--bordered a hairline between the columns too, and around the
+ *                       table outside a card or a full-page wrapper
+ *   .ds-table--plain    no hairlines between the rows (with --zebra)
+ *   <th aria-sort="ascending"><button class="ds-table__sort">Name (arrowUp .ds-table__sort-arrow)</button></th>
+ *                       a sortable column; the arrow at the sorted column
+ *                       says it, not the colour; every sort button keeps
+ *                       the arrow's room, so moving the sort never shifts
+ *                       the columns
+ *   .ds-table__sort-arrow  on the arrow's svg: one up arrow for both
+ *                       directions, which turns to point down for
+ *                       aria-sort="descending" (opt-in: an unmarked svg
+ *                       is never turned, so a page that renders arrowDown
+ *                       for descending keeps its direction)
+ *   <td class="ds-table__actions"><button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Remove source 1">(close)</button></td>
+ *                       the row's own actions at its end: end-aligned, as
+ *                       narrow as its buttons, which hang into the cell's
+ *                       padding (the row keeps its height); in an inner
+ *                       .ds-hover-actions they show on demand
+ *   tfoot               a summary row: label type, a hairline above, no
+ *                       hover, press or row link
+ *   .ds-table--sticky-head, .ds-table--sticky-foot
+ *                       the header row, the summary row stays while the
+ *                       rows scroll under it, in a wrapper bounded by
+ *                       --ds-table-max-height (or a full-page wrapper)
+ *   <div class="ds-selection-bar" role="toolbar" aria-label="Selected devices">
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Clear selection">(close)</button>
+ *     <p class="ds-selection-bar__count" aria-live="polite">3 selected</p>
+ *     <div class="ds-selection-bar__actions">...</div>
+ *   </div>              the bar of a bulk selection, in --ds-accent: it
+ *                       shares a .ds-swap slot with the toolbar
+ *                       (DS.motion.crossfade() when the count goes from 0
+ *                       to 1 and back), so the table never moves
+ *
+ * Stacked rows (a row of fields on a phone or in a side sheet):
+ *   <table class="ds-table ds-table--stack">   (or ds-table--stack-wide)
+ *     <tbody><tr><td data-label="Name"><input class="ds-input" aria-label="Name"></td> ...
+ *   Each row becomes a block with a hairline border, each cell a label
+ *   (its data-label, in the field label's type) above its content, a
+ *   .ds-table__actions cell at the block's top end; the header stays for
+ *   screen readers only. Always inside .ds-sheet__body and .ds-dialog,
+ *   and in a view whose content area is at most 600px wide (--stack) or
+ *   840px (--stack-wide, five or more field columns). No row hover and no
+ *   fade; not for interactive rows, expandable rows or sort buttons, and
+ *   a full-page wrapper or a pinned column steps aside while the rows
+ *   stack. The three copies of the stacked block (sheet and dialog, 600px,
+ *   840px) are kept identical by a test.
+ *
+ * Options (src/core/options.css, docs/options.md), on the table or any
+ * ancestor; each is computed here, in the cells' own rule:
+ *   size      .ds-xs ... .ds-xl: 8px of head and row height per step
+ *   density   .ds-density-*: 4px of head and row height per step (rows 52,
+ *             48, 44, 40px), 2px of cell padding per step
+ *   touch     .ds-touch: head and rows at least --ds-touch-target high, the
+ *             sort button's target as high (it hangs into the cell)
+ *   shape     .ds-shape-*: multiplies the radius of the sort button, the
+ *             full-page wrapper, a stacked block and the selection bar
+ *   not type: the cells keep --ds-font-dense and the head --ds-font-label at
+ *             every size, so a size class around a table only gives its
+ *             rows room. No tone: a table shows no meaning of its own
+ *             (a status chip in a cell does)
+ *
+ * Full-page tables and pinned columns:
+ *   <div class="ds-table-wrap ds-table-wrap--fill"><table class="ds-table ds-table--pin-first">...</table></div>
+ *   .ds-table-wrap--fill  the wrapper is its own card (hairline border,
+ *                       card radius), fills what is left of a bounded
+ *                       parent (.ds-view--fill) and scrolls both ways; its
+ *                       header row is sticky, and long cells are cut with
+ *                       an ellipsis at --ds-table-cell-max-width (a
+ *                       tooltip shows a cut cell's text)
+ *   .ds-table--pin-first  the first column stays while the others scroll
+ *                       under it, on an opaque base; the row's layers lie
+ *                       over it (registered colours, so they still fade);
+ *                       a hairline at its end shows once the table has
+ *                       scrolled (the wrapper drops its start
+ *                       fade). In an interactive table
+ *                       DS.ripple.attach() forwards a click on the row to
+ *                       its row link (the pinned cell confines the link's
+ *                       stretched area) and ripples the row in two parts
+ *   .ds-table--pin-last the last column stays (the row's actions, a total),
+ *                       the same way at the end edge: its hairline shows
+ *                       while columns follow under it, and the wrapper
+ *                       drops its end fade. Its cell stands above the row
+ *                       link: its own room opens nothing, with no pointer,
+ *                       no press and no ripple; a row's ripple reaches it
+ *                       in a part of its own (DS.ripple.attach()), and it
+ *                       finishes the ring of a row link in another cell.
+ *                       DS.dom.scrollEdges() measures it, so a control that
+ *                       Tab reaches under it scrolls clear of it
+ *
+ * Wrappers that scroll sideways fade at the end that still has columns
+ * (in a card: .ds-table--wide when the content area is narrow, every table
+ * on phones; .ds-table-wrap--fill always). The fades are the two numbers
+ * of scroller.css (--ds-scroll-edge-start, --ds-scroll-edge-end): where
+ * scroll timelines exist ds-scroll-edge-start and ds-scroll-edge-end drive
+ * them on the wrapper's own scroll; elsewhere DS.dom.scrollEdges() writes
+ * data-ds-overflow-start and -end (a card wrapper without it keeps the
+ * static fade at its right edge). A wrapper with stacked rows never fades.
+ * A wrapper whose cells hold nothing focusable is a tab stop
+ * (tabindex="0" role="region" aria-label="..."): an inset ring that snaps
+ * from its edge, unmasked while focused; around a wrapper with sticky rows or
+ * a pinned column, whose cells would paint over it, the ring lies outside
+ * the box and snaps in from one width further out.
+ *
+ * Hooks: --ds-table-row-hover, --ds-table-row-selected, --ds-table-head-height
+ * (48px), --ds-table-row-height (52px; the cell padding follows the
+ * heights), --ds-table-padding
+ * (--ds-space-4, the cells' side padding; on phones 3/4 of it, below 360px
+ * half), --ds-table-zebra
+ * (--ds-surface-low), --ds-table-sticky-bg (the opaque base of sticky and
+ * pinned cells and of the fill wrapper, default --ds-surface),
+ * --ds-table-max-height (none),
+ * --ds-table-cell-max-width (280px), --ds-table-fill-min-height
+ * (240px), --ds-table-fill-max-height (none), --ds-selection-bar-height
+ * (48px), --ds-scroll-fade (the fade length; in a card --ds-card-pad, 0px
+ * turns the fades off).
+ *
+ * Runtime properties (written by DS.dom.scrollEdges(), read with a
+ * fallback): --ds-scrollbar-height (the scrollbar strip stays unmasked),
+ * --ds-table-pin-width (focus never lands under a pinned column).
+ *
+ * Internal (never set them): --ds-table-start-fade and
+ * --ds-table-end-fade, 1 on every wrapper; 0 on one that holds a
+ * .ds-table--pin-first or a .ds-table--pin-last (no fade over the pinned
+ * column; the other end's fade stays). The private computed values of a
+ * rule (--_h, --_box, --_room, --_pad, --_hang, and --_sticky-head,
+ * --_sticky-foot, --_kept-head, --_kept-foot for the sticky rows' focus
+ * offset) are private: never set them.
+ *
+ * Internal (each body row sets them, its cells read them; never set
+ * them): --ds-table-row-layer, --ds-table-row-pace, --ds-table-row-tint,
+ * --ds-table-row-line, --ds-table-row-ring. The row decides, the cells paint: no cell rule
+ * sits behind a row's :has() (Chromium would restyle every table cell
+ * of the page on each change anywhere in it).
+ *
+ * The sort button presses in --ds-dur-micro (also while js/ripple.js holds
+ * .ds-pressed) and ripples; it is not a pill and does not morph. Keyboard
+ * focus on the sort button: a ring that is solid from the first frame and
+ * snaps from offset + width to the offset (outline-offset, --ds-dur-fast),
+ * plus the focus layer. The link button (.ds-link-btn, button.css) is an
+ * inline link: no ripple, no morph.
+ *
+ * Rows:
+ *   hover                  a state layer on the cells (currentColor at
+ *                          --ds-state-hover-lg), so it adds to a selected
+ *                          row's colour; hook --ds-table-row-hover
+ *   .ds-table--interactive every body row with a row link opens something:
+ *                          its primary link or button carries
+ *                          .ds-table__row-link, whose
+ *                          ::after stretches over the row (the focus ring
+ *                          sits on it, inset, so the scroller never clips
+ *                          it); the row is positioned and every body row
+ *                          has an identity transform, so it is the box of
+ *                          the stretched area also in WebKit, which lays
+ *                          rows out static (a row is then a stacking
+ *                          context and the box of fixed descendants; not
+ *                          while it holds a menu or combobox list that the
+ *                          script places); WebKit makes the area as tall
+ *                          as the table below the row's top, the rows
+ *                          below, painted above it, keep their own
+ *                          clicks, and a focused row clips its ring to
+ *                          itself; the press is the cell layer at
+ *                          --ds-state-pressed in --ds-dur-micro, or the
+ *                          ripple (js/ripple.js, the row is a host); other
+ *                          controls in the row stay above the link and
+ *                          keep their own press (no row layer, no ripple);
+ *                          the table draws separate borders (a positioned
+ *                          row would cover collapsed hairlines in Firefox);
+ *                          a row without a row link stays plain (no
+ *                          pointer, no press, no ripple)
+ *   .ds-table__row--selected, or a checked checkbox directly in a cell: the
+ *                          row takes --ds-table-row-selected (default
+ *                          --ds-accent) over --ds-dur-fast; the checkbox is
+ *                          the cue that does not rely on colour, also in
+ *                          the header cell (select all, indeterminate for
+ *                          some); select all changes every row in one frame
+ *   expandable             the trigger row holds
+ *                          <button class="ds-btn ds-btn--quiet ds-btn--icon ds-table__toggle" aria-expanded="false" aria-controls="d1">(chevronDown .ds-chevron)</button>
+ *                          and is followed by
+ *                          <tr class="ds-table__detail" id="d1" inert><td colspan="N"><div class="ds-table__expand"><div>...</div></div></td></tr>
+ *                          its header cell is named for screen readers:
+ *                          <th scope="col"><span class="ds-sr">Details</span></th>
+ *                          The detail opens by grid-template-rows (0fr to
+ *                          1fr) over --ds-dur-medium on --ds-ease-out and
+ *                          closes over --ds-dur-base on --ds-ease-in: it
+ *                          pushes the rows below, so it never overshoots;
+ *                          its content fades over --ds-dur-fast. One
+ *                          hairline, below the detail. The page toggles
+ *                          aria-expanded, sets inert on the collapsed
+ *                          detail row and keys both rows (data-ds-key), so
+ *                          flip() and morphHtml keep them together.
+ *
+ * Sorting: with .ds-table__sort-arrow the page renders the same up arrow
+ * for both directions; aria-sort="descending" turns it 180deg on the
+ * spring (--ds-dur-medium), when the header is patched in place
+ * (DS.dom.morphHtml). Without the marker the arrow is what the page
+ * renders (arrowUp or arrowDown), as before 1.4.
+ *
+ * Data motion (docs/motion.md, "Data motion"): sort, filter (also while
+ * typing) and live data glide through DS.motion.flip with keyed rows and
+ * DS.dom.morphHtml; figures in cells change at once and never count up.
+ * A removed row goes at once while the rows below glide up. While rows
+ * glide, flip() marks the tbody data-ds-glide and sets --ds-flip-backdrop
+ * (the colour behind the table): every row gets an opaque backing in that
+ * colour (the selection colour over it), so crossing rows never show
+ * through each other.
+ *
+ * Forced colours: sticky and pinned cells are Canvas (nothing shows through
+ * them), the pinned columns' hairlines and the fill wrapper's border
+ * CanvasText, the selection bar keeps an outline, zebra and selection tints
+ * go (the checkbox stays the cue), a plain table gets its row lines back.
+ * Print:
+ * wrappers show every column, unmasked and unclipped; the
+ * full-page table is unbounded and unsticky, header text wraps, rows do not
+ * break across pages, closed detail rows and the selection bar are hidden.
+ *
+ * :has() and container queries are baseline.
+ * Progressive:
+ * - scroll-driven edge fades (animation-timeline, the registered
+ *   --ds-scroll-edge-* numbers of scroller.css; the pinned column's
+ *   hairlines): without them DS.dom.scrollEdges() sets them through its
+ *   attributes, or the static fade at the right edge stays (the hairlines
+ *   then show with data-ds-overflow-start and -end).
+ * - scrollbar-color and scrollbar-width (a thin scrollbar on the full-page
+ *   table): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+/*
+ * Deprecated in 2.0 (removed in 3.0 at the earliest), unused: the widths
+ * of the old scroll-linked edge fades (ds-edge-fade in motion.css). The
+ * wrappers fade on --ds-scroll-edge-start and --ds-scroll-edge-end
+ * (scroller.css) now.
+ */
+@property --ds-table-fade-start {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --ds-table-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+/*
+ * The state layers of a pinned cell: its base is opaque (the columns that
+ * scroll under it never show through), so hover, focus, press and the
+ * selection lie over it as background images of these two colours.
+ * Registered, so they fade like the other cells' background colour; they do
+ * not inherit.
+ */
+@property --ds-table-sticky-layer {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+@property --ds-table-sticky-tint {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+@layer ds.components.table {
+  /* Positioned, so absolutely placed descendants (the visually hidden header
+     text .ds-sr) are clipped by the scroller instead of widening the page. */
+  .ds-table-wrap {
+    position: relative;
+    overflow-x: auto;
+    /* Focus moved by the keyboard never lands under a pinned first column
+       (DS.dom.scrollEdges() writes its width), in a card as in a fill
+       wrapper, nor under a pinned last one once the page sets its width. */
+    scroll-padding-inline: var(--ds-table-pin-width, 0px) var(--ds-table-pin-last-width, 0px);
+    /* The fade of each end, on (1) or off (0): a pinned column stays opaque. */
+    --ds-table-start-fade: 1;
+    --ds-table-end-fade: 1;
+  }
+
+  /* A pinned first column stays at the start edge, so the start fade would
+     only wash out its text; its hairline tells that the table has
+     scrolled. The end fade stays. */
+  .ds-table-wrap:has(> .ds-table--pin-first) {
+    --ds-table-start-fade: 0;
+  }
+
+  /* The same at the other end: the hairline of a pinned last column tells
+     that columns follow under it. */
+  .ds-table-wrap:has(> .ds-table--pin-last) {
+    --ds-table-end-fade: 0;
+  }
+
+  /* A sticky row sticks to its scroller, and the wrapper is one (overflow-x
+     makes it a scroller on both axes): it scrolls down once bounded. It sits
+     mid-page, so a wheel at its end goes on to the page, and its sticky cells'
+     z-indices stay inside it (a page's own sticky bar stays on top). */
+  .ds-table-wrap:where(:has(> :is(.ds-table--sticky-head, .ds-table--sticky-foot))) {
+    max-height: var(--ds-table-max-height, none);
+    isolation: isolate;
+  }
+
+  /* Focus moved by the keyboard never lands under the sticky rows. The
+     wrapper keeps what its own options make them, for whatever a script
+     scrolls into view; what takes focus adds what the table's options add to
+     that (below), since a class on the table never reaches the wrapper. */
+  .ds-table-wrap:has(> .ds-table--sticky-head) {
+    --_kept-head: max(var(--ds-target-min, 0px), calc(var(--ds-table-head-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    scroll-padding-block-start: var(--_kept-head);
+  }
+
+  .ds-table-wrap:has(> .ds-table--sticky-foot) {
+    --_kept-foot: max(var(--ds-target-min, 0px), calc(var(--ds-table-row-height, 52px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    scroll-padding-block-end: var(--_kept-foot);
+  }
+
+  .ds-table--sticky-head,
+  .ds-table-wrap--fill > .ds-table {
+    --_sticky-head: max(var(--ds-target-min, 0px), calc(var(--ds-table-head-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+  }
+
+  .ds-table--sticky-foot {
+    --_sticky-foot: max(var(--ds-target-min, 0px), calc(var(--ds-table-row-height, 52px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+  }
+
+  .ds-table--sticky-head > tbody :where(a[href], button, input, select, textarea, summary, [tabindex]),
+  .ds-table-wrap--fill > .ds-table > tbody :where(a[href], button, input, select, textarea, summary, [tabindex]) {
+    scroll-margin-block-start: max(0px, calc(var(--_sticky-head) - var(--_kept-head, 0px)));
+  }
+
+  .ds-table--sticky-foot > tbody :where(a[href], button, input, select, textarea, summary, [tabindex]) {
+    scroll-margin-block-end: max(0px, calc(var(--_sticky-foot) - var(--_kept-foot, 0px)));
+  }
+
+  /* The edge numbers of scroller.css, from DS.dom.scrollEdges() where no
+     scroll timeline drives them (the animations win where one does). They
+     glide only once it has measured (data-ds-edges comes after the first
+     edges): the first fades show still on load. */
+  .ds-table-wrap[data-ds-edges] {
+    transition:
+      --ds-scroll-edge-start var(--ds-dur-fast) var(--ds-ease-in-out),
+      --ds-scroll-edge-end var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-table-wrap[data-ds-overflow-start] {
+    --ds-scroll-edge-start: 1;
+  }
+
+  .ds-table-wrap[data-ds-overflow-end] {
+    --ds-scroll-edge-end: 1;
+  }
+
+  /* A wrapper that is a tab stop (nothing focusable in its cells): an inset
+     ring, solid from the first frame, that snaps inward from the edge; the
+     fades would cut it, so the focused wrapper shows unmasked. */
+  .ds-table-wrap[tabindex] {
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-table-wrap[tabindex][data-ds-edges] {
+    transition:
+      --ds-scroll-edge-start var(--ds-dur-fast) var(--ds-ease-in-out),
+      --ds-scroll-edge-end var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-table-wrap[tabindex]:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  /* Sticky and pinned cells have a z-index, so they paint over an outline
+     inside the box: here the ring lies outside it, and rests one width
+     further out. Focused, the wrapper stands above what follows it, which
+     would cover the ring's lower edge. */
+  .ds-table-wrap[tabindex]:where(.ds-table-wrap--fill, :has(> :is(.ds-table--sticky-head, .ds-table--sticky-foot, .ds-table--pin-first, .ds-table--pin-last))) {
+    outline-offset: var(--ds-focus-width);
+  }
+
+  .ds-table-wrap[tabindex]:where(.ds-table-wrap--fill, :has(> :is(.ds-table--sticky-head, .ds-table--sticky-foot, .ds-table--pin-first, .ds-table--pin-last))):focus-visible {
+    z-index: var(--ds-z-raised);
+    outline-offset: 0;
+  }
+
+  .ds-card .ds-table-wrap {
+    margin-inline: calc(-1 * var(--ds-card-pad));
+  }
+
+  .ds-table {
+    width: 100%;
+    border-collapse: collapse;
+    /* Its own ink (a widget without .ds-base would take the host's). */
+    color: var(--ds-text);
+    font: var(--ds-font-dense);
+    /* Dates, times and counts line up from row to row. */
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The options, computed here (docs/options.md). Each cell names its
+     height at size md, comfortable (--_h, the hook) and what its text line
+     and hairline take (--_room); the box is never below the touch minimum
+     (.ds-touch), and the block padding follows it, never more than
+     --ds-space-3: a 20px line in a 48px head, a 24px status chip and the
+     hairline in a 52px row, 7px in a 40px row. Density takes 2px of side
+     padding per step as well. */
+  .ds-table th,
+  .ds-table td {
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    --_pad: calc(var(--ds-table-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px);
+    height: var(--_box);
+    padding-block: min(var(--ds-space-3), max(0px, calc((var(--_box) - var(--_room)) / 2)));
+    padding-inline: var(--_pad);
+    border-bottom: 1px solid var(--ds-line);
+    text-align: start;
+    vertical-align: middle;
+  }
+
+  .ds-card .ds-table-wrap :is(th, td):first-child {
+    padding-inline-start: var(--ds-card-pad);
+  }
+
+  .ds-card .ds-table-wrap :is(th, td):last-child {
+    padding-inline-end: var(--ds-card-pad);
+  }
+
+  .ds-table caption {
+    text-align: start;
+  }
+
+  .ds-table th {
+    --_h: calc(var(--ds-table-head-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_room: calc(var(--ds-space-5) + 1px);
+    color: var(--ds-text-2);
+    font: var(--ds-font-label);
+    white-space: nowrap;
+  }
+
+  .ds-table td {
+    --_h: calc(var(--ds-table-row-height, 52px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_room: calc(var(--ds-space-6) + 2px);
+  }
+
+  /*
+   * The row holds the selection colour, its cells the state layer: the
+   * layer adds to the selection instead of replacing it. The row decides
+   * and its cells paint: each body row sets its state layer
+   * (--ds-table-row-layer) and how fast it changes (--ds-table-row-pace),
+   * the selection a pinned cell lays over its base (--ds-table-row-tint)
+   * and the style of its hairline (--ds-table-row-line); its cells read
+   * them. A cell rule behind a row's :has() would put every cell of the
+   * page into Chromium's one :has() invalidation set, so each change
+   * anywhere in the page restyled every table cell. Every body row starts
+   * from these values, so a nested table never takes its outer row's
+   * layer. Internal: a page never sets them.
+   */
+  .ds-table tbody tr {
+    --ds-table-row-layer: transparent;
+    --ds-table-row-pace: var(--ds-dur-fast);
+    --ds-table-row-tint: transparent;
+    --ds-table-row-line: solid;
+    --ds-table-row-ring: none;
+    transition: background-color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-table tbody tr > :is(td, th) {
+    border-bottom-style: var(--ds-table-row-line);
+    background-color: var(--ds-table-row-layer);
+    transition: background-color var(--ds-table-row-pace) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-table tbody tr:not(.ds-table__detail):hover {
+      --ds-table-row-layer: var(--ds-table-row-hover, color-mix(in srgb, currentColor calc(var(--ds-state-hover-lg) * 100%), transparent));
+    }
+  }
+
+  /* Selected rows (bulk selection): the checkbox in the row is the cue
+     that does not rely on colour. Two rules: the class marks a row on its
+     own (set by the page), and the :has() rule picks up a row whose
+     checkbox is checked. */
+  .ds-table tbody tr.ds-table__row--selected {
+    --ds-table-row-tint: var(--ds-table-row-selected, var(--ds-accent));
+    background-color: var(--ds-table-row-selected, var(--ds-accent));
+  }
+
+  .ds-table tbody tr:has(> :is(td, th) > input[type="checkbox"]:checked) {
+    --ds-table-row-tint: var(--ds-table-row-selected, var(--ds-accent));
+    background-color: var(--ds-table-row-selected, var(--ds-accent));
+  }
+
+  /* Zebra: the even rows, not counting detail rows (a detail row goes with
+     its trigger). The :where() keeps it below the selected rows above, and
+     the state layer on the cells adds to it; a pinned cell lays it over
+     its base as it does the selection. The look modifiers name their own
+     rows only: a nested table keeps its own look. */
+  .ds-table--zebra > tbody > tr:where(:nth-child(even of :not(.ds-table__detail))),
+  .ds-table--zebra > tbody > tr:where(:nth-child(even of :not(.ds-table__detail)) + .ds-table__detail) {
+    --ds-table-row-tint: var(--ds-table-zebra, var(--ds-surface-low));
+    background-color: var(--ds-table-zebra, var(--ds-surface-low));
+  }
+
+  /* No hairlines between the rows (a zebra needs none). */
+  .ds-table--plain > tbody > tr {
+    --ds-table-row-line: none;
+  }
+
+  /* A hairline between the columns, on the following cell, so a dropped
+     .ds-col--secondary takes its line along; the :where() keeps it below
+     a stacked cell's border: 0. Around the table only where nothing else
+     draws its edge (a stacked table draws none: its rows are blocks). */
+  .ds-table--bordered > * > tr > :is(th, td):where(:not(:first-child)) {
+    border-inline-start: 1px solid var(--ds-line);
+  }
+
+  .ds-table--bordered:where(:not(.ds-card *, .ds-table-wrap--fill *)) {
+    border: 1px solid var(--ds-line);
+  }
+
+  /* While rows glide (DS.motion.flip marks the tbody data-ds-glide with
+     --ds-flip-backdrop, the colour behind the table), every row is opaque,
+     so a row that crosses another never shows its text through. A
+     background image: it switches at once (no colour transition), and the
+     selection colour lies over the backing; the cells' state layer stays
+     above both. At rest it matches what is behind the table. */
+  .ds-table tbody[data-ds-glide] > tr {
+    background-image: linear-gradient(var(--ds-flip-backdrop, var(--ds-surface)), var(--ds-flip-backdrop, var(--ds-surface)));
+  }
+
+  .ds-table--zebra > tbody[data-ds-glide] > tr:where(:nth-child(even of :not(.ds-table__detail))),
+  .ds-table--zebra > tbody[data-ds-glide] > tr:where(:nth-child(even of :not(.ds-table__detail)) + .ds-table__detail) {
+    background-image:
+      linear-gradient(var(--ds-table-zebra, var(--ds-surface-low)), var(--ds-table-zebra, var(--ds-surface-low))),
+      linear-gradient(var(--ds-flip-backdrop, var(--ds-surface)), var(--ds-flip-backdrop, var(--ds-surface)));
+  }
+
+  .ds-table tbody[data-ds-glide] > tr.ds-table__row--selected {
+    background-image:
+      linear-gradient(var(--ds-table-row-selected, var(--ds-accent)), var(--ds-table-row-selected, var(--ds-accent))),
+      linear-gradient(var(--ds-flip-backdrop, var(--ds-surface)), var(--ds-flip-backdrop, var(--ds-surface)));
+  }
+
+  .ds-table tbody[data-ds-glide] > tr:has(> :is(td, th) > input[type="checkbox"]:checked) {
+    background-image:
+      linear-gradient(var(--ds-table-row-selected, var(--ds-accent)), var(--ds-table-row-selected, var(--ds-accent))),
+      linear-gradient(var(--ds-flip-backdrop, var(--ds-surface)), var(--ds-flip-backdrop, var(--ds-surface)));
+  }
+
+  /*
+   * Interactive rows: the row's primary link or button stretches over the
+   * row (::after against the row, positioned and transformed). Other
+   * controls in the row stay above it (zero specificity: a control's own
+   * position wins). A row without a row link opens nothing, so it stays
+   * plain.
+   */
+  /* Positioned rows paint after the table's collapsed borders (Firefox
+     then covers a selected row's hairlines with its colour): separate
+     borders, which each cell paints over its row. Only bottom borders are
+     drawn, so the lines look the same. */
+  .ds-table--interactive,
+  .ds-table--sticky-head,
+  .ds-table--sticky-foot,
+  .ds-table--pin-last {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .ds-table--interactive tbody tr:not(.ds-table__detail):has(.ds-table__row-link) {
+    position: relative;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* WebKit lays a table row out static whatever its position, so the row
+     link's ::after (and the row's ripple box) would stretch over the
+     nearest positioned box around the table: every row's link over the
+     whole table, the last on top, taking hover, clicks and the status bar
+     URL of every row. An identity transform makes the row their containing
+     block in every engine (it is also a stacking context, which the
+     raised controls and the pinned cell stay inside). Every body row gets
+     it: WebKit makes the area as tall as the table
+     below the row's top, and a later row, painted above, keeps its own
+     clicks also when it has no row link (or is a detail row). */
+  .ds-table--interactive tbody tr {
+    transform: translateX(0);
+  }
+
+  /* A menu or combobox list that the script places inside a row (no top
+     layer: no popover or anchor positioning) is fixed or absolute against
+     the viewport or its field: the transform would make the row its box,
+     clipped by the scrolling wrapper and painted under the rows below. */
+  .ds-table--interactive tbody tr:has(:is(.ds-menu, .ds-combo__popup):not([hidden], [data-anchored])) {
+    transform: none;
+  }
+
+  :where(.ds-table--interactive tbody tr) :where(a[href], button, input, select, textarea, label, summary, [tabindex]):where(:not(.ds-table__row-link)) {
+    position: relative;
+    z-index: var(--ds-z-raised);
+  }
+
+  .ds-table__row-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    /* The ring rests at the row's edge and snaps inward. */
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-table--interactive .ds-table__row-link:focus-visible {
+    outline: none;
+  }
+
+  /* Inset by the ring's width, so the scroller never clips it. */
+  .ds-table__row-link:focus-visible::after {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  /* Keyboard focus: the focus layer on the cells, at once. WebKit gives a
+     transformed row's absolute boxes the row's top and width but the
+     table's height, so the link's ring would run on down to the table's
+     end: the focused row clips what it holds to its own box (the inset
+     ring and the cells' content lie inside it in every engine). Anchor
+     positioning would size the area itself, but WebKit then restyles the
+     link from its initial values on every load, so its underline and
+     ring offset transition. */
+  .ds-table--interactive tbody tr:not(.ds-table__detail):where(:has(.ds-table__row-link:focus-visible)):focus-within {
+    --ds-table-row-layer: color-mix(in srgb, currentColor calc(var(--ds-state-focus) * 100%), transparent);
+    --ds-table-row-pace: 0s;
+    clip-path: inset(0);
+  }
+
+  /* A pinned last cell stands above the link's ring, so it finishes the ring:
+     the end, top and bottom edges (below). The ring takes the place of the
+     row's hairline, so its bottom edge lines up with the rest. */
+  .ds-table--interactive.ds-table--pin-last:not(.ds-table--pin-first) tbody tr:not(.ds-table__detail):where(:has(.ds-table__row-link:focus-visible)):focus-within {
+    --ds-table-row-line: none;
+    --ds-table-row-ring: var(--ds-focus-outline);
+  }
+
+  /* Press-in in --ds-dur-micro (.ds-pressed: js/ripple.js holds it); not
+     while a control inside the row is pressed (it has its own press), nor on
+     the room of a pinned last cell, which opens nothing. */
+  .ds-table--interactive tbody tr:not(.ds-table__detail):has(.ds-table__row-link):is(:active, .ds-pressed):not(:where(:has(:is(a[href], button, input, select, textarea, label, summary):not(.ds-table__row-link):active))):not(:where(.ds-table--pin-last tbody tr:has(> :is(td, th):last-child:active))) {
+    --ds-table-row-layer: color-mix(in srgb, currentColor calc(var(--ds-state-pressed) * 100%), transparent);
+    --ds-table-row-pace: var(--ds-dur-micro);
+  }
+
+  /*
+   * Expandable rows: the detail row has no padding, height or hairline of
+   * its own until it opens; the trigger row gives its hairline to the
+   * detail, so there is one line, below the detail, which travels down as
+   * it opens.
+   */
+  .ds-table tbody tr:has(+ .ds-table__detail) {
+    --ds-table-row-line: none;
+  }
+
+  .ds-table .ds-table__detail > td,
+  .ds-card .ds-table-wrap .ds-table__detail > td {
+    height: auto;
+    padding: 0;
+  }
+
+  /* The open state reaches the content through --_shown (and its curve):
+     a rule that styled `... + .ds-table__detail .ds-table__expand > *`
+     behind the row's :has() made Chromium restyle the whole page on every
+     change anywhere. Each wrapper sets its own value, so a nested one stays
+     closed until its own row opens. */
+  .ds-table__expand {
+    --_shown: 0;
+    --_shown-ease: var(--ds-ease-in);
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--ds-dur-base) var(--ds-ease-in);
+  }
+
+  /* The content: horizontal room as the cells', vertical room as spacers
+     inside the clip (a padding would stay as the collapsed height). */
+  .ds-table__expand > * {
+    min-height: 0;
+    overflow: hidden;
+    padding-inline: calc(var(--ds-table-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px);
+    opacity: var(--_shown);
+    transition: opacity var(--ds-dur-fast) var(--_shown-ease);
+  }
+
+  .ds-table__expand > *::before,
+  .ds-table__expand > *::after {
+    content: '';
+    display: block;
+    height: var(--ds-space-4);
+  }
+
+  .ds-table__expand > *::before {
+    height: var(--ds-space-1);
+  }
+
+  .ds-card .ds-table-wrap .ds-table__expand > * {
+    padding-inline: var(--ds-card-pad);
+  }
+
+  tr:has(.ds-table__toggle[aria-expanded="true"]) + .ds-table__detail .ds-table__expand {
+    --_shown: 1;
+    --_shown-ease: var(--ds-ease-in-out);
+    grid-template-rows: 1fr;
+    transition: grid-template-rows var(--ds-dur-medium) var(--ds-ease-out);
+  }
+
+  /* The 40px round toggle hangs out of the 20px text line, so the row
+     keeps its height; its icon lines up with the column's text. Its margin
+     box is the text line: aligned to the line's top (not its baseline),
+     its centre is the line's centre. */
+  .ds-table .ds-table__toggle {
+    vertical-align: top;
+    margin-block: calc((var(--ds-space-5) - max(var(--ds-target-min, 0px), calc(var(--ds-btn-icon-size, 40px) + var(--ds-size-step, 0) * 8px))) / 2);
+    margin-inline: calc((var(--ds-space-5) - max(var(--ds-target-min, 0px), calc(var(--ds-btn-icon-size, 40px) + var(--ds-size-step, 0) * 8px))) / 2) 0;
+  }
+
+  .ds-table tbody tr:last-child :is(td, th) {
+    border-bottom: none;
+  }
+
+  /*
+   * Row actions: the last cell holds the row's own buttons, as narrow as
+   * they are, at the row's end. The buttons hang into the cell's padding
+   * (their margin box is the 20px text line), so the row keeps its height
+   * and the last icon lines up with the column edge.
+   */
+  .ds-table td.ds-table__actions {
+    width: 1%;
+    white-space: nowrap;
+    text-align: end;
+  }
+
+  .ds-table__actions .ds-btn {
+    margin-block: calc((var(--ds-space-5) - max(var(--ds-target-min, 0px), calc(var(--ds-btn-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px))) / 2);
+    vertical-align: top;
+  }
+
+  .ds-table__actions .ds-btn--icon {
+    margin-block: calc((var(--ds-space-5) - max(var(--ds-target-min, 0px), calc(var(--ds-btn-icon-size, 40px) + var(--ds-size-step, 0) * 8px))) / 2);
+  }
+
+  .ds-table__actions .ds-btn--icon:last-child {
+    margin-inline-end: calc((var(--ds-space-5) - max(var(--ds-target-min, 0px), calc(var(--ds-btn-icon-size, 40px) + var(--ds-size-step, 0) * 8px))) / 2);
+  }
+
+  /* A summary row: label type, one hairline above it, none below; no row
+     layers (tbody rules never reach it) and no row link. */
+  .ds-table tfoot :is(th, td) {
+    border-top: 1px solid var(--ds-line-2);
+    border-bottom: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Sort button in a header cell. Its 4px padding (the room of its state
+     layer) hangs into the cell's padding, so the header keeps its height
+     and the label lines up with the cells below. */
+  .ds-table__sort {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+    /* What hangs into the cell: its 4px padding, or under .ds-touch what the
+       target adds to the 20px text line (the head keeps its height). */
+    --_hang: max(var(--ds-space-1), calc((var(--ds-target-min, 0px) - var(--ds-space-5)) / 2));
+    min-height: var(--ds-target-min, 0px);
+    margin-block: calc(-1 * var(--_hang));
+    margin-inline: calc(-1 * var(--ds-space-1));
+    padding: var(--ds-space-1);
+    border: 0;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    white-space: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-table__sort::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-table__sort:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-table__sort:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  .ds-table__sort:active::before,
+  .ds-table__sort.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-table__sort:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-table__sort > svg {
+    flex-shrink: 0;
+  }
+
+  /* A sortable column without its arrow keeps the arrow's room (the gap
+     and the documented 16px arrow) in its padding, so a sort that moves to
+     another column never resizes the columns. Padding, not an empty flex
+     item: that would become the inline-flex button's baseline and move it
+     down in its row. In a .ds-num column the room leads, as the arrow does. */
+  .ds-table__sort:not(:has(> svg)) {
+    padding-inline-end: calc(2 * var(--ds-space-1) + 16px);
+  }
+
+  /* Opt-in: one up arrow for both directions, which descending turns on
+     the spring. An unmarked svg keeps the direction the page drew. */
+  .ds-table__sort-arrow {
+    transition: rotate var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  .ds-table th[aria-sort="descending"] .ds-table__sort-arrow {
+    rotate: 180deg;
+  }
+
+  /* A number column sorts with the arrow in front, so the figures keep
+     their right edge. */
+  .ds-table th.ds-num .ds-table__sort {
+    flex-direction: row-reverse;
+  }
+
+  .ds-table th.ds-num .ds-table__sort:not(:has(> svg)) {
+    padding-inline: calc(2 * var(--ds-space-1) + 16px) var(--ds-space-1);
+  }
+
+  .ds-table th:is([aria-sort="ascending"], [aria-sort="descending"]) {
+    color: var(--ds-text);
+  }
+
+  /*
+   * The full-page table: the wrapper is its own card and scrolls both
+   * ways, so the header row sticks to its top. Separate borders: a sticky
+   * cell keeps its own hairline. Its fades leave the border and the
+   * scrollbars opaque: three mask layers, the fade over the padding box
+   * (the box inside the border and the scrollbars) added to the ring
+   * between the border box and the padding box.
+   *
+   * Every fade of a table wrapper runs left to right with the scroll
+   * (LTR only, D9): the gradients keep their physical directions.
+   */
+  .ds-table-wrap--fill {
+    display: block;
+    flex: 1 1 auto;
+    min-height: var(--ds-table-fill-min-height, 240px);
+    max-height: var(--ds-table-fill-max-height, none);
+    overflow: auto;
+    overscroll-behavior: contain;
+    isolation: isolate;
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-radius-card) * var(--ds-shape, 1));
+    background: var(--ds-table-sticky-bg, var(--ds-surface));
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    /* Focus moved by the keyboard never lands under the header (nor, as
+       in every wrapper, under the pinned column); what takes focus adds what
+       the table's own options add to this. */
+    --_kept-head: max(var(--ds-target-min, 0px), calc(var(--ds-table-head-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    scroll-padding-block-start: var(--_kept-head);
+    mask-image:
+      linear-gradient(to right, transparent, #000 calc(var(--ds-scroll-edge-start) * var(--ds-table-start-fade) * var(--ds-scroll-fade, var(--ds-space-8))), #000 calc(100% - var(--ds-scroll-edge-end) * var(--ds-table-end-fade) * var(--ds-scroll-fade, var(--ds-space-8))), transparent),
+      linear-gradient(#000, #000),
+      linear-gradient(#000, #000);
+    mask-origin: padding-box, padding-box, border-box;
+    mask-clip: padding-box, padding-box, border-box;
+    mask-repeat: no-repeat;
+    mask-composite: add, exclude;
+  }
+
+  @supports (animation-timeline: scroll()) {
+    .ds-table-wrap--fill {
+      animation: ds-scroll-edge-start linear both, ds-scroll-edge-end linear both;
+      animation-timeline: scroll(self inline);
+      animation-range: 0 var(--ds-space-8), calc(100% - var(--ds-space-8)) 100%;
+    }
+  }
+
+  .ds-table-wrap--fill > .ds-table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .ds-table-wrap--fill > .ds-table > thead th,
+  .ds-table--sticky-head > thead th {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: var(--ds-z-sticky);
+    background-color: var(--ds-table-sticky-bg, var(--ds-surface));
+  }
+
+  /* The summary row at the bottom edge, as the header at the top. */
+  .ds-table--sticky-foot > tfoot :is(th, td) {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: var(--ds-z-sticky);
+    background-color: var(--ds-table-sticky-bg, var(--ds-surface));
+  }
+
+  /* Long cells stay on one line and end in an ellipsis (a tooltip shows a
+     cut cell's text). The rings of controls in a cell stay inside its
+     padding; the row link's stretched area and the row's ripple belong to
+     the row, so the cell does not clip them. */
+  .ds-table-wrap--fill td {
+    max-width: var(--ds-table-cell-max-width, 280px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /*
+   * A pinned first column: sticky at the start, above the raised controls
+   * of the cells that scroll under it (--ds-z-pinned), on an opaque base.
+   * The row's layers would show the scrolled columns through a translucent
+   * background colour, so they lie over the base as images of two
+   * registered colours: --ds-table-sticky-tint (the selection) and
+   * --ds-table-sticky-layer (hover, focus, press) above it.
+   * The first cell is named :is(td, th):first-child, never a bare
+   * :first-child: a bare one is tried on every element of the page and
+   * marks every parent as depending on its first child, so each inserted
+   * node restyles its siblings (Chromium: four times the style work of a
+   * page load).
+   */
+  .ds-table--pin-first tbody tr:not(.ds-table__detail) > :is(td, th):first-child,
+  .ds-table--pin-first thead th:first-child,
+  .ds-table--pin-first tfoot tr > :is(td, th):first-child {
+    inset-inline-start: 0;
+  }
+
+  .ds-table--pin-last tbody tr:not(.ds-table__detail) > :is(td, th):last-child,
+  .ds-table--pin-last thead th:last-child,
+  .ds-table--pin-last tfoot tr > :is(td, th):last-child {
+    inset-inline-end: 0;
+  }
+
+  .ds-table--pin-first tbody tr:not(.ds-table__detail) > :is(td, th):first-child,
+  .ds-table--pin-first thead th:first-child,
+  .ds-table--pin-first tfoot tr > :is(td, th):first-child,
+  .ds-table--pin-last tbody tr:not(.ds-table__detail) > :is(td, th):last-child,
+  .ds-table--pin-last thead th:last-child,
+  .ds-table--pin-last tfoot tr > :is(td, th):last-child {
+    position: sticky;
+    z-index: var(--ds-z-pinned);
+    background-image:
+      linear-gradient(var(--ds-table-sticky-layer), var(--ds-table-sticky-layer)),
+      linear-gradient(var(--ds-table-sticky-tint), var(--ds-table-sticky-tint)),
+      linear-gradient(var(--ds-table-sticky-bg, var(--ds-surface)), var(--ds-table-sticky-bg, var(--ds-surface)));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      --ds-table-sticky-layer var(--ds-dur-fast) var(--ds-ease-in-out),
+      --ds-table-sticky-tint var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* A body row's pinned cell lays the row's layer and selection over its
+     base (the row decides them, as for the other cells). */
+  .ds-table--pin-first tbody tr:not(.ds-table__detail) > :is(td, th):first-child,
+  .ds-table--pin-last tbody tr:not(.ds-table__detail) > :is(td, th):last-child {
+    --ds-table-sticky-layer: var(--ds-table-row-layer);
+    --ds-table-sticky-tint: var(--ds-table-row-tint);
+    transition:
+      background-color var(--ds-table-row-pace) var(--ds-ease-in-out),
+      --ds-table-sticky-layer var(--ds-table-row-pace) var(--ds-ease-in-out),
+      --ds-table-sticky-tint var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* The room of a pinned last cell opens nothing, so it does not say it
+     would; its controls keep their own pointer. */
+  .ds-table--interactive.ds-table--pin-last tbody tr:not(.ds-table__detail) > :is(td, th):last-child {
+    cursor: default;
+  }
+
+  /* The row link's ring on this cell (a border, so it stays in forced
+     colours); the row decides, the cell paints. */
+  .ds-table--interactive.ds-table--pin-last:not(.ds-table--pin-first) tbody tr:not(.ds-table__detail) > :is(td, th):last-child::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: var(--ds-table-row-ring);
+    border-inline-start: 0;
+    pointer-events: none;
+  }
+
+  /* The corners, where a sticky row meets a pinned column. */
+  .ds-table-wrap--fill > .ds-table--pin-first > thead th:first-child,
+  .ds-table-wrap--fill > .ds-table--pin-last > thead th:last-child,
+  .ds-table--sticky-head.ds-table--pin-first > thead th:first-child,
+  .ds-table--sticky-head.ds-table--pin-last > thead th:last-child,
+  .ds-table--sticky-foot.ds-table--pin-first > tfoot tr > :is(td, th):first-child,
+  .ds-table--sticky-foot.ds-table--pin-last > tfoot tr > :is(td, th):last-child {
+    z-index: var(--ds-z-sticky-pinned);
+  }
+
+  /* The hairline at the pinned column's end: it shows once the table has
+     scrolled away from its start (the cells under it are cut there).
+     Without scroll timelines data-ds-overflow-start shows it. */
+  .ds-table--pin-first tbody tr:not(.ds-table__detail) > :is(td, th):first-child::after,
+  .ds-table--pin-first thead th:first-child::after,
+  .ds-table--pin-first tfoot tr > :is(td, th):first-child::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    width: 1px;
+    background: var(--ds-line);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-table-wrap[data-ds-overflow-start] > .ds-table--pin-first tbody tr:not(.ds-table__detail) > :is(td, th):first-child::after,
+  .ds-table-wrap[data-ds-overflow-start] > .ds-table--pin-first thead th:first-child::after,
+  .ds-table-wrap[data-ds-overflow-start] > .ds-table--pin-first tfoot tr > :is(td, th):first-child::after {
+    opacity: 1;
+  }
+
+  @supports (animation-timeline: scroll()) {
+    .ds-table--pin-first tbody tr:not(.ds-table__detail) > :is(td, th):first-child::after,
+    .ds-table--pin-first thead th:first-child::after,
+    .ds-table--pin-first tfoot tr > :is(td, th):first-child::after {
+      animation: ds-scroll-fade linear both;
+      animation-timeline: scroll(nearest inline);
+      animation-range: 0 var(--ds-space-2);
+    }
+  }
+
+  /* The hairline at the start of a pinned last column: it shows while
+     columns follow under it, and goes over the last of the scroll. Without
+     scroll timelines data-ds-overflow-end shows it. */
+  .ds-table--pin-last tbody tr:not(.ds-table__detail) > :is(td, th):last-child::after,
+  .ds-table--pin-last thead th:last-child::after,
+  .ds-table--pin-last tfoot tr > :is(td, th):last-child::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: 1px;
+    background: var(--ds-line);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-table-wrap[data-ds-overflow-end] > .ds-table--pin-last tbody tr:not(.ds-table__detail) > :is(td, th):last-child::after,
+  .ds-table-wrap[data-ds-overflow-end] > .ds-table--pin-last thead th:last-child::after,
+  .ds-table-wrap[data-ds-overflow-end] > .ds-table--pin-last tfoot tr > :is(td, th):last-child::after {
+    opacity: 1;
+  }
+
+  @supports (animation-timeline: scroll()) {
+    .ds-table--pin-last tbody tr:not(.ds-table__detail) > :is(td, th):last-child::after,
+    .ds-table--pin-last thead th:last-child::after,
+    .ds-table--pin-last tfoot tr > :is(td, th):last-child::after {
+      animation: ds-scroll-fade linear both reverse;
+      animation-timeline: scroll(nearest inline);
+      animation-range: calc(100% - var(--ds-space-2)) 100%;
+    }
+  }
+
+  /*
+   * The bar of a bulk selection: it stands where the toolbar stood (one
+   * .ds-swap slot, DS.motion.crossfade()), so the table never moves. The
+   * count says the state, not the tint; it changes at once. The slot keeps
+   * the bar's height (.ds-toolbar > .ds-swap: in form.css, the toolbar's
+   * own stylesheet, which comes after this one).
+   */
+  .ds-selection-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-height: max(var(--ds-target-min, 0px), calc(var(--ds-selection-bar-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    padding-inline: var(--ds-space-1) var(--ds-space-2);
+    border-radius: calc(var(--ds-radius-md) * var(--ds-shape, 1));
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+  }
+
+  .ds-selection-bar__count {
+    margin: 0;
+    font: var(--ds-font-label);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-selection-bar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin-inline-start: auto;
+  }
+
+  /*
+   * Short cells (numbers, status chips, dates with .ds-nowrap) stay on one
+   * line, and text cells keep a readable width instead of breaking word by
+   * word. A wide table (.ds-table--wide) drops its secondary columns
+   * whenever the content area is narrow, also next to the persistent drawer;
+   * on phones every table does. A table that still does not fit scrolls
+   * sideways, and a fade at the edge of its card tells that more columns
+   * follow (statically: at the right edge, over the card's padding).
+   */
+  .ds-table td.ds-num,
+  .ds-table .ds-status {
+    white-space: nowrap;
+  }
+
+  .ds-table .ds-col--text {
+    min-width: 168px;
+  }
+
+  @container ds-content (max-width: 1040px) {
+    .ds-table--wide th {
+      white-space: normal;
+    }
+
+    .ds-table--wide .ds-col--secondary {
+      display: none;
+    }
+
+    /* In a card the last column still shown takes the card's gutter, as the
+       last cell does while every column shows. The sibling :has() stays in
+       the cell's own compound; the :where() keeps the rule at the weight of
+       a plain card cell, so detail rows and stacked rows keep theirs. */
+    .ds-card .ds-table-wrap :where(.ds-table--wide) :is(th, td):where(:not(.ds-col--secondary):not(:has(~ :not(.ds-col--secondary)))) {
+      padding-inline-end: var(--ds-card-pad);
+    }
+
+    /* The static fade (no scroll timeline, no DS.dom.scrollEdges()); the
+       scrollbar strip stays opaque. */
+    .ds-card .ds-table-wrap:has(> .ds-table--wide) {
+      mask-image: linear-gradient(to left, transparent, #000 calc(var(--ds-table-end-fade) * var(--ds-scroll-fade, var(--ds-card-pad)))), linear-gradient(#000, #000);
+      mask-size: 100% calc(100% - var(--ds-scrollbar-height, 0px)), 100% var(--ds-scrollbar-height, 0px);
+      mask-position: 0 0, 0 100%;
+      mask-repeat: no-repeat;
+    }
+
+    /* DS.dom.scrollEdges() attached: a fade on each side that has more. */
+    .ds-card .ds-table-wrap:where([data-ds-edges]):has(> .ds-table--wide) {
+      mask-image: linear-gradient(to right, transparent, #000 calc(var(--ds-scroll-edge-start) * var(--ds-table-start-fade) * var(--ds-scroll-fade, var(--ds-card-pad))), #000 calc(100% - var(--ds-scroll-edge-end) * var(--ds-table-end-fade) * var(--ds-scroll-fade, var(--ds-card-pad))), transparent), linear-gradient(#000, #000);
+    }
+
+    /* Scroll-linked: a fade on each side that still has columns to show
+       (the timeline is the wrapper's own inline scroll; the shorthand
+       comes first, it resets animation-timeline). */
+    @supports (animation-timeline: scroll()) {
+      .ds-card .ds-table-wrap:has(> .ds-table--wide) {
+        mask-image: linear-gradient(to right, transparent, #000 calc(var(--ds-scroll-edge-start) * var(--ds-table-start-fade) * var(--ds-scroll-fade, var(--ds-card-pad))), #000 calc(100% - var(--ds-scroll-edge-end) * var(--ds-table-end-fade) * var(--ds-scroll-fade, var(--ds-card-pad))), transparent), linear-gradient(#000, #000);
+        animation: ds-scroll-edge-start linear both, ds-scroll-edge-end linear both;
+        animation-timeline: scroll(self inline);
+        animation-range: 0 var(--ds-space-8), calc(100% - var(--ds-space-8)) 100%;
+      }
+    }
+  }
+
+  @media (max-width: 600px) {
+    .ds-table th {
+      white-space: normal;
+    }
+
+    .ds-table .ds-col--secondary {
+      display: none;
+    }
+
+    .ds-card .ds-table-wrap :is(th, td):where(:not(.ds-col--secondary):not(:has(~ :not(.ds-col--secondary)))) {
+      padding-inline-end: var(--ds-card-pad);
+    }
+
+    /* A 360px phone has no room for a 168px text column next to three
+       others: it takes what is left, and the cells keep closer together
+       (three quarters of the hook, 12px by default). */
+    .ds-table .ds-col--text {
+      min-width: 0;
+    }
+
+    .ds-table :is(th, td) {
+      --_pad: max(var(--ds-space-1), calc(var(--ds-table-padding, var(--ds-space-4)) * 0.75 + var(--ds-density, 0) * 2px));
+    }
+
+    .ds-table .ds-table__expand > * {
+      padding-inline: max(var(--ds-space-1), calc(var(--ds-table-padding, var(--ds-space-4)) * 0.75 + var(--ds-density, 0) * 2px));
+    }
+
+    .ds-card .ds-table-wrap {
+      mask-image: linear-gradient(to left, transparent, #000 calc(var(--ds-table-end-fade) * var(--ds-scroll-fade, var(--ds-card-pad)))), linear-gradient(#000, #000);
+      mask-size: 100% calc(100% - var(--ds-scrollbar-height, 0px)), 100% var(--ds-scrollbar-height, 0px);
+      mask-position: 0 0, 0 100%;
+      mask-repeat: no-repeat;
+    }
+
+    .ds-card .ds-table-wrap:where([data-ds-edges]) {
+      mask-image: linear-gradient(to right, transparent, #000 calc(var(--ds-scroll-edge-start) * var(--ds-table-start-fade) * var(--ds-scroll-fade, var(--ds-card-pad))), #000 calc(100% - var(--ds-scroll-edge-end) * var(--ds-table-end-fade) * var(--ds-scroll-fade, var(--ds-card-pad))), transparent), linear-gradient(#000, #000);
+    }
+
+    @supports (animation-timeline: scroll()) {
+      .ds-card .ds-table-wrap {
+        mask-image: linear-gradient(to right, transparent, #000 calc(var(--ds-scroll-edge-start) * var(--ds-table-start-fade) * var(--ds-scroll-fade, var(--ds-card-pad))), #000 calc(100% - var(--ds-scroll-edge-end) * var(--ds-table-end-fade) * var(--ds-scroll-fade, var(--ds-card-pad))), transparent), linear-gradient(#000, #000);
+        animation: ds-scroll-edge-start linear both, ds-scroll-edge-end linear both;
+        animation-timeline: scroll(self inline);
+        animation-range: 0 var(--ds-space-8), calc(100% - var(--ds-space-8)) 100%;
+      }
+    }
+  }
+
+  /* 320px (400% zoom): closer still (half of the hook, 8px by default), so
+     three columns fit without a sideways scroll. */
+  @media (max-width: 359px) {
+    .ds-table :is(th, td) {
+      --_pad: max(var(--ds-space-1), calc(var(--ds-table-padding, var(--ds-space-4)) * 0.5 + var(--ds-density, 0) * 2px));
+    }
+
+    .ds-table .ds-table__expand > * {
+      padding-inline: max(var(--ds-space-1), calc(var(--ds-table-padding, var(--ds-space-4)) * 0.5 + var(--ds-density, 0) * 2px));
+    }
+  }
+
+  /* Stacked rows never scroll sideways, so their wrapper never fades. */
+  .ds-card .ds-table-wrap:has(> :is(.ds-table--stack, .ds-table--stack-wide)) {
+    mask-image: none;
+    animation: none;
+  }
+
+  /* The fades would cut the ring of a wrapper that is a tab stop, so a
+     focused one shows unmasked: after them, since a wide table in a card
+     weighs as much as this. */
+  .ds-table-wrap[tabindex]:focus-visible {
+    mask-image: none;
+  }
+
+  /*
+   * Stacked rows: three copies of one block, kept identical by a test
+   * (test/css.test.js): always in a side sheet body or a dialog (both
+   * follow the window, outside the ds-content container), and in a view
+   * whose content area is narrow. No container query on the wrapper: its
+   * layout containment would re-anchor script-placed popups.
+   */
+  :is(.ds-sheet__body, .ds-dialog) :is(.ds-table--stack, .ds-table--stack-wide) {
+    display: block;
+    border: 0;
+  }
+
+  :is(.ds-sheet__body, .ds-dialog) :is(.ds-table--stack, .ds-table--stack-wide) > thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  :is(.ds-sheet__body, .ds-dialog) :is(.ds-table--stack, .ds-table--stack-wide) > tbody {
+    display: grid;
+    gap: var(--ds-space-3);
+  }
+
+  :is(.ds-sheet__body, .ds-dialog) :is(.ds-table--stack, .ds-table--stack-wide) > tbody > tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--ds-space-3);
+    padding: var(--ds-space-4);
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-radius-card) * var(--ds-shape, 1));
+  }
+
+  :is(.ds-sheet__body, .ds-dialog) :is(.ds-table--stack, .ds-table--stack-wide) > tbody > tr > td {
+    display: grid;
+    grid-column: 1;
+    gap: var(--ds-space-1);
+    max-width: none;
+    height: auto;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    white-space: normal;
+  }
+
+  :is(.ds-sheet__body, .ds-dialog) :is(.ds-table--stack, .ds-table--stack-wide) > tbody > tr > td.ds-table__actions {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    width: auto;
+  }
+
+  :is(.ds-sheet__body, .ds-dialog) :is(.ds-table--stack, .ds-table--stack-wide) > tbody > tr > td[data-label]::before {
+    content: attr(data-label) / "";
+    color: var(--ds-text-2);
+    font: var(--ds-font-label);
+  }
+
+  :is(.ds-sheet__body, .ds-dialog) :is(.ds-table--stack, .ds-table--stack-wide) > tbody > tr:not(.ds-table__detail) > :is(td, th):is(:first-child, :last-child) {
+    position: static;
+    background-image: none;
+  }
+
+  :is(.ds-sheet__body, .ds-dialog) :is(.ds-table--stack, .ds-table--stack-wide) > tbody > tr:not(.ds-table__detail) > :is(td, th):is(:first-child, :last-child)::after {
+    display: none;
+  }
+
+  @media (hover: hover) {
+    :is(.ds-sheet__body, .ds-dialog) :is(.ds-table--stack, .ds-table--stack-wide) > tbody > tr:not(.ds-table__detail):hover {
+      --ds-table-row-layer: transparent;
+    }
+  }
+
+  :is(.ds-sheet__body, .ds-dialog) .ds-card .ds-table-wrap > :is(.ds-table--stack, .ds-table--stack-wide) > tbody {
+    padding-inline: var(--ds-card-pad);
+  }
+
+  :is(.ds-sheet__body, .ds-dialog) .ds-card .ds-table-wrap > :is(.ds-table--stack, .ds-table--stack-wide) > tbody > tr > td {
+    padding: 0;
+  }
+
+  @container ds-content (max-width: 600px) {
+    .ds-table--stack {
+      display: block;
+      border: 0;
+    }
+
+    .ds-table--stack > thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .ds-table--stack > tbody {
+      display: grid;
+      gap: var(--ds-space-3);
+    }
+
+    .ds-table--stack > tbody > tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--ds-space-3);
+      padding: var(--ds-space-4);
+      border: 1px solid var(--ds-line);
+      border-radius: calc(var(--ds-radius-card) * var(--ds-shape, 1));
+    }
+
+    .ds-table--stack > tbody > tr > td {
+      display: grid;
+      grid-column: 1;
+      gap: var(--ds-space-1);
+      max-width: none;
+      height: auto;
+      padding: 0;
+      overflow: visible;
+      border: 0;
+      white-space: normal;
+    }
+
+    .ds-table--stack > tbody > tr > td.ds-table__actions {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: start;
+      width: auto;
+    }
+
+    .ds-table--stack > tbody > tr > td[data-label]::before {
+      content: attr(data-label) / "";
+      color: var(--ds-text-2);
+      font: var(--ds-font-label);
+    }
+
+    .ds-table--stack > tbody > tr:not(.ds-table__detail) > :is(td, th):is(:first-child, :last-child) {
+      position: static;
+      background-image: none;
+    }
+
+    .ds-table--stack > tbody > tr:not(.ds-table__detail) > :is(td, th):is(:first-child, :last-child)::after {
+      display: none;
+    }
+
+    @media (hover: hover) {
+      .ds-table--stack > tbody > tr:not(.ds-table__detail):hover {
+        --ds-table-row-layer: transparent;
+      }
+    }
+
+    .ds-card .ds-table-wrap > .ds-table--stack > tbody {
+      padding-inline: var(--ds-card-pad);
+    }
+
+    .ds-card .ds-table-wrap > .ds-table--stack > tbody > tr > td {
+      padding: 0;
+    }
+  }
+
+  @container ds-content (max-width: 840px) {
+    .ds-table--stack-wide {
+      display: block;
+      border: 0;
+    }
+
+    .ds-table--stack-wide > thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .ds-table--stack-wide > tbody {
+      display: grid;
+      gap: var(--ds-space-3);
+    }
+
+    .ds-table--stack-wide > tbody > tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--ds-space-3);
+      padding: var(--ds-space-4);
+      border: 1px solid var(--ds-line);
+      border-radius: calc(var(--ds-radius-card) * var(--ds-shape, 1));
+    }
+
+    .ds-table--stack-wide > tbody > tr > td {
+      display: grid;
+      grid-column: 1;
+      gap: var(--ds-space-1);
+      max-width: none;
+      height: auto;
+      padding: 0;
+      overflow: visible;
+      border: 0;
+      white-space: normal;
+    }
+
+    .ds-table--stack-wide > tbody > tr > td.ds-table__actions {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: start;
+      width: auto;
+    }
+
+    .ds-table--stack-wide > tbody > tr > td[data-label]::before {
+      content: attr(data-label) / "";
+      color: var(--ds-text-2);
+      font: var(--ds-font-label);
+    }
+
+    .ds-table--stack-wide > tbody > tr:not(.ds-table__detail) > :is(td, th):is(:first-child, :last-child) {
+      position: static;
+      background-image: none;
+    }
+
+    .ds-table--stack-wide > tbody > tr:not(.ds-table__detail) > :is(td, th):is(:first-child, :last-child)::after {
+      display: none;
+    }
+
+    @media (hover: hover) {
+      .ds-table--stack-wide > tbody > tr:not(.ds-table__detail):hover {
+        --ds-table-row-layer: transparent;
+      }
+    }
+
+    .ds-card .ds-table-wrap > .ds-table--stack-wide > tbody {
+      padding-inline: var(--ds-card-pad);
+    }
+
+    .ds-card .ds-table-wrap > .ds-table--stack-wide > tbody > tr > td {
+      padding: 0;
+    }
+  }
+
+  /* A link that leaves the app carries the external icon. Its own display:
+     a layered preflight (svg { display: block }) would drop it below the
+     text. */
+  .ds-table a > svg {
+    display: inline-block;
+    margin-inline-start: var(--ds-space-1);
+    vertical-align: -2px;
+  }
+
+  /* Small notes inside a cell ("(default)", "was: ...") stay in one piece:
+     a note broken over two lines reads as two notes. */
+  .ds-table small {
+    font: var(--ds-font-meta);
+    white-space: nowrap;
+  }
+
+  /* A badge (badge.css) in a selected row: the tint badge would vanish on
+     the selection's tint, so the strong pair instead, as on a tinted
+     button. */
+  :is(.ds-table__row--selected, tr:has(> td input[type="checkbox"]:checked)) .ds-badge:not(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --ds-badge-bg: var(--ds-primary);
+    --ds-badge-color: var(--ds-on-primary);
+  }
+
+  :is(.ds-table__row--selected, tr:has(> td input[type="checkbox"]:checked)) .ds-badge.ds-tone-neutral:not(.ds-badge--dot) {
+    --ds-badge-bg: var(--ds-surface);
+    --ds-badge-color: var(--ds-text-2);
+  }
+
+  /* Actions on demand (.ds-hover-actions, utilities.css) in a row selected
+     by its checkbox: the selection reveals them, as aria-selected does. */
+  :is(tr, li, .ds-hover-host).ds-table__row--selected .ds-hover-actions:not(:is(tr, li, .ds-card, .ds-drawer__row, .ds-hover-host):is(:focus-within, [aria-current]:not([aria-current="false"]), [aria-selected="true"], .ds-table__row--selected, [data-ds-shown]) :is(tr, li, .ds-card, .ds-drawer__row, .ds-hover-host):not(:focus-within, [aria-current]:not([aria-current="false"]), [aria-selected="true"], .ds-table__row--selected, [data-ds-shown]) .ds-hover-actions) {
+    opacity: 1;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* Forced colours: sticky and pinned cells are opaque in the system
+     colours, so nothing shows through them; the pinned columns' hairlines
+     stay as CanvasText; the fill wrapper keeps its edge and the selection
+     bar an outline (its tint is gone); a plain table gets its row lines
+     back (the zebra it relies on is gone). */
+  @media (forced-colors: active) {
+    .ds-table-wrap--fill {
+      border-color: CanvasText;
+    }
+
+    .ds-table-wrap--fill > .ds-table > thead th,
+    .ds-table--sticky-head > thead th,
+    .ds-table--sticky-foot > tfoot :is(th, td),
+    .ds-table--pin-first tbody tr:not(.ds-table__detail) > :is(td, th):first-child,
+    .ds-table--pin-first thead th:first-child,
+    .ds-table--pin-first tfoot tr > :is(td, th):first-child,
+    .ds-table--pin-last tbody tr:not(.ds-table__detail) > :is(td, th):last-child,
+    .ds-table--pin-last thead th:last-child,
+    .ds-table--pin-last tfoot tr > :is(td, th):last-child {
+      background-color: Canvas;
+      background-image: none;
+    }
+
+    /* The line would be forced to Canvas, and vanish against its cell. */
+    .ds-table--pin-first tbody tr:not(.ds-table__detail) > :is(td, th):first-child::after,
+    .ds-table--pin-first thead th:first-child::after,
+    .ds-table--pin-first tfoot tr > :is(td, th):first-child::after,
+    .ds-table--pin-last tbody tr:not(.ds-table__detail) > :is(td, th):last-child::after,
+    .ds-table--pin-last thead th:last-child::after,
+    .ds-table--pin-last tfoot tr > :is(td, th):last-child::after {
+      background: CanvasText;
+    }
+
+    .ds-table--plain > tbody > tr {
+      --ds-table-row-line: solid;
+    }
+
+    .ds-selection-bar {
+      outline: 1px solid CanvasText;
+    }
+  }
+
+  /* Paper: every column, unmasked and unclipped; the full-page table runs
+     on over the pages with its header repeated (not sticky); rows stay in
+     one piece. */
+  @media print {
+    .ds-table-wrap,
+    .ds-card .ds-table-wrap,
+    .ds-card .ds-table-wrap:has(> .ds-table--wide),
+    .ds-table-wrap:where(:has(> :is(.ds-table--sticky-head, .ds-table--sticky-foot))) {
+      max-height: none;
+      overflow: visible;
+      mask-image: none;
+      animation: none;
+    }
+
+    .ds-table-wrap--fill {
+      max-height: none;
+      overflow: visible;
+      mask-image: none;
+    }
+
+    .ds-table th {
+      white-space: normal;
+    }
+
+    .ds-table-wrap--fill > .ds-table > thead th,
+    .ds-table--sticky-head > thead th,
+    .ds-table--sticky-foot > tfoot :is(th, td),
+    .ds-table--pin-first tbody tr:not(.ds-table__detail) > :is(td, th):first-child,
+    .ds-table--pin-first thead th:first-child,
+    .ds-table--pin-first tfoot tr > :is(td, th):first-child,
+    .ds-table--pin-last tbody tr:not(.ds-table__detail) > :is(td, th):last-child,
+    .ds-table--pin-last thead th:last-child,
+    .ds-table--pin-last tfoot tr > :is(td, th):last-child {
+      position: static;
+    }
+
+    .ds-table-wrap--fill td {
+      max-width: none;
+      white-space: normal;
+    }
+
+    .ds-table tr {
+      break-inside: avoid;
+    }
+
+    /* A closed detail row stays off paper: paged layout gives its 0fr
+       room the height of its content (an open one prints in full). */
+    .ds-table tr:not(:has(.ds-table__toggle[aria-expanded="true"])) + .ds-table__detail {
+      display: none;
+    }
+
+    .ds-selection-bar {
+      display: none;
+    }
+  }
+}

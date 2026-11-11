@@ -1,0 +1,429 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Diff view: the changes of one or more files from unified diff text
+ * (git diff, diff -u), as a review or an audit shows them. diff.js parses
+ * the text and renders the files; without the script the source reads as
+ * a plain code block.
+ *
+ *   <div class="ds-diff" data-ds-diff data-ds-diff-view="unified" aria-label="Changes">
+ *     <pre class="ds-diff__source">diff --git a/src/sync.js b/src/sync.js ...</pre>
+ *   </div>
+ *   .ds-diff--wrap      long lines wrap in the unified view too (the split
+ *                       view always wraps: its two columns share the width)
+ *
+ * What diff.js renders into .ds-diff__files (the page writes none of it):
+ *   <section class="ds-diff__file">
+ *     <div class="ds-diff__head">
+ *       <button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm ds-diff__toggle" aria-expanded="true">(chevronDown .ds-chevron)</button>
+ *       <h3 class="ds-diff__name"><span class="ds-diff__path ds-diff__path--old">old</span>(arrowRight .ds-diff__arrow)<span class="ds-diff__path">new</span></h3>
+ *       <span class="ds-diff__status">Renamed</span>
+ *       <span class="ds-diff__stat"><span class="ds-diff__count" data-kind="add">+12</span><span class="ds-diff__count" data-kind="del">−3</span></span>
+ *     </div>
+ *     <div class="ds-diff__body" tabindex="0" role="region">
+ *       <table class="ds-diff__table" data-view="unified|split">
+ *         <thead class="ds-diff__cols"> (the column names, for screen readers only)
+ *         <tr class="ds-diff__hunk"><td><span class="ds-diff__hunk-head">(load button .ds-diff__expand)<span class="ds-diff__range">@@ -1,5 +1,6 @@</span> <span class="ds-diff__section">function sync()</span></span></td></tr>
+ *         <tr class="ds-diff__line"><td class="ds-diff__num" data-kind="add" data-line="12"></td> <td class="ds-diff__sign"> <td class="ds-diff__code">... <ins class="ds-diff__word">3</ins></td></tr>
+ *         <tr class="ds-diff__fold"><td><button class="ds-btn ds-btn--quiet ds-sm ds-diff__expand">Show 14 unchanged lines</button></td></tr>
+ *         <tr class="ds-diff__note"><td>No newline at end of file</td></tr>
+ *     <p class="ds-diff__empty">Binary file, not shown</p>
+ *
+ * Every cell of a line carries data-kind (add, del, ctx; empty: the blank
+ * side of a split row). An added line is on --ds-diff-add-bg with a "+"
+ * in the sign column, a removed one on --ds-diff-del-bg with a "−", and a
+ * hidden word ("Added", "Removed") for screen readers: the sign carries
+ * the meaning, never the colour alone. Changed words are ins and del on
+ * --ds-diff-add-word / --ds-diff-del-word. Line numbers and signs are
+ * generated content (attr(data-line)) that a selection never copies.
+ * The file header sticks while its file scrolls under it
+ * (--ds-diff-sticky-top below a fixed bar).
+ *
+ * Options (src/core/options.css, docs/options.md), on the view or any
+ * ancestor; each is computed here:
+ *   density   .ds-density-*: 1px of block padding per step off each code
+ *             line (24, 22, 20, 20px rows) and 2px off the file header's
+ *   size      .ds-xs ... .ds-xl: 1px of block padding per step on each line
+ *             (the code keeps its role: --ds-diff-font); the header's
+ *             buttons follow their own size rules
+ *   shape     .ds-shape-*: multiplies the radius of each file block
+ *   touch     .ds-touch: the header's and the folds' buttons grow (button
+ *             rules); the lines are no targets
+ *   not tone: the colours are the kinds of change, each with its sign
+ *
+ * Accessibility: each file is a section (unnamed: no landmark of its own)
+ * under its heading (data-ds-diff-heading, default h3); its toggle is a
+ * disclosure button named by the heading (aria-expanded); the table has
+ * column headers for screen readers; the body is a named, focusable region
+ * (the one landmark per file) that scrolls sideways with the arrow keys. A fold's button opens the lines and the
+ * focus moves to the first of them.
+ *
+ * Forced colours: the colours go; the signs and words stay, inserted
+ * words are underlined and removed ones struck through, and the hunk rows
+ * keep a rule above them.
+ *
+ * Hooks: --ds-diff-bg (--ds-code-bg), --ds-diff-add-bg, --ds-diff-del-bg,
+ * --ds-diff-add-word, --ds-diff-del-word, --ds-diff-hunk-bg,
+ * --ds-diff-radius (--ds-radius-card), --ds-diff-font (--ds-font-code),
+ * --ds-diff-sticky-top (0px), --ds-diff-split-min (720px: the width from
+ * which data-ds-diff-view="auto" shows the split view).
+ *
+ * Print: lines wrap, nothing scrolls, the headers stop sticking.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin scrollbar under a wide
+ *   file): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.diff {
+  .ds-diff {
+    --_bg: var(--ds-diff-bg, var(--ds-code-bg));
+    --_radius: calc(var(--ds-diff-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    /* Read by diff.js for data-ds-diff-view="auto". */
+    --_split-min: var(--ds-diff-split-min, 720px);
+    display: block;
+    min-inline-size: 0;
+    color: var(--ds-text);
+  }
+
+  .ds-diff__source {
+    position: relative;
+    margin: 0;
+    padding: var(--ds-space-4);
+    overflow-x: auto;
+    border-radius: var(--_radius);
+    background: var(--_bg);
+    font: var(--ds-diff-font, var(--ds-font-code));
+    white-space: pre;
+  }
+
+  .ds-diff__files {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ds-space-4);
+  }
+
+  .ds-diff__file {
+    min-inline-size: 0;
+    border: 1px solid var(--ds-line);
+    border-radius: var(--_radius);
+    background: var(--_bg);
+    overflow: clip;
+  }
+
+  /* The header sticks while its file scrolls under it (clip, unlike hidden, keeps the page the scroller). */
+  .ds-diff__head {
+    position: sticky;
+    inset-block-start: var(--ds-diff-sticky-top, 0px);
+    z-index: var(--ds-z-sticky);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-1) var(--ds-space-2);
+    padding-block: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px);
+    padding-inline: var(--ds-space-2) var(--ds-space-3);
+    background: var(--ds-surface);
+  }
+
+  .ds-diff__name {
+    display: flex;
+    flex: 1 1 12rem;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 var(--ds-space-1);
+    min-inline-size: 0;
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-diff-font, var(--ds-font-code));
+    font-weight: var(--ds-weight-label);
+    overflow-wrap: anywhere;
+  }
+
+  .ds-diff__toggle {
+    flex: none;
+  }
+
+  .ds-diff__path {
+    min-inline-size: 0;
+  }
+
+  .ds-diff__path--old {
+    color: var(--ds-text-2);
+    font-weight: var(--ds-weight-regular);
+  }
+
+  .ds-diff__arrow {
+    flex: none;
+    color: var(--ds-text-2);
+  }
+
+  .ds-diff__status {
+    padding: 0 var(--ds-space-2);
+    border: 1px solid var(--ds-line-2);
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    white-space: nowrap;
+  }
+
+  .ds-diff__stat {
+    display: inline-flex;
+    gap: var(--ds-space-2);
+    font: var(--ds-font-caption);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .ds-diff__count[data-kind="add"] {
+    color: var(--ds-on-success-container);
+  }
+
+  .ds-diff__count[data-kind="del"] {
+    color: var(--ds-on-error-container);
+  }
+
+  .ds-diff__body {
+    position: relative;
+    overflow-x: auto;
+    border-block-start: 1px solid var(--ds-line);
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    /* An inset ring: the block clips anything outside it. */
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-diff__body:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-diff__empty {
+    margin: 0;
+    padding: var(--ds-space-4);
+    border-block-start: 1px solid var(--ds-line);
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+
+  .ds-diff__files > .ds-diff__empty {
+    border: 1px solid var(--ds-line);
+    border-radius: var(--_radius);
+  }
+
+  .ds-diff__table {
+    --_pad: max(0px, calc(2px + var(--ds-density, 0) * 1px + var(--ds-size-step, 0) * 1px));
+    min-inline-size: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    color: var(--ds-text);
+    font: var(--ds-diff-font, var(--ds-font-code));
+    tab-size: 4;
+  }
+
+  .ds-diff__table[data-view="split"] {
+    inline-size: 100%;
+    table-layout: fixed;
+  }
+
+  /* The column names: for screen readers; the row takes no room. */
+  .ds-diff__cols :is(th, td) {
+    padding: 0;
+    border: 0;
+  }
+
+  .ds-diff__table :is(td, th) {
+    padding: var(--_pad) 0;
+    vertical-align: top;
+  }
+
+  .ds-diff__num {
+    inline-size: calc(var(--ds-diff-digits, 3) * 1ch + 2 * var(--ds-space-2));
+    min-inline-size: calc(var(--ds-diff-digits, 3) * 1ch + 2 * var(--ds-space-2));
+    color: var(--ds-text-2);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .ds-diff__table .ds-diff__num {
+    padding-inline: var(--ds-space-2);
+  }
+
+  .ds-diff__num::before {
+    content: attr(data-line);
+  }
+
+  .ds-diff__sign {
+    inline-size: 2ch;
+    color: var(--ds-text-2);
+    text-align: center;
+    user-select: none;
+  }
+
+  .ds-diff__sign[data-kind="add"]::before {
+    content: "+";
+    content: "+" / "";
+  }
+
+  .ds-diff__sign[data-kind="del"]::before {
+    content: "\2212";
+    content: "\2212" / "";
+  }
+
+  .ds-diff__code {
+    inline-size: 100%;
+    white-space: pre;
+  }
+
+  .ds-diff__table .ds-diff__code {
+    padding-inline: var(--ds-space-1) var(--ds-space-4);
+  }
+
+  .ds-diff__table[data-view="split"] .ds-diff__code {
+    inline-size: auto;
+  }
+
+  .ds-diff__table[data-view="split"] .ds-diff__code,
+  .ds-diff--wrap .ds-diff__code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* The halves of a split row meet at a rule. */
+  .ds-diff__table[data-view="split"] .ds-diff__code + .ds-diff__num {
+    border-inline-start: 1px solid var(--ds-line);
+  }
+
+  /* The kinds of change: a fill per line, a stronger one for the gutter and the words. */
+  .ds-diff__line > [data-kind="add"] {
+    background: var(--ds-diff-add-bg, color-mix(in oklab, var(--ds-success-container) 45%, var(--_bg)));
+  }
+
+  .ds-diff__line > [data-kind="del"] {
+    background: var(--ds-diff-del-bg, color-mix(in oklab, var(--ds-error-container) 45%, var(--_bg)));
+  }
+
+  .ds-diff__line > .ds-diff__num[data-kind="add"] {
+    background: var(--ds-success-container);
+    color: var(--ds-on-success-container);
+  }
+
+  .ds-diff__line > .ds-diff__num[data-kind="del"] {
+    background: var(--ds-error-container);
+    color: var(--ds-on-error-container);
+  }
+
+  .ds-diff__sign[data-kind="add"] {
+    color: var(--ds-on-success-container);
+  }
+
+  .ds-diff__sign[data-kind="del"] {
+    color: var(--ds-on-error-container);
+  }
+
+  .ds-diff__line > [data-kind="empty"] {
+    background: color-mix(in oklab, var(--ds-line) 40%, var(--_bg));
+  }
+
+  .ds-diff__word {
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    color: inherit;
+    text-decoration: none;
+  }
+
+  ins.ds-diff__word {
+    background: var(--ds-diff-add-word, var(--ds-success-container));
+  }
+
+  del.ds-diff__word {
+    background: var(--ds-diff-del-word, var(--ds-error-container));
+  }
+
+  /* A line the fold opened keeps the focus until the next Tab; it shows a ring like any row. */
+  .ds-diff__line {
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-diff__line:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-diff__hunk > td {
+    padding: var(--_pad) var(--ds-space-2);
+    border-block-start: 1px solid transparent;
+    background: var(--ds-diff-hunk-bg, color-mix(in oklab, var(--ds-info-container) 45%, var(--_bg)));
+    color: var(--ds-on-info-container);
+  }
+
+  .ds-diff__hunk-head {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-block-size: 20px;
+    white-space: pre;
+  }
+
+  .ds-diff__range {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-diff__section {
+    color: var(--ds-text-2);
+  }
+
+  .ds-diff__fold > td,
+  .ds-diff__note > td {
+    padding: var(--_pad) var(--ds-space-2);
+    color: var(--ds-text-2);
+  }
+
+  .ds-diff__fold > td {
+    background: color-mix(in oklab, var(--ds-line) 25%, var(--_bg));
+  }
+
+  /* The fold's button sits in the row's own height; its target reaches the touch minimum. */
+  .ds-diff__fold .ds-diff__expand {
+    margin-block: calc(-1 * var(--_pad));
+  }
+
+  .ds-diff__hunk .ds-diff__expand {
+    margin-block: calc(-1 * var(--ds-space-1));
+  }
+
+  @media (forced-colors: active) {
+    ins.ds-diff__word {
+      text-decoration: underline;
+    }
+
+    del.ds-diff__word {
+      text-decoration: line-through;
+    }
+
+    .ds-diff__hunk > td {
+      border-block-start-color: CanvasText;
+    }
+  }
+
+  @media print {
+    .ds-diff__head {
+      position: static;
+    }
+
+    .ds-diff__body,
+    .ds-diff__source {
+      overflow: visible;
+    }
+
+    .ds-diff__code,
+    .ds-diff__source {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+}

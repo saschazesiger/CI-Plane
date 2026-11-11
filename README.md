@@ -192,7 +192,7 @@ Changes are listed in the [changelog](CHANGELOG.md).
 
 MIT, see [LICENSE](LICENSE). CI-Plane stands on:
 
-- [Dashboard-Style](https://github.com/saschazesiger/Dashboard-Style) for the whole interface (MIT, vendored).
+- [Z-Dash](https://github.com/saschazesiger/Z-Dash) for the whole interface (MIT, vendored).
 - [cloudflared](https://github.com/cloudflare/cloudflared) for the tunnel (Apache 2.0, bundled in the image).
 - The official runner image [ghcr.io/actions/actions-runner](https://github.com/actions/runner) (MIT), and
   `docker:dind` and `registry:2` from Docker Hub, pulled on the workers.

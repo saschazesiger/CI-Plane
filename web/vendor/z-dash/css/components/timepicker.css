@@ -1,0 +1,132 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Time picker: a segmented time field and a list of times in a picker
+ * popover. The field is a .ds-datefield (type time) and the popover a
+ * .ds-picker__popover; DS.timepicker (timepicker.js) builds both inside
+ * the root and owns the list:
+ *
+ *   <div class="ds-picker" data-ds-timepicker data-ds-value="09:30" [data-ds-timepicker-step="15"]>
+ *     <div class="ds-datefield" role="group" aria-labelledby="start-label">
+ *       <button class="ds-btn ds-btn--quiet ds-btn--icon ds-datefield__toggle" type="button" aria-label="Choose time">(clock)</button>
+ *     </div>
+ *     (rendered:)
+ *     <div class="ds-picker__popover ds-timepicker__popover" role="dialog" aria-modal="true" aria-label="Choose time" hidden>
+ *       <div class="ds-picker__pane ds-picker__pane--scroll">
+ *         <div class="ds-timepicker__list" role="listbox" tabindex="0" aria-activedescendant="...">
+ *           <div class="ds-timepicker__option" role="option" id="..." aria-selected="true" [data-active]>9:30 AM</div> ...
+ *
+ * The list: one row per time, in the hour cycle of the locale; the chosen
+ * one (aria-selected) takes the tint and the label weight; the active one
+ * (data-active, keyboard and pointer alike) the state layer, and while the
+ * list has keyboard focus an inset ring. A row picks on a click and closes
+ * the popover, so it takes no ripple (the layer is the feedback).
+ *
+ * Options (src/core/options.css, docs/options.md), on the picker or any
+ * ancestor; each is computed here:
+ *   size      .ds-xs ... .ds-xl: a row 8px per step from
+ *             --ds-timepicker-option-height (40px), the type of the size
+ *   density   .ds-density-*: a row 4px per step
+ *   shape     .ds-shape-*: multiplies a row's radius
+ *   touch     .ds-touch: a row at least --ds-touch-target high
+ *   tone      none
+ *
+ * Motion: the active row's layer comes in over --ds-dur-micro and goes at
+ * once (a held arrow key leaves no trail); the popover is the picker's.
+ *
+ * Forced colours: the chosen row is SelectedItem / SelectedItemText, the
+ * active one carries a Highlight ring (CanvasText on the chosen one).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.timepicker {
+  .ds-timepicker__popover {
+    padding: var(--ds-space-2);
+  }
+
+  .ds-timepicker__list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 128px;
+    outline: none;
+  }
+
+  .ds-timepicker__option {
+    --_h: calc(var(--ds-timepicker-option-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex: none;
+    align-items: center;
+    min-block-size: var(--_box);
+    padding: 0 var(--ds-space-4);
+    border-radius: min(calc(var(--ds-radius-sm) * var(--ds-shape, 1)), calc(var(--_box) / 2));
+    color: var(--ds-text);
+    font: var(--ds-size-font, var(--ds-font-body));
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    outline-offset: 0;
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* The active row's layer: in over --ds-dur-micro, out at once. */
+  .ds-timepicker__option::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0ms var(--ds-ease-in-out);
+  }
+
+  .ds-timepicker__option[data-active]::before {
+    opacity: var(--ds-state-hover);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-timepicker__option[aria-selected="true"] {
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+    font-weight: var(--ds-weight-label);
+  }
+
+  /* Keyboard focus on the list: the active row carries the ring. */
+  .ds-timepicker__list > .ds-timepicker__option[data-active] {
+    outline-offset: 0;
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-timepicker__list:focus-visible > .ds-timepicker__option[data-active] {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  @media (forced-colors: active) {
+    .ds-timepicker__option[data-active] {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+
+    .ds-timepicker__option[aria-selected="true"] {
+      forced-color-adjust: none;
+      background: SelectedItem;
+      color: SelectedItemText;
+    }
+
+    .ds-timepicker__option[aria-selected="true"][data-active] {
+      outline-color: CanvasText;
+    }
+  }
+}

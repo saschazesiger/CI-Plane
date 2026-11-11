@@ -1,0 +1,96 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Number input: a field that holds a number in the page's locale, with
+ * stepper buttons at its end (or one at each end), a unit or a currency.
+ * It is an input group of form.css: the group draws the field (border,
+ * radius, height, ring, invalid and disabled), this file only places the
+ * steppers and sets the figures.
+ *
+ *   <div class="ds-input-group ds-number" data-ds-number data-ds-number-min="0" data-ds-number-max="500" data-ds-number-step="5">
+ *     <input class="ds-input" id="quota" type="text" inputmode="decimal" autocomplete="off" value="50">
+ *     <span class="ds-input-group__suffix" aria-hidden="true">GB</span>
+ *     <span class="ds-input-group__trailing ds-number__steps">
+ *       <button class="ds-btn ds-btn--quiet ds-btn--icon ds-number__step ds-number__down" type="button" tabindex="-1" aria-label="Decrease">(minimize 18)</button>
+ *       <button class="ds-btn ds-btn--quiet ds-btn--icon ds-number__step ds-number__up" type="button" tabindex="-1" aria-label="Increase">(plus 18)</button>
+ *     </span>
+ *   </div>
+ *
+ *   .ds-number--split: the minus first, the plus last, the figure centred
+ *   (a quantity); the steppers are direct children, in any order:
+ *   <div class="ds-input-group ds-number ds-number--split" data-ds-number data-ds-number-min="1">
+ *     <input class="ds-input" ...>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon ds-number__step ds-number__down" ...>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon ds-number__step ds-number__up" ...></div>
+ *
+ * Currency and unit: data-ds-number-currency="EUR" or -unit="gigabyte" on
+ * the group, with an empty .ds-input-group__prefix and __suffix: DS.number
+ * writes the symbol where the locale writes it (€ before the figure in
+ * English, after it in German). Both are aria-hidden: the spinbutton's
+ * aria-valuetext says "19.90 euros".
+ *
+ * The figures are tabular, so a value that steps does not shift. Behaviour
+ * (the keys, parsing and formatting, min, max and step, the held stepper)
+ * is DS.number (number.js).
+ *
+ * Options (src/core/options.css, docs/options.md), from the group of
+ * form.css and computed here for the steppers:
+ *   size      .ds-xs ... .ds-xl: the field 8px per step; the steppers 8px
+ *             per step too, always 8px less than the field (32px at md)
+ *   density   .ds-density-*: 4px per step on the field and the steppers
+ *   shape     .ds-shape-*: the field's corners; the steppers are actions:
+ *             a pill at the default, square at 0 (D11)
+ *   touch     .ds-touch: field and steppers at least --ds-touch-target
+ * There is no tone: the field shows its state through aria-invalid and a
+ * hint in words (form.css).
+ *
+ * Hooks: --ds-number-step-size (32px: the stepper at md and comfortable,
+ * which size and density steps apply to).
+ *
+ * Forced colours: the steppers are buttons in the system's colours; at an
+ * end a stepper is disabled, GrayText (button.css).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.number {
+  .ds-number > .ds-input {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The steppers sit side by side at the end of the field, close to each
+     other (the group's end padding gives way to a trailing button). */
+  .ds-number__steps {
+    gap: 0;
+  }
+
+  /* A stepper is an icon button 8px smaller than the field at every size
+     and density (the icon button's own model follows size only), never
+     under the touch minimum. */
+  .ds-number__step {
+    --ds-btn-icon-size: calc(var(--ds-number-step-size, 32px) + var(--ds-density, 0) * 4px);
+    /* A held press repeats: no double-tap zoom, no text selection. */
+    touch-action: manipulation;
+    user-select: none;
+  }
+
+  /* Split: the minus at the start, the plus at the end, the figure in the
+     middle. */
+  .ds-number--split {
+    padding-inline: var(--ds-space-1);
+  }
+
+  .ds-number--split > .ds-input {
+    text-align: center;
+  }
+
+  /* Wherever the markup puts them (the field may come first, so a screen
+     reader's cursor meets it first): the minus first, the plus last. */
+  .ds-number--split > .ds-number__down {
+    order: -1;
+  }
+
+  .ds-number--split > .ds-number__up {
+    order: 1;
+  }
+}

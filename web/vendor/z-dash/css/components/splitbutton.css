@@ -1,0 +1,65 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Split button: one pill with two targets, the action and a menu (a button
+ * group of two, button-group.css: the pill's ends, the square inner
+ * corners and the divider between them).
+ *
+ *   <div class="ds-btn-group ds-split-btn" role="group" aria-label="Merge" data-ds-splitbutton>
+ *     <button class="ds-btn ds-btn--filled ds-split-btn__action" type="button" value="merge">
+ *       <span class="ds-split-btn__label">Merge</span></button>
+ *     <button class="ds-btn ds-btn--filled ds-split-btn__toggle" type="button" aria-label="More merge options"
+ *             aria-haspopup="menu" aria-expanded="false" aria-controls="merge-menu">(chevronDown 20, .ds-chevron)</button>
+ *   </div>
+ *   <div class="ds-menu" id="merge-menu" role="menu" aria-label="Merge options" hidden>...</div>
+ *
+ *   .ds-split-btn            the group (with .ds-btn-group and role="group")
+ *   .ds-split-btn__action    the action: a .ds-btn in any look of the group
+ *   .ds-split-btn__label     the action's words; a choice writes the chosen
+ *                            label here; an ellipsis when it is too narrow
+ *   .ds-split-btn__toggle    the menu button: the chevron only (20px), as
+ *                            narrow as its padding allows (8px each side at
+ *                            md, 2px per size step), never narrower than
+ *                            the touch minimum under .ds-touch; the chevron
+ *                            (.ds-chevron) turns while the menu is open
+ *
+ * One look on both buttons: --filled (the main action of its area),
+ * --tonal or outlined.
+ *
+ * Behaviour (DS.splitbutton, splitbutton.js): the toggle opens the menu
+ * through DS.menubutton and DS.overlay; with radio items the menu chooses
+ * the action's variant (its label and value).
+ *
+ * Options: the buttons' (size, density, shape, touch: button.css and
+ * button-group.css); the toggle's side padding steps with size only.
+ *
+ * Forced colours: the buttons' system colours; the divider stays
+ * ButtonBorder.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.splitbutton {
+  .ds-split-btn {
+    flex-wrap: nowrap;
+  }
+
+  .ds-split-btn__action {
+    min-inline-size: 0;
+  }
+
+  .ds-split-btn__label {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The menu half: the chevron and a little padding, so the action keeps
+     the room; touch keeps it a full target. */
+  .ds-split-btn__toggle {
+    flex-shrink: 0;
+    min-inline-size: var(--ds-target-min, 0px);
+    padding-inline: calc(var(--ds-space-2) + var(--ds-size-step, 0) * 2px);
+  }
+}

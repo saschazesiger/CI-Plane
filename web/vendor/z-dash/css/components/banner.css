@@ -1,0 +1,64 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Banner (3.0): the behaviour of the app's message strip, .ds-banner (the
+ * App frame's, shell.css: the first child of .ds-panel, above the view):
+ * several messages in priority order, each dismissible and remembered.
+ *
+ *   <div class="ds-banner" data-ds-banner [data-ds-banner-max="1"] [data-ds-banner-remember="local|session|off"]>
+ *     <div class="ds-alert ds-tone-error" role="alert" data-ds-banner-id="outage-1104" [data-ds-banner-priority="90"]>
+ *       (alertCircle 20)<span class="ds-alert__text">Sign-in is down. We are on it.</span>
+ *       <button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm ds-banner__dismiss" type="button" aria-label="Dismiss">(close 20)</button>   banner.js
+ *     </div>
+ *     <div class="ds-alert ds-tone-info" role="status" data-ds-banner-id="maintenance-1109" hidden> ... </div>   waiting
+ *     <button class="ds-btn ds-btn--text ds-sm ds-banner__more" type="button" aria-expanded="false">Show 1 more</button>   banner.js
+ *   </div>
+ *
+ * banner.js orders the alerts, hides the dismissed ones and those past the
+ * maximum (hidden), adds the dismiss buttons and the more button.
+ *
+ * Messages under each other: only the first one shown keeps the panel's
+ * top corners (shell.css); the next ones are square, a hairline apart. The
+ * more button sits at the end of a row of its own under them, on the
+ * panel's surface.
+ *
+ * Options (docs/options.md): those of the alert (size and density on its
+ * padding, shape on the first message's corners, tone per message, the
+ * icon and the word carry the status). The dismiss button is an icon button
+ * at .ds-sm: it steps with size, never with density; .ds-touch makes it a
+ * full target.
+ *
+ * Forced colours: the hairline between messages becomes CanvasText, as
+ * every border.
+ *
+ * Motion: banner.js changes the messages inside DS.motion.flip() on the
+ * panel, so the view glides; a message that appears fades in
+ * (DS.motion.enter(alert, 'fade')). Nothing animates a height.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.banner {
+  /* A waiting or dismissed message takes no room, also on a page without
+     .ds-base (an alert is display: flex). */
+  .ds-banner > [hidden] {
+    display: none;
+  }
+
+  /* Under the first message shown: square corners, a hairline apart. */
+  .ds-banner > .ds-alert:not(:nth-child(1 of .ds-alert:not([hidden]))) {
+    border-top: 1px solid var(--ds-line);
+    border-radius: 0;
+  }
+
+  /* The dismiss button closes the row, after any action. */
+  .ds-banner__dismiss {
+    order: 1;
+  }
+
+  .ds-banner > .ds-banner__more:not([hidden]) {
+    display: flex;
+    margin-block: var(--ds-space-1);
+    margin-inline: auto var(--ds-space-2);
+  }
+}

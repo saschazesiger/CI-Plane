@@ -1,0 +1,322 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Message: one turn of a conversation. Four roles: the user's own (a
+ * bubble at the end side), the assistant's (full width, no bubble, an
+ * avatar at the start), a system line (centred, quiet) and a tool result
+ * (a framed block). A streaming reply shows a cursor at the end of its
+ * text; a reply that stopped or failed says so in a note; the footer holds
+ * its actions (copy, retry, edit, feedback).
+ *
+ *   <article class="ds-message ds-message--assistant" data-ds-message aria-labelledby="m1-author">
+ *     <div class="ds-message__avatar" aria-hidden="true">(bot 20)</div>
+ *     <div class="ds-message__main">
+ *       <header class="ds-message__head">
+ *         <span class="ds-message__author" id="m1-author">Assistant</span>
+ *         <time class="ds-message__time" datetime="2026-11-04T09:41:00Z" data-ds-time>09:41</time>
+ *       </header>
+ *       <div class="ds-message__content ds-prose ds-prose--compact"><p>The battery of laptop 4 ...</p></div>
+ *       <footer class="ds-message__footer" role="group" aria-label="Message actions">
+ *         <button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm" type="button" aria-label="Copy" data-tip="Copy"
+ *           data-ds-message-action="copy">(icon swap: copy / check)</button>
+ *         <button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm" type="button" aria-label="Retry" data-tip="Retry"
+ *           data-ds-message-action="retry">(refresh)</button>
+ *       </footer>
+ *     </div>
+ *   </article>
+ *
+ * Roles (the variant):
+ *   .ds-message--assistant   the default look: full width, no bubble
+ *   .ds-message--user        the content in a bubble (--ds-message-user-bg)
+ *                            at the end side, at most --ds-message-user-max
+ *                            wide; an avatar goes to the end side
+ *   .ds-message--system      a quiet centred line (meta type, text-2): a
+ *                            join, a handover, a reset; no avatar, no footer
+ *   .ds-message--tool        a tool's result: the content framed
+ *                            (--ds-message-tool-bg, a line), code type
+ *
+ * Parts:
+ *   .ds-message__avatar      a round slot (--ds-message-avatar-size, 32px)
+ *                            for an icon, initials or an <img>
+ *   .ds-message__main        the column: head, content, note, footer
+ *   .ds-message__head        author, time and labels (an AI label), meta type
+ *   .ds-message__author      the name, label weight
+ *   .ds-message__time        the time, text-2
+ *   .ds-message__content     the text; with .ds-prose .ds-prose--compact for
+ *                            rendered markdown
+ *   .ds-message__note        a line under the content with an icon and a
+ *                            word: why a reply ended early (written by the
+ *                            module for the partial and error states, or by
+ *                            the page)
+ *   .ds-message__footer      the actions, quiet icon buttons and a
+ *                            .ds-feedback; at the end side for the user
+ *
+ * States, written by the module (DS.message) as data-state, with
+ * aria-busy="true" while streaming:
+ *   streaming   the cursor at the end of the text (the last paragraph or
+ *               list item, or the empty content), the footer kept but
+ *               invisible, so nothing moves when it comes
+ *   partial     stopped before its end: the note says "Stopped"
+ *   error       failed: the note says why (the error tone, an icon and a
+ *               word, never the colour alone)
+ *   (none)      complete
+ *
+ * Options (src/core/options.css, docs/options.md), on the message or any
+ * ancestor; each is computed here, in the part's own rule:
+ *   size      .ds-xs ... .ds-xl: the avatar 8px per step; the text keeps
+ *             its role (a conversation reads at body size)
+ *   density   .ds-density-*: 2px less per step between head, content and
+ *             footer, and of the bubble's and the tool frame's padding
+ *   shape     .ds-shape-*: multiplies the bubble's and the tool frame's
+ *             radius; the avatar stays round
+ *   touch     the footer's buttons follow their own rule
+ * There is no tone: the role is the variant; the error state takes the
+ * error ink with its icon and word.
+ *
+ * Hooks: --ds-message-avatar-size (32px), --ds-message-gap (8px),
+ * --ds-message-user-bg (--ds-surface-high), --ds-message-user-color
+ * (--ds-text), --ds-message-user-max (80%), --ds-message-radius
+ * (--ds-radius-xl), --ds-message-tool-bg (--ds-surface-low). The computed
+ * values (--_gap, --_pad, --_avatar) are private: never set them.
+ *
+ * Motion: none of its own. The cursor stands still (the text that streams
+ * in is the motion); a footer that comes after a stream is already in
+ * place. A copy swaps its icon to a check through .ds-icon-swap.
+ *
+ * Forced colours: the bubble and the tool frame keep a transparent border
+ * (their edge there); the cursor is CanvasText; the error note keeps its
+ * icon and word in the system colours.
+ *
+ * Print: the footer goes; the cursor too.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.message {
+  .ds-message {
+    --_gap: max(0px, calc(var(--ds-message-gap, var(--ds-space-2)) + var(--ds-density, 0) * 2px));
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-3);
+    min-width: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-body);
+  }
+
+  .ds-message__avatar {
+    --_avatar: max(16px, calc(var(--ds-message-avatar-size, 32px) + var(--ds-size-step, 0) * 8px));
+    position: relative;
+    display: grid;
+    flex: none;
+    place-items: center;
+    inline-size: var(--_avatar);
+    block-size: var(--_avatar);
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--ds-surface-high);
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-message__avatar > img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  .ds-message__main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--_gap);
+    min-width: 0;
+  }
+
+  .ds-message__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-1) var(--ds-space-2);
+    min-width: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-message__author {
+    color: var(--ds-text);
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-message__time {
+    color: var(--ds-text-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-message__content {
+    align-self: stretch;
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* The default look, named: a message inside another role's region stays a reply. */
+  .ds-message--assistant {
+    flex-direction: row;
+  }
+
+  /* ── The user's bubble ─────────────────────────── */
+
+  .ds-message--user {
+    flex-direction: row-reverse;
+  }
+
+  .ds-message--user > .ds-message__main {
+    align-items: flex-end;
+  }
+
+  .ds-message--user .ds-message__content {
+    --_pad: max(var(--ds-space-1), calc(var(--ds-space-3) + var(--ds-density, 0) * 2px));
+    align-self: flex-end;
+    max-inline-size: var(--ds-message-user-max, 80%);
+    padding: calc(var(--_pad) - 2px) calc(var(--_pad) + var(--ds-space-1));
+    border: 1px solid transparent;
+    border-radius: calc(var(--ds-message-radius, var(--ds-radius-xl)) * var(--ds-shape, 1));
+    background: var(--ds-message-user-bg, var(--ds-surface-high));
+    color: var(--ds-message-user-color, var(--ds-text));
+    white-space: pre-wrap;
+  }
+
+  /* ── System line ───────────────────────────────── */
+
+  .ds-message--system {
+    justify-content: center;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    text-align: center;
+  }
+
+  .ds-message--system > .ds-message__main {
+    flex: 0 1 auto;
+    align-items: center;
+  }
+
+  .ds-message--system .ds-message__content {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+  }
+
+  .ds-message--system .ds-message__content > svg {
+    flex: none;
+  }
+
+  /* ── Tool result ───────────────────────────────── */
+
+  .ds-message--tool .ds-message__content {
+    --_pad: max(var(--ds-space-1), calc(var(--ds-space-3) + var(--ds-density, 0) * 2px));
+    position: relative;
+    padding: var(--_pad);
+    overflow-x: auto;
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-message-radius, var(--ds-radius-xl)) / 2 * var(--ds-shape, 1));
+    background: var(--ds-message-tool-bg, var(--ds-surface-low));
+    font: var(--ds-font-code);
+    white-space: pre-wrap;
+  }
+
+  /* ── States ────────────────────────────────────── */
+
+  /* The cursor: a block at the end of the text, in the text's colour. It
+     follows the last paragraph, heading or list item, or stands alone in an
+     empty content before the first words. */
+  .ds-message[data-state="streaming"] .ds-message__content:not(:has(> *))::after,
+  .ds-message[data-state="streaming"] .ds-message__content > :is(p, h1, h2, h3, h4, h5, h6, blockquote):last-child::after,
+  .ds-message[data-state="streaming"] .ds-message__content > :is(ul, ol):last-child > li:last-child::after {
+    content: '';
+    display: inline-block;
+    inline-size: .5em;
+    block-size: 1em;
+    margin-inline-start: 2px;
+    border-radius: calc(var(--ds-radius-xs) / 2);
+    background: currentColor;
+    vertical-align: text-bottom;
+  }
+
+  /* Kept in the layout, so the reply does not move when the footer comes. */
+  .ds-message[data-state="streaming"] .ds-message__footer {
+    visibility: hidden;
+  }
+
+  .ds-message__note {
+    display: inline-flex;
+    margin: 0;
+    align-items: center;
+    gap: var(--ds-space-2);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-message__note > svg {
+    flex: none;
+  }
+
+  .ds-message[data-state="error"] .ds-message__note {
+    color: var(--ds-on-error-container);
+  }
+
+  .ds-message[data-state="error"] .ds-message__note > svg {
+    color: var(--ds-error);
+  }
+
+  .ds-message__note[hidden] {
+    display: none;
+  }
+
+  /* ── Footer ────────────────────────────────────── */
+
+  /* Quiet icon buttons: their glyph lines up with the text above (the
+     button's own padding hangs into the gutter). */
+  .ds-message__footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    margin-inline-start: calc(-1 * var(--ds-space-2));
+  }
+
+  .ds-message--user .ds-message__footer {
+    margin-inline: 0 calc(-1 * var(--ds-space-2));
+  }
+
+  @media (forced-colors: active) {
+    .ds-message--user .ds-message__content,
+    .ds-message--tool .ds-message__content {
+      border-color: CanvasText;
+    }
+
+    .ds-message[data-state="streaming"] .ds-message__content:not(:has(> *))::after,
+    .ds-message[data-state="streaming"] .ds-message__content > :is(p, h1, h2, h3, h4, h5, h6, blockquote):last-child::after,
+    .ds-message[data-state="streaming"] .ds-message__content > :is(ul, ol):last-child > li:last-child::after {
+      background: CanvasText;
+    }
+
+    .ds-message[data-state="error"] .ds-message__note,
+    .ds-message[data-state="error"] .ds-message__note > svg {
+      color: CanvasText;
+    }
+  }
+
+  @media print {
+    .ds-message__footer {
+      display: none;
+    }
+
+    .ds-message[data-state="streaming"] .ds-message__content:not(:has(> *))::after,
+    .ds-message[data-state="streaming"] .ds-message__content > :is(p, h1, h2, h3, h4, h5, h6, blockquote):last-child::after,
+    .ds-message[data-state="streaming"] .ds-message__content > :is(ul, ol):last-child > li:last-child::after {
+      content: none;
+    }
+  }
+}

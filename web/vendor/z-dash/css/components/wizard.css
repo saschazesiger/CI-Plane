@@ -1,0 +1,150 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Form wizard (3.0): a form in steps on the Steps component, each step
+ * checked before the next, Back and Next, and a summary step with an Edit
+ * button per step. DS.wizard (wizard.js) moves between the panels, checks
+ * them and writes the steps and the summary.
+ *
+ *   <form class="ds-wizard" data-ds-wizard aria-labelledby="report-title">
+ *     <ol class="ds-steps ds-wizard__steps" aria-label="Report a problem"></ol>   (written by DS.wizard)
+ *     <section class="ds-wizard__panel" aria-labelledby="s1">
+ *       <h3 class="ds-wizard__title" id="s1">Device</h3> (fields) </section>
+ *     <section class="ds-wizard__panel" data-ds-wizard-summary aria-labelledby="s4" hidden>
+ *       <h3 class="ds-wizard__title" id="s4">Review</h3>
+ *       <div class="ds-wizard__summary">            (written by DS.wizard)
+ *         <section class="ds-wizard__group"><div class="ds-wizard__group-head">
+ *           <h4 class="ds-wizard__group-title">Device</h4>
+ *           <button class="ds-btn ds-btn--text ds-sm ds-wizard__edit" aria-label="Edit Device">Edit</button></div>
+ *           <dl class="ds-facts ds-facts--rows"> ... </dl></section></div></section>
+ *     <div class="ds-wizard__actions">
+ *       <button class="ds-btn ds-wizard__back" type="button">Back</button>
+ *       <button class="ds-btn ds-btn--filled ds-wizard__next" type="button">Next</button>
+ *       <button class="ds-btn ds-btn--filled ds-wizard__submit" type="submit" hidden>Send report</button></div>
+ *   </form>
+ *
+ * The panels stack in one column; only the current one shows (hidden on
+ * the others). Its title takes the focus when a step opens (tabindex="-1",
+ * with the ring on keyboard use). The actions sit under a hairline: Back at
+ * the start, Next or the submit button at the end, one filled button in
+ * the area; they wrap on a phone. An invalid field gets Form's error hint
+ * (.ds-field__hint--error.ds-wizard__error, with its icon and words).
+ *
+ * Options (src/core/options.css, docs/options.md), on the wizard or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: the steps, fields and buttons step
+ *             themselves (Steps, Form, Button)
+ *   density   .ds-density-*: the room between the parts, inside a panel and
+ *             in the summary 2px per step
+ *   shape     .ds-shape-*: the parts follow (Steps, Form, Button)
+ *   touch     .ds-touch: fields and buttons take --ds-touch-target
+ *   tone      none: a step's status is the Steps' data-status, with its
+ *             icon and word
+ *
+ * Hooks: --ds-wizard-gap (--ds-space-6: between the steps, the panel and
+ * the actions), --ds-wizard-panel-gap (--ds-space-4: inside a panel). The
+ * private --_gap is computed here: never set it.
+ *
+ * Motion: the panel that opens plays .ds-enter--swap (DS.motion.enter);
+ * a done step's check draws itself and its connector turns (Steps).
+ *
+ * Forced colours: the parts are Steps', Form's and Button's; the hairline
+ * over the actions stays (CanvasText).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.wizard {
+  .ds-wizard {
+    --_gap: calc(var(--ds-wizard-gap, var(--ds-space-6)) + var(--ds-density, 0) * 2px);
+    display: grid;
+    gap: var(--_gap);
+    min-width: 0;
+  }
+
+  .ds-wizard__steps {
+    margin: 0;
+  }
+
+  .ds-wizard__panel {
+    display: grid;
+    align-content: start;
+    gap: calc(var(--ds-wizard-panel-gap, var(--ds-space-4)) + var(--ds-density, 0) * 2px);
+    min-width: 0;
+  }
+
+  .ds-wizard__panel[hidden] {
+    display: none;
+  }
+
+  .ds-wizard__title {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-title);
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-wizard__title:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-wizard__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ds-space-2);
+    padding-block-start: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  .ds-wizard__back {
+    margin-inline-end: auto;
+  }
+
+  :is(.ds-wizard__back, .ds-wizard__next, .ds-wizard__submit)[hidden] {
+    display: none;
+  }
+
+  .ds-wizard__error {
+    max-inline-size: var(--ds-measure);
+  }
+
+  .ds-wizard__summary {
+    display: grid;
+    gap: calc(var(--ds-space-5) + var(--ds-density, 0) * 2px);
+  }
+
+  .ds-wizard__group {
+    display: grid;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-wizard__group-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ds-space-2);
+  }
+
+  .ds-wizard__group-title {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-subtitle);
+  }
+
+  .ds-wizard__edit {
+    flex: none;
+  }
+
+  @media (forced-colors: active) {
+    .ds-wizard__actions {
+      border-block-start-color: CanvasText;
+    }
+  }
+}

@@ -1,0 +1,289 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * File upload (3.0): a drop zone (.ds-dropzone of Drag and files), the line
+ * that says why a file was refused, and the chosen files as rows or as a
+ * grid of previews, each with its progress, retry and remove. DS.upload
+ * (upload.js) renders the rows; the page uploads and reports progress.
+ *
+ *   <div class="ds-upload" data-ds-upload data-ds-upload-max-size="10 MB" data-ds-upload-max-files="5">
+ *     <label class="ds-dropzone"> ... <input class="ds-dropzone__input" type="file" accept="image/*,.pdf" multiple> ... </label>
+ *     <p class="ds-upload__error" hidden>(alertCircle 16)<span class="ds-upload__error-text"></span></p>
+ *     <ul class="ds-list ds-upload__list" aria-label="Files"></ul>
+ *   </div>
+ *
+ *   A row (written by DS.upload, list view):
+ *   <li class="ds-list__item ds-upload__item" data-ds-key="upload-1" data-status="uploading" aria-busy="true">
+ *     <span class="ds-list__media ds-upload__thumb"><img alt=""></span>   (or a .ds-list__icon)
+ *     <span class="ds-list__text"><span class="ds-list__title ds-upload__name">devices.csv</span>
+ *       <span class="ds-list__meta ds-upload__meta"><span class="ds-upload__status">1.2 MB · 40%</span></span>
+ *       <div class="ds-progress ds-progress--flat ds-upload__bar"> ... </div></span>
+ *     <span class="ds-list__actions ds-upload__actions">
+ *       <button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm ds-upload__retry" aria-label="Retry devices.csv" hidden>
+ *       <button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm ds-upload__remove" aria-label="Remove devices.csv"></span></li>
+ *
+ *   Previews: <ul class="ds-upload__grid" aria-label="Photos"></ul>; a tile is
+ *   li.ds-upload__tile with .ds-upload__preview (the picture, or a
+ *   .ds-upload__glyph), .ds-upload__caption (.ds-upload__name,
+ *   .ds-upload__meta), the bar and .ds-upload__actions over the preview's
+ *   top corner (tonal icon buttons, so they read on any picture).
+ *
+ * data-status (written by DS.upload): queued ("Waiting", no bar yet),
+ * uploading (the share, glides), done (the check and "Uploaded"),
+ * error (the alert icon and the reason in the error ink; a tile takes the
+ * error edge; Retry shows). Status is never colour alone: icon and words.
+ *
+ * .ds-upload__error: the reason a file was refused, an icon and words in the
+ * field's error ink (--ds-field-error-color); the zone's input carries
+ * aria-invalid meanwhile (the zone's error edge) and names the line in its
+ * aria-describedby. It fades in (ds-fade-in, --ds-dur-fast).
+ *
+ * Options (src/core/options.css, docs/options.md), on the upload or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: a tile's least width 16px per step, the
+ *             name's type role (--ds-size-font); rows follow the list, the
+ *             zone the drop zone
+ *   density   .ds-density-*: the gap between tiles and the caption's
+ *             padding 2px per step; rows follow the list
+ *   shape     .ds-shape-*: multiplies the tile's radius (the preview's
+ *             corners follow)
+ *   touch     .ds-touch: the buttons take --ds-touch-target (Button)
+ *   tone      none: a file's status is data-status, with its icon and word
+ *
+ * Hooks: --ds-upload-tile (144px: a tile's least width at md),
+ * --ds-upload-radius (--ds-radius-card), --ds-upload-gap (--ds-space-3:
+ * between the zone, the error line and the files). The private --_tile,
+ * --_radius and --_inner are computed here: never set them.
+ *
+ * Motion: rows and tiles come and go through DS.motion.flip() (they fade
+ * in over --ds-dur-fast, the others glide); the bar glides on
+ * --ds-ease-value (Progress).
+ *
+ * Forced colours: a tile and its preview keep their edges (CanvasText), a
+ * failed tile a 2px edge; the words carry the status.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.upload {
+  .ds-upload {
+    display: grid;
+    gap: calc(var(--ds-upload-gap, var(--ds-space-3)) + var(--ds-density, 0) * 2px);
+    min-width: 0;
+  }
+
+  .ds-upload__error {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-1);
+    margin: 0;
+    color: var(--ds-field-error-color, var(--ds-on-error-container));
+    font: var(--ds-font-meta);
+    animation: ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) backwards;
+  }
+
+  .ds-upload__error[hidden] {
+    display: none;
+  }
+
+  .ds-upload__error > svg {
+    flex: none;
+    margin-block-start: 1px;
+  }
+
+  .ds-upload__error-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* ── Rows ─────────────────────────────────────── */
+
+  /* A row list (list.css); empty, it takes no room. */
+  .ds-upload__list {
+    min-width: 0;
+  }
+
+  /* In a row the bar sits under the words (upload.js puts it there), so
+     the actions stay on the first line down to a phone's width. */
+  .ds-upload__item > .ds-list__text {
+    flex-basis: 8rem;
+  }
+
+  .ds-upload__item .ds-upload__bar {
+    margin-block-start: var(--ds-space-1);
+  }
+
+  .ds-upload__bar[hidden] {
+    display: none;
+  }
+
+  /* A picture, never squeezed by a long name. */
+  .ds-upload__thumb {
+    flex: none;
+  }
+
+  .ds-upload__name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ds-upload__meta {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-1);
+    min-width: 0;
+  }
+
+  .ds-upload__status {
+    min-width: 0;
+  }
+
+  /* On the first line of the words, which may wrap. */
+  .ds-upload__status-icon {
+    flex: none;
+    margin-block: calc((1lh - 16px) / 2);
+  }
+
+  .ds-upload__actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-1);
+    margin-inline-start: auto;
+  }
+
+  .ds-upload__retry[hidden] {
+    display: none;
+  }
+
+  .ds-upload__remove {
+    flex: none;
+  }
+
+  /* A row that DS.motion.flip() brings in fades in quickly, as a list row. */
+  .ds-upload__item {
+    --ds-enter-duration: var(--ds-dur-fast);
+  }
+
+  /* ── Previews ─────────────────────────────────── */
+
+  .ds-upload__grid {
+    --_tile: max(96px, calc(var(--ds-upload-tile, 144px) + var(--ds-size-step, 0) * 16px));
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--_tile)), 1fr));
+    gap: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-upload__grid:empty {
+    display: none;
+  }
+
+  .ds-upload__tile {
+    --ds-enter-duration: var(--ds-dur-fast);
+    --_radius: calc(var(--ds-upload-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    --_inner: max(0px, calc(var(--_radius) - 1px));
+    position: relative;
+    display: grid;
+    grid-template-rows: auto auto;
+    align-content: start;
+    gap: var(--ds-space-2);
+    box-sizing: border-box;
+    min-width: 0;
+    padding-block-end: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px);
+    border: 1px solid var(--ds-line);
+    border-radius: var(--_radius);
+    background: var(--ds-surface);
+    color: var(--ds-text);
+    transition: border-color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-upload__tile[data-status="error"] {
+    border-color: var(--ds-error);
+  }
+
+  .ds-upload__preview {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border-block-end: 1px solid var(--ds-line);
+    border-start-start-radius: var(--_inner);
+    border-start-end-radius: var(--_inner);
+    background: var(--ds-surface-high);
+    color: var(--ds-text-2);
+  }
+
+  .ds-upload__preview > img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .ds-upload__glyph {
+    flex: none;
+  }
+
+  .ds-upload__caption {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    padding-inline: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px);
+  }
+
+  .ds-upload__caption > .ds-upload__name {
+    overflow: hidden;
+    color: var(--ds-text);
+    font: var(--ds-size-font, var(--ds-font-label));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-upload__caption > .ds-upload__meta {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-upload__tile > .ds-upload__bar {
+    margin-inline: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px);
+  }
+
+  /* Over the preview's top corner: tonal buttons read on any picture. */
+  .ds-upload__tile > .ds-upload__actions {
+    position: absolute;
+    inset-block-start: var(--ds-space-2);
+    inset-inline-end: var(--ds-space-2);
+  }
+
+  /* The status after the parts' own colours: the check, and the reason in
+     the error ink. */
+  [data-status="done"] > * > .ds-upload__meta > .ds-upload__status-icon {
+    color: var(--ds-success);
+  }
+
+  [data-status="error"] > * > .ds-upload__meta {
+    color: var(--ds-field-error-color, var(--ds-on-error-container));
+  }
+
+  @media (forced-colors: active) {
+    .ds-upload__tile,
+    .ds-upload__preview {
+      border-color: CanvasText;
+    }
+
+    .ds-upload__tile[data-status="error"] {
+      outline: 1px solid CanvasText;
+      outline-offset: -2px;
+    }
+
+    .ds-upload__error,
+    [data-status="error"] > * > .ds-upload__meta,
+    [data-status="done"] > * > .ds-upload__meta > .ds-upload__status-icon {
+      color: CanvasText;
+    }
+  }
+}

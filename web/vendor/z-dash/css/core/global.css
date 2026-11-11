@@ -1,0 +1,51 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Global: the rules for every element inside .ds-theme, whatever
+ * components a page uses, so every bundle and every set of single files
+ * carries them (tools/bundle.mjs writes the core first).
+ *
+ * - Border-box sizing: every component is measured as border-box (a 100%
+ *   wide field with its padding, a dialog of min(400px, 100%)). Zero
+ *   specificity, so a host page that embeds .ds-theme keeps any sizing it
+ *   sets itself. Elements only: a rule whose subject is every ::before and
+ *   ::after makes the engine compute two pseudo-element styles for every
+ *   element of the page, content or not (in Chromium more than half the
+ *   style cost of a plain element). A pseudo-element with a size and a
+ *   border or padding sets box-sizing in its own rule.
+ * - Zero-weight defaults that a component of an earlier sublayer must still
+ *   beat: the browser margins of paragraphs in a card.
+ * - Forced colours: icons coloured on the <svg> itself would keep their
+ *   authored colour (dark grey on black), so every icon follows the forced
+ *   text colour of its control.
+ *
+ * The rules sit in ds.components, first in it (ds.css inlines this file
+ * right before the first component): they held that place in 2.x, at the
+ * top of utilities.css (border-box) and in shell.css (the !important icon
+ * colour, which no other rule sets with !important, so its place within
+ * the layer decides nothing).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.global {
+  :where(.ds-theme),
+  :where(.ds-theme) * {
+    box-sizing: border-box;
+  }
+
+  /* A card's rhythm decides its spacing: no browser margins of paragraphs
+     in it (a last one would add 1em to the bottom padding). Here and not in
+     card.css: a zero-weight default holds only in the first sublayer, and
+     the paragraphs of components that come before the card (a tile's
+     value, a progress label) keep their own margins. */
+  :where(.ds-card) p {
+    margin-block: 0;
+  }
+
+  @media (forced-colors: active) {
+    .ds-theme svg {
+      color: inherit !important;
+    }
+  }
+}

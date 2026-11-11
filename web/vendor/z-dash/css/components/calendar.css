@@ -1,0 +1,358 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Calendar: the month grid that every date picker shares (the grid of the
+ * WAI-ARIA date picker dialog), inline on a page or inside a picker's
+ * popover. DS.calendar (calendar.js) renders it from Intl in the page's
+ * locale: the month titles, the weekday heads, the first day of the week,
+ * the week numbers and a full date as each day's name.
+ *
+ *   <div class="ds-calendar" data-ds-calendar data-ds-value="2026-11-04"
+ *        [data-ds-calendar-min="2026-01-01"] [data-ds-calendar-max]
+ *        [data-ds-calendar-disabled="6,7,2026-12-24"] [data-ds-calendar-weeks]
+ *        [data-ds-calendar-months="2"] [data-ds-calendar-mode="range"]></div>
+ *
+ * What the script renders inside, per month:
+ *
+ *   <div class="ds-calendar__months">
+ *     <div class="ds-calendar__month" [data-turn="next | back"]>
+ *       <div class="ds-calendar__caption">
+ *         <button class="ds-btn ds-btn--quiet ds-btn--icon ds-calendar__nav" type="button" aria-label="Previous month">(chevronLeft)</button>
+ *         <span class="ds-calendar__title" aria-live="polite">November 2026</span>
+ *         <span class="ds-calendar__spacer"></span>   (in place of a button)
+ *       </div>
+ *       <table class="ds-calendar__grid" role="grid" aria-labelledby="(title)">
+ *         <thead><tr>[<th class="ds-calendar__week" scope="col">]<th scope="col" abbr="Monday">M</th> ...</tr></thead>
+ *         <tbody><tr>[<th class="ds-calendar__week" scope="row">45</th>]
+ *           <td></td>   (a day of another month: empty)
+ *           <td [aria-selected="true"] [data-range="start | middle | end | single"] [data-preview="..."]>
+ *             <button class="ds-calendar__day" type="button" tabindex="-1 | 0" data-date="2026-11-04"
+ *                     aria-label="Wednesday, November 4, 2026" [aria-current="date"] [aria-disabled="true"]>4</button>
+ *           </td> ...
+ *
+ * States: the chosen day is filled in the action colour (aria-selected on
+ * its cell); today has a ring in the action colour (aria-current="date");
+ * a day that may not be picked takes the disabled ink and no press
+ * (aria-disabled, still focusable so its name is read). A range lays a
+ * band in --ds-accent from its start to its end (data-range), the two ends
+ * filled; while the second end is chosen a lighter band previews it
+ * (data-preview). Every state is an attribute, so none is told by colour
+ * alone.
+ *
+ * Options (src/core/options.css, docs/options.md), on the calendar or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: a day 8px per step from
+ *             --ds-calendar-cell (40px), the type of the size
+ *             (--ds-size-font, the body role by default)
+ *   density   .ds-density-*: a day 4px per step
+ *   shape     .ds-shape-*: multiplies the rest and pressed radius of a day
+ *             (round at the default, square at .ds-shape-square)
+ *   touch     .ds-touch: a day at least --ds-touch-target, whatever the
+ *             size and the density
+ *   tone      none: a calendar shows no status
+ *
+ * Press and focus: a day is an action (DS.ripple.attach() gives it the
+ * ripple): a state layer in its ink (hover, press in --ds-dur-micro), the
+ * press morph towards --ds-radius-action-pressed that springs back, and
+ * the focus ring that snaps in. A blocked day shows neither hover nor
+ * press.
+ *
+ * Motion: a turned page slides in from its side (DS.motion.enter(month,
+ * 'slide'): ds-fade-in and ds-shift-in on the spring, --ds-motion-distance
+ * from data-turn, mirrored right to left); the band and the fills change
+ * colour over --ds-dur-fast.
+ *
+ * Forced colours: a chosen day and the band are SelectedItem /
+ * SelectedItemText, the ends of a range carry a CanvasText ring inside the
+ * fill, the preview a dashed edge, today keeps its ring (a border), a
+ * blocked day is GrayText, and a focused chosen day a CanvasText ring.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.calendar {
+  .ds-calendar {
+    /* A day: the hook at md and comfortable, 8px per size step, 4px per
+       density step, never below the touch minimum. */
+    --_cell: max(var(--ds-target-min, 0px), calc(var(--ds-calendar-cell, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    display: inline-block;
+    max-inline-size: 100%;
+    color: var(--ds-text);
+    font: var(--ds-calendar-font, var(--ds-size-font, var(--ds-font-body)));
+  }
+
+  /* One month, or two side by side; they wrap under each other when the
+     room is too narrow. The clip keeps a turning page inside, with room
+     for the focus ring. */
+  .ds-calendar__months {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ds-space-6);
+    margin: calc(-1 * var(--ds-space-1));
+    padding: var(--ds-space-1);
+    overflow: clip;
+  }
+
+  .ds-calendar__month {
+    min-inline-size: 0;
+  }
+
+  /* The page turns towards where it comes from (DS.motion.enter, 'slide'). */
+  .ds-calendar__month[data-turn="next"] {
+    --ds-motion-distance: var(--ds-distance-xl);
+  }
+
+  .ds-calendar__month[data-turn="back"] {
+    --ds-motion-distance: calc(-1 * var(--ds-distance-xl));
+  }
+
+  .ds-calendar__month[data-turn="next"]:dir(rtl) {
+    --ds-motion-distance: calc(-1 * var(--ds-distance-xl));
+  }
+
+  .ds-calendar__month[data-turn="back"]:dir(rtl) {
+    --ds-motion-distance: var(--ds-distance-xl);
+  }
+
+  .ds-calendar__caption {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+    margin-block-end: var(--ds-space-1);
+  }
+
+  .ds-calendar__title {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    font: var(--ds-font-label);
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* As wide as the icon button it stands for, so the title stays centred. */
+  .ds-calendar__spacer {
+    flex: none;
+    inline-size: max(var(--ds-target-min, 0px), calc(var(--ds-btn-icon-size, 40px) + var(--ds-size-step, 0) * 8px));
+  }
+
+  /* Right to left the arrows point the other way. */
+  .ds-calendar__nav:dir(rtl) svg {
+    scale: -1 1;
+  }
+
+  .ds-calendar__grid {
+    border-collapse: collapse;
+    border-spacing: 0;
+    table-layout: fixed;
+  }
+
+  .ds-calendar__grid th {
+    inline-size: var(--_cell);
+    block-size: calc(var(--_cell) * 0.75);
+    padding: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    text-align: center;
+  }
+
+  .ds-calendar__grid td {
+    inline-size: var(--_cell);
+    block-size: var(--_cell);
+    padding: 0;
+    text-align: center;
+  }
+
+  /* The week numbers: a narrower column in the quieter ink. */
+  .ds-calendar__grid .ds-calendar__week {
+    inline-size: calc(var(--_cell) * 0.75);
+    color: var(--ds-text-3);
+    font: var(--ds-font-caption);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-calendar__day {
+    --_half: calc(var(--_cell) / 2);
+    --_radius: min(calc(min(var(--ds-radius-action), var(--_half)) * var(--ds-shape, 1)), var(--_half));
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--_cell);
+    block-size: var(--_cell);
+    margin: 0;
+    padding: 0;
+    /* Transparent at rest: today's ring, and the edge forced colours keep. */
+    border: 1px solid transparent;
+    border-radius: var(--_radius);
+    background: transparent;
+    color: var(--ds-text);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    /* The ring rests one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* State layer in the day's ink. */
+  .ds-calendar__day::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-calendar__day:hover:not([aria-disabled="true"])::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-calendar__day:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-calendar__day:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  /* Press-in in --ds-dur-micro (.ds-pressed: js/ripple.js holds it). */
+  .ds-calendar__day:active:not([aria-disabled="true"])::before,
+  .ds-calendar__day.ds-pressed:not([aria-disabled="true"])::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-calendar__day:active:not(:disabled, [aria-disabled="true"], [aria-busy="true"]),
+  .ds-calendar__day.ds-pressed:not(:disabled, [aria-disabled="true"], [aria-busy="true"]) {
+    border-radius: min(calc(var(--ds-radius-action-pressed) * var(--ds-shape, 1)), var(--_radius));
+    transition: border-radius var(--ds-dur-micro) var(--ds-ease-out);
+  }
+
+  /* With DS.ripple.attach() the ripple brings the press; the flat layer
+     stays at its hover value. */
+  :where(.ds-ripples) .ds-calendar__day:where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *, [aria-disabled="true"])):is(:active, .ds-pressed)::before {
+    opacity: 0;
+  }
+
+  @media (hover: hover) {
+    :where(.ds-ripples) .ds-calendar__day:where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *, [aria-disabled="true"])):is(:active, .ds-pressed)::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  /* Today: a ring in the action colour (and aria-current="date"). */
+  .ds-calendar__day[aria-current="date"] {
+    border-color: var(--ds-calendar-today, var(--ds-primary));
+    color: var(--ds-calendar-today, var(--ds-primary));
+  }
+
+  /* Blocked: the disabled ink, no hover and no press. */
+  .ds-calendar__day[aria-disabled="true"] {
+    color: var(--ds-disabled-ink);
+    cursor: default;
+  }
+
+  /* The chosen day, and the two ends of a range: filled. */
+  .ds-calendar td[aria-selected="true"] > .ds-calendar__day {
+    border-color: transparent;
+    background: var(--ds-calendar-selected-bg, var(--ds-primary));
+    color: var(--ds-calendar-selected-color, var(--ds-on-primary));
+  }
+
+  /* The band of a range, under the day: whole cells in between, the inner
+     half of the cells at the ends (logical, so it follows the writing
+     direction). */
+  .ds-calendar td:is([data-range], [data-preview]) {
+    position: relative;
+  }
+
+  .ds-calendar td:is([data-range], [data-preview])::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--ds-calendar-range-bg, var(--ds-accent));
+    pointer-events: none;
+  }
+
+  .ds-calendar td:is([data-range="start"], [data-preview="start"])::before {
+    inset-inline-start: 50%;
+  }
+
+  .ds-calendar td:is([data-range="end"], [data-preview="end"])::before {
+    inset-inline-end: 50%;
+  }
+
+  .ds-calendar td:is([data-range="single"], [data-preview="single"])::before {
+    content: none;
+  }
+
+  /* A day inside the band is no end: the band's ink, no fill. */
+  .ds-calendar td[data-range="middle"] > .ds-calendar__day {
+    border-color: transparent;
+    background: transparent;
+    color: var(--ds-on-accent);
+  }
+
+  /* The preview while the second end is chosen: the band at the pressed
+     layer's strength; the anchor stays filled. */
+  .ds-calendar td[data-preview]::before {
+    background: color-mix(in srgb, var(--ds-calendar-range-bg, var(--ds-accent)) calc(var(--ds-state-pressed) * 100%), transparent);
+  }
+
+  @media (forced-colors: active) {
+    .ds-calendar td[aria-selected="true"] > .ds-calendar__day {
+      forced-color-adjust: none;
+      border-color: SelectedItem;
+      background: SelectedItem;
+      color: SelectedItemText;
+    }
+
+    .ds-calendar td[data-range]::before {
+      forced-color-adjust: none;
+      background: SelectedItem;
+    }
+
+    .ds-calendar td[data-range="middle"] > .ds-calendar__day {
+      color: SelectedItemText;
+    }
+
+    /* The ends: a ring of the text colour inside the fill. */
+    .ds-calendar td:is([data-range="start"], [data-range="end"]) > .ds-calendar__day {
+      border-color: CanvasText;
+    }
+
+    .ds-calendar td[data-preview]::before {
+      border-block: 1px dashed CanvasText;
+      background: none;
+    }
+
+    .ds-calendar__day[aria-current="date"] {
+      border-color: CanvasText;
+    }
+
+    .ds-calendar__day[aria-disabled="true"] {
+      color: GrayText;
+    }
+
+    .ds-calendar td[aria-selected="true"] > .ds-calendar__day:focus-visible {
+      outline-color: CanvasText;
+    }
+  }
+}

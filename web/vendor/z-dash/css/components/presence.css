@@ -1,0 +1,112 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Presence: whether a person can be reached now, as a dot and a word.
+ * Four states, each with its own shape as well as its colour, so a state
+ * reads without colour (forced colours, a grey screen) and the word says it
+ * to everyone:
+ *
+ *   <span class="ds-presence-label"><span class="ds-presence-dot ds-presence-dot--online"></span>Online</span>
+ *   <span class="ds-presence-label"><span class="ds-presence-dot ds-presence-dot--away"></span>Away</span>
+ *   <span class="ds-presence-label"><span class="ds-presence-dot ds-presence-dot--busy"></span>Busy</span>
+ *   <span class="ds-presence-label"><span class="ds-presence-dot ds-presence-dot--offline"></span>Offline</span>
+ *
+ *   .ds-presence-dot--online    a filled disc (--ds-success)
+ *   .ds-presence-dot--away      a ring, its lower half filled (--ds-warning)
+ *   .ds-presence-dot--busy      a filled disc with a bar across (--ds-error)
+ *   .ds-presence-dot--offline   an empty ring (--ds-outline)
+ *   .ds-presence-label          the dot and its word on one line; the word
+ *                               takes the type and the ink around it
+ *
+ * The dot is decoration: the word next to it, in .ds-sr inside it, or in
+ * the label of the avatar it sits on (avatar.css: "Ada Lovelace, online")
+ * carries the state. Every fill holds 3:1 on the surfaces (the icon pairs of
+ * theme-rules.mjs).
+ *
+ * Not the motion utility .ds-presence (motion.css), which fades toggled
+ * elements in and out.
+ *
+ * Options (docs/options.md), computed here into --_dot:
+ *   size      .ds-xs ... .ds-xl on the dot or any ancestor: 2px per step
+ *             (6 ... 14px around the 10px md dot); the stroke is a fifth
+ *   shape     not read: a presence dot is round at every shape, so the
+ *             four shapes stay told apart
+ *   tone      not read: each state has its colour
+ *   density, target-min: not read; a dot is no target
+ *
+ * Hooks: --ds-presence-dot-size (10px, the md base), --ds-presence-ground
+ * (--ds-surface: the hollow of the away, busy and offline dots, the ground
+ * they lie on), --ds-presence-online (--ds-success), --ds-presence-away
+ * (--ds-warning), --ds-presence-busy (--ds-error), --ds-presence-offline
+ * (--ds-outline).
+ *
+ * Motion: a state change glides its colours (--ds-dur-medium,
+ * --ds-ease-in-out), as a status chip does; the shape changes at once.
+ *
+ * Forced colours: the shapes in CanvasText on Canvas, so the four states
+ * stay apart without their colours.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.presence {
+  .ds-presence-dot {
+    --_dot: calc(var(--ds-presence-dot-size, 10px) + var(--ds-size-step, 0) * 2px);
+    --_stroke: calc(var(--_dot) / 5);
+    --_ink: var(--ds-presence-offline, var(--ds-outline));
+    --_ground: var(--ds-presence-ground, var(--ds-surface));
+    display: inline-block;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    inline-size: var(--_dot);
+    block-size: var(--_dot);
+    border: var(--_stroke) solid var(--_ink);
+    border-radius: 50%;
+    background-color: var(--_ground);
+    vertical-align: middle;
+    transition:
+      background-color var(--ds-dur-medium) var(--ds-ease-in-out),
+      border-color var(--ds-dur-medium) var(--ds-ease-in-out);
+  }
+
+  /* An empty ring; also the look of a dot without a state. */
+  .ds-presence-dot--offline {
+    --_ink: var(--ds-presence-offline, var(--ds-outline));
+  }
+
+  .ds-presence-dot--online {
+    --_ink: var(--ds-presence-online, var(--ds-success));
+    background-color: var(--_ink);
+  }
+
+  /* Half filled: the lower half of the ring's hollow takes the ink. */
+  .ds-presence-dot--away {
+    --_ink: var(--ds-presence-away, var(--ds-warning));
+    background-image: linear-gradient(to top, var(--_ink) 50%, transparent 50%);
+  }
+
+  /* A bar across the filled disc, in the ground's colour. */
+  .ds-presence-dot--busy {
+    --_ink: var(--ds-presence-busy, var(--ds-error));
+    background-color: var(--_ink);
+    background-image: linear-gradient(var(--_ground), var(--_ground));
+    background-position: center;
+    background-size: 70% var(--_stroke);
+    background-repeat: no-repeat;
+  }
+
+  .ds-presence-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-inline-size: 0;
+  }
+
+  @media (forced-colors: active) {
+    .ds-presence-dot {
+      forced-color-adjust: none;
+      --_ink: CanvasText;
+      --_ground: Canvas;
+    }
+  }
+}

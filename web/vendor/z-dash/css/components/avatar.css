@@ -1,0 +1,390 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Avatar: a person (a disc) or an entity (a square: a team, a device, a
+ * service) as a picture, initials or an icon. A group stacks several and
+ * ends with "+N".
+ *
+ *   <span class="ds-avatar" role="img" aria-label="Ada Lovelace">AL</span>
+ *   <span class="ds-avatar ds-avatar--hue-3" data-ds-avatar="Ada Lovelace"></span>   (avatar.js: initials, hue, name)
+ *   <span class="ds-avatar ds-sm" aria-hidden="true">AL</span> Ada Lovelace            (next to the name)
+ *   <span class="ds-avatar" role="img" aria-label="Ada Lovelace"><img src="..." alt=""></span>
+ *   <img class="ds-avatar" src="..." alt="">                                            (a picture alone, next to the name)
+ *   <span class="ds-avatar" role="img" aria-label="Unknown user">(user 20)</span>
+ *   <span class="ds-avatar ds-avatar--square" role="img" aria-label="Build service">(server 20)</span>
+ *
+ *   <span class="ds-avatar" role="img" aria-label="Ada Lovelace, online">AL<span class="ds-presence-dot ds-presence-dot--online"></span></span>
+ *   <span class="ds-avatar ds-avatar--ring" role="img" aria-label="Ada Lovelace, new activity">AL</span>
+ *   <span class="ds-avatar" role="img" aria-label="Ada Lovelace, 3 unread">AL<span class="ds-badge">3</span></span>
+ *
+ *   <div class="ds-avatar-group" role="group" aria-label="Assigned to" data-ds-avatar-group data-ds-avatar-group-max="3">
+ *     <span class="ds-avatar" data-ds-avatar="Ada Lovelace"></span> ...
+ *     <button class="ds-avatar ds-avatar-group__more" type="button" aria-haspopup="menu" aria-expanded="false" data-ds-open="#people-more" hidden></button>
+ *     <div class="ds-menu" role="menu" id="people-more" hidden></div>
+ *   </div>
+ *
+ * Variants:
+ *   (none)                 a disc on the tint (--ds-avatar-bg / --ds-avatar-color:
+ *                          --ds-accent / --ds-on-accent)
+ *   .ds-avatar--hue-1 ... -6
+ *                          a colour of its own, which avatar.js derives from
+ *                          the name (DS.avatar.hue()): a chart role (1-4, the
+ *                          neutral chart mark, and a mix of the second and
+ *                          fourth) mixed into the surface (24%) behind the
+ *                          same role mixed into the text (60%); every pair
+ *                          holds 4.5:1 in every shipped theme and preset
+ *   .ds-avatar--square     an entity: rounded corners (--ds-avatar-square-radius,
+ *                          --ds-radius-sm, at most a quarter of the side)
+ *   .ds-avatar--ring       an activity ring (new activity, speaking): a ring of
+ *                          --ds-avatar-ring-color (--ds-primary, or the tone
+ *                          of a .ds-tone-* class on the avatar itself) beyond
+ *                          an edge of --ds-avatar-edge-color; the label says
+ *                          what it means
+ *   :is(a, button).ds-avatar
+ *                          an avatar that opens something (a profile, the
+ *                          rest of a group): a state layer over the picture,
+ *                          the focus ring, a hit area of --ds-target-min
+ *                          around the disc; no ripple and no morph (below)
+ *
+ * Parts inside an avatar (its overflow stays visible; a picture inside
+ * clips itself to the radius):
+ *   img                    covers the disc
+ *   svg                    an icon, 60% of the side
+ *   .ds-presence-dot       a status dot at the bottom end corner, on an edge
+ *                          of --ds-avatar-edge-color; the avatar's label
+ *                          carries its word (presence.css)
+ *   .ds-badge              a count centred on the top end corner of the box,
+ *                          a dot on the curve there, on the same edge
+ *                          (badge.css)
+ *
+ * Group: .ds-avatar-group stacks its avatars, each overlapping the one
+ * before by a quarter of the side, every one on its edge ring; a hidden
+ * one takes no room. .ds-avatar-group--spread sets them side by side.
+ * .ds-avatar-group__more is the neutral "+N" (--ds-surface-high /
+ * --ds-text), usually a button that opens a menu of the rest (avatar.js
+ * writes its text, its name and the menu). An avatar that takes keyboard
+ * focus comes to the front while it has it, so its ring shows whole.
+ *
+ * Options (docs/options.md), computed here into --_size:
+ *   size      .ds-xs ... .ds-xl on the avatar, the group or any ancestor:
+ *             8px per step (16, 24, 32, 40, 48px around the 32px md,
+ *             --ds-avatar-size); the type role of the size; a status dot
+ *             and the edge ring follow
+ *   shape     .ds-shape-*: multiplies the radius (a disc from the default
+ *             up, square at 0); the corner parts follow the curve
+ *   touch     .ds-touch: an interactive avatar keeps its disc and its hit
+ *             area grows to --ds-target-min
+ *   density   not read: an avatar is the size of a face, and a dense row
+ *             takes a smaller size class
+ *   tone      only the ring of .ds-avatar--ring, from the class on the
+ *             avatar itself; the label carries what it means
+ *
+ * Interactive avatars and the ripple: a ripple host clips while a ripple
+ * is inside (ripple.css), which would cut the status dot and the badge
+ * on the corner. Until each ripple clips itself (plans/after-2.0.md), an
+ * interactive avatar presses through its state layer alone (--ds-state-pressed
+ * in --ds-dur-micro), the exception in meta.json. A disc never morphs: it
+ * is a face, not a pill.
+ *
+ * Hooks: --ds-avatar-size (32px, the md base), --ds-avatar-bg,
+ * --ds-avatar-color, --ds-avatar-font (the size's role),
+ * --ds-avatar-square-radius (--ds-radius-sm), --ds-avatar-edge-color
+ * (--ds-surface: the ground the avatar lies on), --ds-avatar-ring-color
+ * (--ds-primary). Read: the badge's height hooks, to centre a badge on the
+ * corner.
+ *
+ * Motion: none of its own. The state layer fades on --ds-dur-fast (the
+ * press in --ds-dur-micro), the focus ring snaps (outline-offset,
+ * --ds-dur-fast); a badge pops in and out through DS.badge.
+ *
+ * Blocked (:disabled, aria-disabled="true" on an interactive avatar): the
+ * disabled model, --ds-disabled-fill and --ds-disabled-ink (a picture fades
+ * to --ds-state-disabled), faded on --ds-dur-fast; no state layer.
+ *
+ * Forced colours: the disc keeps its edge (a transparent outline that
+ * becomes visible), the state layer goes, the focus ring stays, a blocked
+ * avatar turns GrayText; the ring
+ * of --ring, a shadow elsewhere, becomes a Highlight outline beyond the
+ * edge. A status dot and a badge keep their own forced looks.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.avatar {
+  .ds-avatar {
+    --_size: calc(var(--ds-avatar-size, 32px) + var(--ds-size-step, 0) * 8px);
+    /* The edge ring between stacked avatars and around corner parts. */
+    --_edge: max(1px, calc(var(--_size) / 16));
+    --_edge-color: var(--ds-avatar-edge-color, var(--ds-surface));
+    /* How far inside the box corner the curve passes (r - r / sqrt 2). */
+    --_corner: calc(var(--_size) * 0.1464 * min(var(--ds-shape, 1), 1));
+    position: relative;
+    display: inline-grid;
+    flex-shrink: 0;
+    place-items: center;
+    box-sizing: border-box;
+    inline-size: var(--_size);
+    block-size: var(--_size);
+    padding: 0;
+    border: 0;
+    /* A disc at the default shape and above (past 50% it stays a disc). */
+    border-radius: calc(50% * var(--ds-shape, 1));
+    background: var(--ds-avatar-bg, var(--ds-accent));
+    color: var(--ds-avatar-color, var(--ds-on-accent));
+    font: var(--ds-avatar-font, var(--ds-size-font, var(--ds-font-label)));
+    white-space: nowrap;
+    text-decoration: none;
+    vertical-align: middle;
+    object-fit: cover;
+    user-select: none;
+  }
+
+  .ds-avatar > img {
+    grid-area: 1 / 1;
+    inline-size: 100%;
+    block-size: 100%;
+    border-radius: inherit;
+    object-fit: cover;
+  }
+
+  .ds-avatar > svg {
+    grid-area: 1 / 1;
+    inline-size: 60%;
+    block-size: 60%;
+  }
+
+  /* Without .ds-base a hidden avatar would keep its grid. */
+  .ds-avatar[hidden] {
+    display: none;
+  }
+
+  /* An entity: rounded corners, at most a quarter of the side. */
+  .ds-avatar--square {
+    --_r: min(var(--ds-avatar-square-radius, var(--ds-radius-sm)), calc(var(--_size) / 4));
+    --_corner: calc(var(--_r) * 0.2929 * var(--ds-shape, 1));
+    border-radius: calc(var(--_r) * var(--ds-shape, 1));
+  }
+
+  /* A colour from the name: a chart role mixed into the surface, the same
+     role mixed into the text (4.5:1 in every shipped theme; avatar.test.js). */
+  .ds-avatar--hue-1 {
+    --_hue: var(--ds-chart-1);
+  }
+
+  .ds-avatar--hue-2 {
+    --_hue: var(--ds-chart-2);
+  }
+
+  .ds-avatar--hue-3 {
+    --_hue: var(--ds-chart-3);
+  }
+
+  .ds-avatar--hue-4 {
+    --_hue: var(--ds-chart-4);
+  }
+
+  .ds-avatar--hue-5 {
+    --_hue: var(--ds-chart-neutral);
+  }
+
+  .ds-avatar--hue-6 {
+    --_hue: color-mix(in srgb, var(--ds-chart-2), var(--ds-chart-4));
+  }
+
+  .ds-avatar:is(.ds-avatar--hue-1, .ds-avatar--hue-2, .ds-avatar--hue-3, .ds-avatar--hue-4, .ds-avatar--hue-5, .ds-avatar--hue-6) {
+    background: color-mix(in srgb, var(--_hue) 24%, var(--ds-surface));
+    color: color-mix(in srgb, var(--_hue) 60%, var(--ds-text));
+  }
+
+  /* The activity ring, beyond an edge of the ground. */
+  .ds-avatar--ring {
+    --_ring: var(--ds-avatar-ring-color, var(--ds-primary));
+    box-shadow:
+      0 0 0 var(--_edge) var(--_edge-color),
+      0 0 0 calc(var(--_edge) * 2) var(--_ring);
+  }
+
+  .ds-avatar--ring:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --_ring: var(--ds-tone);
+  }
+
+  /* Corner parts: centred on the curve, each on the edge ring. */
+  .ds-avatar > .ds-presence-dot {
+    --_part: calc(var(--ds-presence-dot-size, 10px) + var(--ds-size-step, 0) * 2px);
+    --ds-presence-ground: var(--_edge-color);
+    position: absolute;
+    inset-block-end: calc(var(--_corner) - var(--_part) / 2);
+    inset-inline-end: calc(var(--_corner) - var(--_part) / 2);
+    box-shadow: 0 0 0 var(--_edge) var(--_edge-color);
+  }
+
+  /* A count is centred on the box corner, so it covers less of the
+     initials; a dot sits on the curve like the status dot. */
+  .ds-avatar > .ds-badge {
+    --_part: calc(var(--ds-badge-size, 20px) + var(--ds-size-step, 0) * 2px);
+    position: absolute;
+    inset-block-start: calc(var(--_part) / -2);
+    inset-inline-end: calc(var(--_part) / -2);
+    box-shadow: 0 0 0 var(--_edge) var(--_edge-color);
+  }
+
+  .ds-avatar > .ds-badge--dot {
+    --_part: calc(var(--ds-badge-dot-size, 8px) + var(--ds-size-step, 0) * 2px);
+    inset-block-start: calc(var(--_corner) - var(--_part) / 2);
+    inset-inline-end: calc(var(--_corner) - var(--_part) / 2);
+  }
+
+  /*
+   * An interactive avatar: the state layer lies over the picture (::after),
+   * the hit area (::before) reaches the touch minimum around the disc.
+   */
+  :is(a, button).ds-avatar {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    /* The ring rests one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out),
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  :is(a, button).ds-avatar > img {
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  :is(a, button).ds-avatar::before {
+    content: '';
+    position: absolute;
+    inset: min(0px, calc((var(--_size) - var(--ds-target-min, 0px)) / 2));
+  }
+
+  :is(a, button).ds-avatar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    :is(a, button).ds-avatar:hover::after {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  :is(a, button).ds-avatar:focus-visible {
+    z-index: var(--ds-z-raised);
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  :is(a, button).ds-avatar:focus-visible::after {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  :is(a, button).ds-avatar:active::after {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  /* Blocked: the disabled model (the neutral fill and ink, or the theme's
+     dimming through --ds-disabled-opacity; a picture fades onto the fill),
+     no layer, no press; aria-disabled keeps its focus layer. */
+  :is(a, button).ds-avatar:is(:disabled, [aria-disabled="true"]) {
+    cursor: not-allowed;
+    opacity: var(--ds-disabled-opacity, var(--ds-state-disabled));
+    background: var(--ds-disabled-fill, var(--ds-avatar-bg, var(--ds-accent)));
+    color: var(--ds-disabled-ink, var(--ds-avatar-color, var(--ds-on-accent)));
+  }
+
+  /* A picture covers the fill: it fades to the disabled share, less what a
+     theme's dimming of the whole avatar already takes. */
+  :is(a, button).ds-avatar:is(:disabled, [aria-disabled="true"]) > img {
+    opacity: calc(var(--ds-state-disabled) / var(--ds-disabled-opacity, 1));
+  }
+
+  @media (hover: hover) {
+    :is(a, button).ds-avatar:is(:disabled, [aria-disabled="true"]):hover::after {
+      opacity: 0;
+    }
+  }
+
+  :is(a, button).ds-avatar:is(:disabled, [aria-disabled="true"]):active::after {
+    opacity: 0;
+  }
+
+  /*
+   * Group: a stack, each avatar a quarter over the one before, on its edge.
+   */
+  .ds-avatar-group {
+    --_size: calc(var(--ds-avatar-size, 32px) + var(--ds-size-step, 0) * 8px);
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    vertical-align: middle;
+    /* No stacking context of its own: the menu of the rest, placed by the
+       script where the top layer or anchor positioning is missing, must
+       rise above what follows the group. */
+  }
+
+  .ds-avatar-group > .ds-avatar {
+    box-shadow: 0 0 0 var(--_edge) var(--_edge-color);
+  }
+
+  .ds-avatar-group > .ds-avatar--ring {
+    box-shadow:
+      0 0 0 var(--_edge) var(--_edge-color),
+      0 0 0 calc(var(--_edge) * 2) var(--_ring),
+      0 0 0 calc(var(--_edge) * 3) var(--_edge-color);
+  }
+
+  .ds-avatar-group > .ds-avatar ~ .ds-avatar {
+    margin-inline-start: calc(var(--_size) / -4);
+  }
+
+  .ds-avatar-group--spread {
+    gap: var(--ds-space-1);
+  }
+
+  .ds-avatar-group--spread > .ds-avatar ~ .ds-avatar {
+    margin-inline-start: 0;
+  }
+
+  .ds-avatar-group__more {
+    --ds-avatar-bg: var(--ds-surface-high);
+    --ds-avatar-color: var(--ds-text);
+  }
+
+  .ds-avatar-group__more:empty {
+    display: none;
+  }
+
+  @media (forced-colors: active) {
+    /* The disc keeps its edge where its fill is gone. */
+    .ds-avatar {
+      outline: 1px solid transparent;
+    }
+
+    :is(a, button).ds-avatar::after {
+      display: none;
+    }
+
+    /* Blocked: GrayText, the one model for what cannot be used. */
+    :is(a, button).ds-avatar:is(:disabled, [aria-disabled="true"]) {
+      color: GrayText;
+      outline-color: GrayText;
+    }
+
+    /* Shadows are gone here: the ring becomes an outline beyond the edge. */
+    .ds-avatar--ring {
+      outline: var(--_edge) solid Highlight;
+      outline-offset: var(--_edge);
+    }
+  }
+}

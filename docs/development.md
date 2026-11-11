@@ -19,7 +19,7 @@ and GIFs, and how the vendored design system is updated. The rules for changes a
 | `internal/api/` | HTTP API, login, live updates (server-sent events); `services.go` holds the contracts |
 | `internal/demo/` | demo mode on the simulator, with stand-ins for GitHub, Cloudflare and workers |
 | `web/` | the interface: `index.html`, `app/*.js`, `theme.css`, `app.css`, embedded into the binary |
-| `web/vendor/dashboard-style/` | a verified copy of Dashboard-Style; never edit it |
+| `web/vendor/z-dash/` | a verified copy of Z-Dash; never edit it |
 | `scripts/screenshots.mjs` | the screenshots and GIFs of the documentation |
 | `docs/` | this documentation; `docs/images/` is generated |
 
@@ -66,12 +66,13 @@ CI_PLANE_SETUP_TEST=1 go test -run TestSetupOnFreshServer -v ./internal/node/
 
 Both pull images and need internet; the setup test takes several minutes.
 
-The interface has no build step. Before a change to `web/`, check it against Dashboard-Style's rules and check that
+The interface has no build step. Before a change to `web/`, check it against Z-Dash's rules and check that
 the vendored copy is untouched (needs Node for the first command):
 
 ```sh
-node web/vendor/dashboard-style/tools/check-project.mjs --config web/ds-check.json
-sh web/vendor/dashboard-style/tools/verify.sh web/vendor/dashboard-style
+node web/vendor/z-dash/tools/check-project.mjs --config web/ds-check.json
+node web/vendor/z-dash/tools/check-theme.mjs web/theme.css --with web/vendor/z-dash/themes/dark.css
+sh web/vendor/z-dash/tools/verify.sh web/vendor/z-dash
 ```
 
 CI (`.github/workflows/ci.yml`) runs the verification, `go vet`, `go test -race ./...` and a Docker build. The
@@ -124,17 +125,20 @@ before you commit it. `KEEP_TMP=1` keeps the frames for inspection.
 
 ## 🎨 The vendored design system
 
-The interface uses only [Dashboard-Style](https://github.com/saschazesiger/Dashboard-Style), vendored in
-`web/vendor/dashboard-style/` with a `SHA256SUMS` file and the commit in `VERSION`. Never edit the copy; the project's
-look lives in `web/theme.css` (tokens) and `web/app.css` (layout glue).
+The interface uses only [Z-Dash](https://github.com/saschazesiger/Z-Dash) 3 (called Dashboard-Style until 2.x),
+vendored in `web/vendor/z-dash/` with a `SHA256SUMS` file and the commit in `VERSION`. Never edit the copy; the
+project's look lives in `web/theme.css` (tokens) and `web/app.css` (layout glue). The page loads the minified build
+(`ds.min.css`, `ds.min.js`), and `web/web.go` embeds only the files the page loads; a new file of the copy that the
+page needs goes into its `//go:embed` lines too. `web/ds-check.json` says the project is written for major version 3.
 
-The workflow `.github/workflows/update-dashboard-style.yml` checks Dashboard-Style's `main` once a day, vendors a new
-commit, verifies it, runs `go test ./...` and commits the update. To update by hand:
+The workflow `.github/workflows/update-z-dash.yml` checks Z-Dash's `main` once a day, vendors a new commit, verifies
+it, runs the project check and `go test ./...` and commits the update. To update by hand:
 
 ```sh
-commit=$(curl -fsSL -H 'Accept: application/vnd.github.sha' https://api.github.com/repos/saschazesiger/Dashboard-Style/commits/main)
-curl -fsSL "https://raw.githubusercontent.com/saschazesiger/Dashboard-Style/$commit/scripts/vendor.sh" -o /tmp/vendor.sh
-sh /tmp/vendor.sh "$commit" web/vendor/dashboard-style
-sh web/vendor/dashboard-style/tools/verify.sh web/vendor/dashboard-style
+commit=$(curl -fsSL -H 'Accept: application/vnd.github.sha' https://api.github.com/repos/saschazesiger/Z-Dash/commits/main)
+curl -fsSL "https://raw.githubusercontent.com/saschazesiger/Z-Dash/$commit/scripts/vendor.sh" -o /tmp/vendor.sh
+sh /tmp/vendor.sh "$commit" web/vendor/z-dash
+sh web/vendor/z-dash/tools/verify.sh web/vendor/z-dash
+node web/vendor/z-dash/tools/check-project.mjs --config web/ds-check.json
 go test ./...
 ```

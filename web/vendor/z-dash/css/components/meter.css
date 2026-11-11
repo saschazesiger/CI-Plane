@@ -1,0 +1,363 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Meter variants: a share of a known whole (disk used, a quota, a score)
+ * as a segmented bar, a ring, a gauge or a bar gauge, with threshold
+ * marks. The linear meter itself is .ds-meter (chart.css); this file adds
+ * its segmented look and its threshold marks, and the radial and bar
+ * gauges. Every one reads the registered share --ds-share (0 ... 1, set by
+ * the page with style.setProperty, as on a chart mark) and glides to a new
+ * one on --ds-ease-value over --ds-dur-glide; the first render fills from
+ * zero with .ds-enter--fill (DS.motion.enterAll(marks, 'fill')).
+ *
+ *   <span class="ds-meter ds-meter--segmented" role="meter" aria-label="Password strength"
+ *         aria-valuemin="0" aria-valuemax="4" aria-valuenow="3" aria-valuetext="Strong" style="--ds-share: .75"></span>
+ *
+ *   <span class="ds-meter" role="meter" aria-label="Disk" ... style="--ds-share: .62">
+ *     <span class="ds-meter__threshold" style="--ds-share: .8" aria-hidden="true"></span></span>
+ *
+ *   <div class="ds-gauge [ds-gauge--arc]" role="meter" aria-label="CPU" aria-valuemin="0"
+ *        aria-valuemax="100" aria-valuenow="72" aria-valuetext="72%, high" style="--ds-share: .72">
+ *     <span class="ds-gauge__threshold" style="--ds-share: .9" aria-hidden="true"></span>
+ *     <span class="ds-gauge__value" aria-hidden="true">72%</span>
+ *     <span class="ds-gauge__label" aria-hidden="true">CPU</span>
+ *   </div>
+ *
+ *   <div class="ds-bar-gauge" role="meter" aria-labelledby="..." ... style="--ds-share: .84;
+ *        --ds-bar-gauge-warning: .7; --ds-bar-gauge-error: .9">
+ *     <span class="ds-bar-gauge__label" id="...">Memory</span>
+ *     <span class="ds-bar-gauge__value">84%</span>
+ *     <span class="ds-bar-gauge__track" aria-hidden="true"></span>
+ *     <span class="ds-bar-gauge__note">(alert 16) High</span>
+ *   </div>
+ *
+ *   .ds-meter--segmented   the meter in --ds-meter-segments equal parts
+ *                          (5) with --ds-meter-segment-gap (2px) between
+ *                          them: a score in steps (password strength, a
+ *                          rating). Set a share that ends on a segment.
+ *   .ds-meter__threshold   a mark across the track at its own --ds-share:
+ *                          a limit or a target. Its meaning is the page's
+ *                          words (aria-valuetext, a note): never the mark
+ *                          alone
+ *   .ds-gauge              a ring (360 degrees) with the figure inside
+ *   .ds-gauge--arc         a gauge: an arc of 240 degrees, open at the
+ *                          bottom, with round ends
+ *   .ds-gauge__threshold   a tick across the ring at its own --ds-share
+ *   .ds-bar-gauge          a thick bar of cells under a label and a figure;
+ *                          the cells past --ds-bar-gauge-warning and
+ *                          --ds-bar-gauge-error (shares, set on the element;
+ *                          default: none) light in the warning and error
+ *                          colours, so the zones show on the track as well
+ *                          as in the fill. The figure and a note
+ *                          (.ds-bar-gauge__note, an icon and a word) say
+ *                          the state: never the colour alone
+ *
+ * Tone: from the class on the meter itself, as on .ds-meter (an inherited
+ * tone would recolour every gauge of a tinted region): primary, info and
+ * success the tone, neutral, warning and error the chart roles. A bar
+ * gauge takes its zones instead (a tone on it sets the first zone).
+ *
+ * Options (src/core/options.css, docs/options.md), on the meter or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: a gauge 16px per step (96px at md) and its
+ *             ring 2px per step (8px); a bar gauge's track 2px per step
+ *             (12px); the type of a gauge's figure follows its size; a
+ *             segmented meter as .ds-meter (1px per step)
+ *   density   .ds-density-*: the gap between a bar gauge's rows, 1px per
+ *             step; not the gauges, which are figures, not rows
+ *   shape     .ds-shape-*: the threshold marks' ends (a segmented meter's
+ *             ends as .ds-meter); a ring stays round, the arc's ends with
+ *             it, and a bar gauge's cells are square, as LED cells are
+ *   touch     not read: nothing here is a target
+ *
+ * Accessibility: role="meter" with aria-valuemin, -max, -now and a
+ * aria-valuetext that says the state in words; the visible figure and
+ * label inside a gauge are aria-hidden, since the meter says them.
+ * Forced colours: the fill in CanvasText, the track Canvas with a
+ * CanvasText edge, the marks CanvasText; the unlit parts of a segmented
+ * meter and the unlit cells of a bar gauge GrayText, since their masks
+ * cut any edge away; a bar gauge's zones hatch (warning 45 degrees, error
+ * 135 degrees) on lit and unlit cells alike, so they stay apart without
+ * colour. Printed, the fills keep their colours.
+ *
+ * conic-gradient(), sin() and cos() (the arc's round ends) and
+ * mask-image are at the browser floor: no fallbacks.
+ *
+ * Hooks: --ds-meter-segments (5), --ds-meter-segment-gap (2px),
+ * --ds-meter-threshold (--ds-text), --ds-gauge-size (96px),
+ * --ds-gauge-thickness (8px), --ds-gauge-track (--ds-chart-track),
+ * --ds-gauge-color (--ds-chart-1), --ds-bar-gauge-height (12px),
+ * --ds-bar-gauge-cells (20), --ds-bar-gauge-warning and
+ * --ds-bar-gauge-error (shares; default none).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.meter {
+  /* ── Segmented meter ── */
+
+  /* Track and fill both cut into equal parts: the mask leaves a gap after
+     every part but the last. */
+  .ds-meter--segmented {
+    --_n: var(--ds-meter-segments, 5);
+    --_gap: var(--ds-meter-segment-gap, 2px);
+    mask-image: repeating-linear-gradient(to right, #000 0 calc((100% + var(--_gap)) / var(--_n) - var(--_gap)), transparent 0 calc((100% + var(--_gap)) / var(--_n)));
+  }
+
+  /* ── Threshold marks ── */
+
+  /* A mark across a linear meter at its own share, 3px beyond the track
+     on both sides; a hairline of the surface keeps it apart from the fill. */
+  .ds-meter__threshold {
+    position: absolute;
+    inset-block: -3px;
+    inset-inline-start: calc(var(--ds-share) * 100% - 1px);
+    width: 2px;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-meter-threshold, var(--ds-text));
+    box-shadow: 0 0 0 1px var(--ds-surface);
+    transition: none;
+  }
+
+  /* A segmented meter's mask would cut a mark in a gap: none there. */
+  .ds-meter--segmented > .ds-meter__threshold {
+    display: none;
+  }
+
+  /* ── Ring and gauge ── */
+
+  .ds-gauge {
+    --_s: max(calc(var(--ds-size-step, 0) * 16px + var(--ds-gauge-size, 96px)), 48px);
+    --_t: max(calc(var(--ds-gauge-thickness, 8px) + var(--ds-size-step, 0) * 2px), 4px);
+    /* The radius the ring's centre line runs on. */
+    --_r: calc((var(--_s) - var(--_t)) / 2);
+    --_from: 0deg;
+    --_sweep: 360deg;
+    --_fill: var(--ds-gauge-color, var(--ds-chart-1));
+    --_track: var(--ds-gauge-track, var(--ds-chart-track));
+    /* Where the fill ends; it follows the gliding share. */
+    --_a: calc(var(--_from) + var(--ds-share) * var(--_sweep));
+    position: relative;
+    display: inline-grid;
+    flex-shrink: 0;
+    align-content: center;
+    justify-items: center;
+    width: var(--_s);
+    height: var(--_s);
+    color: var(--ds-text);
+    text-align: center;
+    transition: --ds-share var(--ds-dur-glide) var(--ds-ease-value);
+  }
+
+  /* The ring: a conic fill up to the share over the track, masked to a
+     band of --_t. */
+  .ds-gauge::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(from var(--_from), var(--_fill) calc(var(--ds-share) * var(--_sweep)), var(--_track) 0 var(--_sweep), transparent 0);
+    mask-image: radial-gradient(farthest-side, transparent calc(100% - var(--_t) - .5px), #000 calc(100% - var(--_t)));
+  }
+
+  /* An arc of 240 degrees, open at the bottom, with round ends: a disc of
+     the ring's width at each end of the track and of the fill (the fill's
+     start disc only once there is a fill). */
+  .ds-gauge--arc {
+    --_from: -120deg;
+    --_sweep: 240deg;
+  }
+
+  .ds-gauge--arc::before {
+    background:
+      radial-gradient(circle calc(var(--_t) / 2) at calc(50% + var(--_r) * sin(var(--_a))) calc(50% - var(--_r) * cos(var(--_a))), color-mix(in srgb, var(--_fill) calc(min(1, var(--ds-share) * 1000) * 100%), var(--_track)) calc(100% - .5px), transparent),
+      radial-gradient(circle calc(var(--_t) / 2) at calc(50% + var(--_r) * sin(var(--_from))) calc(50% - var(--_r) * cos(var(--_from))), color-mix(in srgb, var(--_fill) calc(min(1, var(--ds-share) * 1000) * 100%), var(--_track)) calc(100% - .5px), transparent),
+      radial-gradient(circle calc(var(--_t) / 2) at calc(50% + var(--_r) * sin(var(--_from) + var(--_sweep))) calc(50% - var(--_r) * cos(var(--_from) + var(--_sweep))), var(--_track) calc(100% - .5px), transparent),
+      conic-gradient(from var(--_from), var(--_fill) calc(var(--ds-share) * var(--_sweep)), var(--_track) 0 var(--_sweep), transparent 0);
+  }
+
+  .ds-gauge:is(.ds-tone-primary, .ds-tone-info, .ds-tone-success) {
+    --_fill: var(--ds-tone);
+  }
+
+  .ds-gauge.ds-tone-neutral {
+    --_fill: var(--ds-chart-neutral);
+  }
+
+  .ds-gauge.ds-tone-warning {
+    --_fill: var(--ds-chart-warning);
+  }
+
+  .ds-gauge.ds-tone-error {
+    --_fill: var(--ds-chart-error);
+  }
+
+  /* The figure scales with the gauge: the title type at md, a sixth of a
+     step either way; the label under it in the meta type. */
+  .ds-gauge__value {
+    position: relative;
+    font: var(--ds-font-title);
+    font-size: calc(var(--_s) / 4);
+    line-height: calc(var(--_s) / 3);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .ds-gauge__label {
+    position: relative;
+    max-width: calc(var(--_s) - var(--_t) * 3);
+    overflow: hidden;
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* A tick across the ring at its own share, turned about the centre. */
+  .ds-gauge__threshold {
+    position: absolute;
+    inset-block-start: -2px;
+    inset-inline-start: calc(50% - 1px);
+    width: 2px;
+    height: calc(var(--_t) + 4px);
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-meter-threshold, var(--ds-text));
+    box-shadow: 0 0 0 1px var(--ds-surface);
+    transform-origin: 50% calc(var(--_s) / 2 + 2px);
+    rotate: calc(var(--_from) + var(--ds-share) * var(--_sweep));
+  }
+
+  /* ── Bar gauge ── */
+
+  .ds-bar-gauge {
+    --_t: max(calc(var(--ds-bar-gauge-height, 12px) + var(--ds-size-step, 0) * 2px), 4px);
+    --_cells: var(--ds-bar-gauge-cells, 20);
+    --_gap: 2px;
+    --_ok: var(--ds-chart-1);
+    --_warn: var(--ds-chart-warning);
+    --_error: var(--ds-chart-error);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    column-gap: var(--ds-space-3);
+    row-gap: calc(var(--ds-space-1) + var(--ds-density, 0) * 1px);
+    min-width: 0;
+    color: var(--ds-text);
+    transition: --ds-share var(--ds-dur-glide) var(--ds-ease-value);
+  }
+
+  .ds-bar-gauge:is(.ds-tone-primary, .ds-tone-info, .ds-tone-success) {
+    --_ok: var(--ds-tone);
+  }
+
+  .ds-bar-gauge.ds-tone-neutral {
+    --_ok: var(--ds-chart-neutral);
+  }
+
+  .ds-bar-gauge__label {
+    min-width: 0;
+    overflow: hidden;
+    font: var(--ds-font-body);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-bar-gauge__value {
+    font: var(--ds-font-label);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+    white-space: nowrap;
+  }
+
+  /*
+   * The track: every cell in its zone's colour (hard stops at the two
+   * shares), cut into cells by the mask. Lit cells (up to the share) show
+   * the colour; the rest show it mixed into the track, so the zones read on
+   * an empty gauge too. Two layers: the lit part clipped at the share over
+   * the unlit one.
+   */
+  .ds-bar-gauge__track {
+    --_zones: linear-gradient(to right, var(--_ok) 0 calc(var(--ds-bar-gauge-warning, 1) * 100%), var(--_warn) 0 calc(var(--ds-bar-gauge-error, 1) * 100%), var(--_error) 0);
+    position: relative;
+    grid-column: 1 / -1;
+    height: var(--_t);
+    background: var(--_zones);
+    mask-image: repeating-linear-gradient(to right, #000 0 calc((100% + var(--_gap)) / var(--_cells) - var(--_gap)), transparent 0 calc((100% + var(--_gap)) / var(--_cells)));
+  }
+
+  /* Unlit: the track over the zone colours, a quarter of them showing. */
+  .ds-bar-gauge__track::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: color-mix(in srgb, var(--ds-chart-track) 75%, transparent);
+    clip-path: inset(0 0 0 calc(var(--ds-share) * 100%));
+  }
+
+  .ds-bar-gauge__note {
+    display: inline-flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    gap: var(--ds-space-1);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-bar-gauge__note svg {
+    flex: none;
+  }
+
+  /* A row of bar gauges: the tracks line up, density spaces the rows. */
+  .ds-bar-gauge + .ds-bar-gauge {
+    margin-block-start: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+  }
+
+  @media (forced-colors: active) {
+    .ds-gauge::before,
+    .ds-gauge--arc::before {
+      forced-color-adjust: none;
+      background: conic-gradient(from var(--_from), CanvasText calc(var(--ds-share) * var(--_sweep)), GrayText 0 var(--_sweep), transparent 0);
+    }
+
+    .ds-meter__threshold,
+    .ds-gauge__threshold {
+      forced-color-adjust: none;
+      background: CanvasText;
+      box-shadow: 0 0 0 1px Canvas;
+    }
+
+    /* The mask cuts the track's edge away: the unlit parts in GrayText. */
+    .ds-meter--segmented {
+      background: GrayText;
+    }
+
+    /* Each zone a hatch from its share to the end: a layer as wide as the
+       zone, at the end (none without the share), the error zone over the
+       warning one. Lit cells hatch in CanvasText, unlit ones in GrayText. */
+    .ds-bar-gauge__track {
+      --_warn-zone: calc((1 - var(--ds-bar-gauge-warning, 1)) * 100%) 100%;
+      --_error-zone: calc((1 - var(--ds-bar-gauge-error, 1)) * 100%) 100%;
+      forced-color-adjust: none;
+      background:
+        repeating-linear-gradient(135deg, CanvasText 0 2px, Canvas 2px 4px) right / var(--_error-zone) no-repeat,
+        repeating-linear-gradient(45deg, CanvasText 0 2px, Canvas 2px 4px) right / var(--_warn-zone) no-repeat,
+        CanvasText;
+    }
+
+    .ds-bar-gauge__track::before {
+      background:
+        repeating-linear-gradient(135deg, GrayText 0 2px, Canvas 2px 4px) right / var(--_error-zone) no-repeat,
+        repeating-linear-gradient(45deg, GrayText 0 2px, Canvas 2px 4px) right / var(--_warn-zone) no-repeat,
+        GrayText;
+    }
+  }
+
+  @media print {
+    .ds-gauge::before,
+    .ds-bar-gauge__track,
+    .ds-bar-gauge__track::before {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+}

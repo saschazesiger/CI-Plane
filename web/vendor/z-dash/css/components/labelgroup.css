@@ -1,0 +1,216 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Label group: the tags of one item on one line, as many as fit, then a
+ * "+N" button that shows all of them in a popup (a ticket's labels in a
+ * table row, a device's groups in a card head).
+ *
+ *   <div class="ds-label-group" data-ds-label-group>
+ *     <ul class="ds-label-group__list" aria-label="Labels of ticket 42">
+ *       <li><span class="ds-tag">Printer</span></li>
+ *       <li><span class="ds-tag ds-tone-warning">Waiting</span></li>
+ *       ...
+ *     </ul>
+ *   </div>
+ *
+ * Written by DS.labelgroup (data-ds-label-group), after the list:
+ *
+ *   <button class="ds-btn ds-btn--tonal ds-label-group__more" type="button"
+ *           aria-haspopup="dialog" aria-expanded="false" aria-controls="..."
+ *           aria-label="+3 more, show all 8"><span aria-hidden="true">+3</span></button>
+ *   <div class="ds-label-group__popup" role="dialog" aria-label="Labels of ticket 42" tabindex="-1" hidden>
+ *     <ul class="ds-label-group__all">...every tag again...</ul>
+ *   </div>
+ *
+ *   .ds-label-group           one line: the list, then the button
+ *   .ds-label-group__list     the tags that fit (the others hidden); one
+ *                             left alone ends in an ellipsis
+ *   .ds-label-group__more     a tonal button as high as a tag
+ *   .ds-label-group__popup    every tag, wrapping, in a popup at the
+ *                             button (DS.overlay)
+ *   .ds-label-group__all      the list in the popup
+ *
+ * Options (src/core/options.css, docs/options.md), on the group or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: the button 4px per step, as the tags
+ *             (24px at md); its side padding 2px per step
+ *   shape     .ds-shape-*: the button's pill and the popup's corners times
+ *             --ds-shape
+ *   touch     .ds-touch: the button at least --ds-touch-target high
+ *   density, tone: not read (the tags carry their own tones and words).
+ *
+ * The popup: placed below the button (above it without room), in the top
+ * layer and anchored where the engine can (data-anchored), else by the
+ * script (--ds-label-group-x / -y, fixed). It opens and closes through
+ * DS.overlay: it fades in and grows from the button on the spring, the
+ * exit only fades; Escape closes it and focus goes back to the button;
+ * a pointerdown outside it or focus that leaves it closes it too.
+ * Transitions keyed on data-state, so a close mid-way turns back from
+ * where it is.
+ *
+ * Progressive:
+ * - anchor positioning (position-area and position-try-fallbacks on the
+ *   popup in the top layer, behind @supports (position-area: block-end)):
+ *   without it the script places the popup by --ds-label-group-x/-y.
+ *
+ * Forced colours: the popup's transparent outline becomes its edge; the
+ * button is a button (button.css).
+ *
+ * Hooks: --ds-label-group-gap (--ds-space-1).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.labelgroup {
+  .ds-label-group {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-label-group-gap, var(--ds-space-1));
+    min-width: 0;
+  }
+
+  /* One line: what does not fit is hidden by the module, so nothing here
+     wraps. The padding keeps room for a tag's focus ring inside the clip. */
+  .ds-label-group__list {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-label-group-gap, var(--ds-space-1));
+    min-width: 0;
+    margin: calc(-1 * (var(--ds-focus-offset) + var(--ds-focus-width)));
+    padding: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    overflow: hidden;
+    list-style: none;
+  }
+
+  .ds-label-group__list > li {
+    display: flex;
+    flex: none;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .ds-label-group__list > [hidden] {
+    display: none;
+  }
+
+  /* A tag left alone in too little room ends in an ellipsis. */
+  .ds-label-group__list > li > .ds-tag {
+    display: block;
+    align-content: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ds-label-group__list > li > .ds-tag > svg {
+    margin-inline-end: var(--ds-space-1);
+    vertical-align: middle;
+  }
+
+  .ds-label-group__more {
+    --ds-btn-height-exact: calc(var(--ds-tag-height, 24px) + var(--ds-size-step, 0) * 4px);
+    --ds-btn-padding-x: calc(var(--ds-space-2) - var(--ds-size-step, 0) * 2px);
+    --ds-btn-font: var(--ds-font-caption);
+    /* As high as a tag also at xs, where the caption's line and the
+       button's border would make it 2px taller. */
+    block-size: max(var(--ds-target-min, 0px), calc(var(--ds-tag-height, 24px) + var(--ds-size-step, 0) * 4px));
+    flex: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-label-group__more[hidden] {
+    display: none;
+  }
+
+  /* Fixed, so no scrolling or clipping box cuts it off. inset, margin and
+     border double as the reset of the UA box of a popover. Physical on
+     purpose (D9): --ds-label-group-x is a script coordinate from the left. */
+  .ds-label-group__popup {
+    position: fixed;
+    inset: var(--ds-label-group-y, 0px) auto auto var(--ds-label-group-x, 0px);
+    z-index: var(--ds-z-popover);
+    box-sizing: border-box;
+    width: max-content;
+    max-width: min(320px, calc(100vw - 2 * var(--ds-space-2)));
+    max-height: calc(100vh - 2 * var(--ds-space-2));
+    margin: 0;
+    padding: var(--ds-space-3);
+    overflow-y: auto;
+    border: 0;
+    border-radius: calc(var(--ds-radius-sm) * var(--ds-shape, 1));
+    background: var(--ds-surface-popover);
+    color: var(--ds-text);
+    box-shadow: var(--ds-elev-popover);
+    /* Invisible; forced colours paint it, so the popup keeps an edge. */
+    outline: 1px solid transparent;
+    outline-offset: 0;
+    transform-origin: var(--ds-motion-origin, 0% 0%);
+    clip-path: inset(calc(-1 * var(--ds-space-6)));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-label-group__popup[data-placement="top"] {
+    transform-origin: var(--ds-motion-origin, 0% 100%);
+  }
+
+  .ds-label-group__popup[hidden] {
+    display: none;
+  }
+
+  /* Driven by DS.overlay: transitions keyed on data-state, so a popup
+     closed mid-way continues from where it is. */
+  .ds-label-group__popup[data-state] {
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-medium) var(--ds-ease-spatial),
+      clip-path var(--ds-dur-medium) var(--ds-ease-spatial),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* The exit only fades, in --ds-dur-instant; scale and clip go back to
+     their start once it is invisible. Closed, it takes no pointer. */
+  .ds-label-group__popup[data-state="closed"] {
+    opacity: 0;
+    scale: var(--ds-motion-scale, var(--ds-scale-popup));
+    clip-path: var(--ds-clip-from, inset(0 0 100% 0));
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in-out),
+      scale 0ms var(--ds-ease-in-out) var(--ds-dur-instant),
+      clip-path 0ms var(--ds-ease-in-out) var(--ds-dur-instant);
+  }
+
+  .ds-label-group__popup:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  @supports (position-area: block-end) {
+    .ds-label-group__popup[data-anchored] {
+      inset: auto;
+      max-height: calc(100% - 2 * var(--ds-space-1));
+      margin: var(--ds-space-1) 0;
+      position-area: block-end span-inline-end;
+      position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    }
+
+    .ds-label-group__popup[data-anchored][data-placement="top"] {
+      position-area: block-start span-inline-end;
+    }
+  }
+
+  .ds-label-group__all {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ds-space-2) var(--ds-label-group-gap, var(--ds-space-1));
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media print {
+    .ds-label-group__popup {
+      display: none;
+    }
+  }
+}

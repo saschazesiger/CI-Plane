@@ -1,0 +1,433 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Lightbox: the images of a gallery (the photos of a device, the
+ * attachments of a ticket) one at a time over the whole window, with
+ * thumbnails, the arrow keys, zoom and pan, a caption and swipe on touch.
+ *
+ * The gallery, the page's markup: links (or buttons) to the full images.
+ *
+ *   <ul class="ds-lightbox__gallery" aria-label="Photos of LAPTOP-0042" data-ds-lightbox>
+ *     <li><a class="ds-lightbox__item" href="lid.jpg" data-caption="The lid, scratched on the left">
+ *       <img src="lid-thumb.jpg" alt="The lid of LAPTOP-0042"></a></li>
+ *     ...
+ *   </ul>
+ *
+ * The viewer, built by DS.lightbox with DOM APIs (a modal dialog that
+ * DS.overlay opens and closes):
+ *
+ *   <dialog class="ds-dialog ds-lightbox" aria-label="Photos of LAPTOP-0042">
+ *     <div class="ds-dialog__backdrop" data-ds-close></div>
+ *     <div class="ds-dialog__box ds-lightbox__box">
+ *       <div class="ds-lightbox__bar">
+ *         <p class="ds-lightbox__count">Image 2 of 6</p>
+ *         <button class="ds-btn ds-btn--ghost ds-btn--icon" type="button" aria-label="Zoom out">(minimize)</button>
+ *         <button class="ds-btn ds-btn--ghost ds-btn--icon" type="button" aria-label="Zoom in">(plus)</button>
+ *         <button class="ds-btn ds-btn--ghost ds-btn--icon" type="button" aria-label="Close" data-ds-close>(close)</button>
+ *       </div>
+ *       <div class="ds-lightbox__stage">
+ *         <button class="ds-btn ds-btn--ghost ds-btn--icon ds-lightbox__nav ds-lightbox__nav--prev" type="button" aria-label="Previous">(chevronLeft)</button>
+ *         <figure class="ds-lightbox__figure">
+ *           <div class="ds-lightbox__frame"><img class="ds-lightbox__image" alt="..."></div>
+ *           <figcaption class="ds-lightbox__caption">...</figcaption>
+ *         </figure>
+ *         <button class="ds-btn ds-btn--ghost ds-btn--icon ds-lightbox__nav ds-lightbox__nav--next" type="button" aria-label="Next">(chevronRight)</button>
+ *       </div>
+ *       <div class="ds-lightbox__thumbs" role="group" aria-label="Images">
+ *         <button class="ds-lightbox__thumb" type="button" aria-label="Image 1 of 6" aria-current="true"><img alt=""></button> ...
+ *       </div>
+ *
+ * The viewer is dark in both colour schemes (--ds-lightbox-bg, its ink
+ * --ds-lightbox-ink): the inverse surface in the light scheme, the backdrop
+ * in the dark one. Its buttons are ghost buttons, in that ink. The image
+ * fits the frame; zoomed, it is scaled by --ds-lightbox-zoom and moved by
+ * --ds-lightbox-x and --ds-lightbox-y (runtime properties DS.lightbox
+ * writes on the frame), and the frame shows the move cursor.
+ *
+ * States, written by DS.lightbox: data-zoomed on the frame while it is
+ * zoomed, data-dragging while a pointer pans or swipes (the image follows
+ * it without a transition), data-loading while the image loads (a spinner
+ * after --ds-delay-loader), data-failed when it did not load (an icon and
+ * the words in .ds-lightbox__error), aria-current="true" on the current
+ * thumbnail (a ring and the full opacity; the others are dimmed). A
+ * pressed item or thumbnail shows a currentColor state layer (::before).
+ *
+ * Options: shape multiplies the radius of the gallery's items and of the
+ * thumbnails; density changes the gallery's gap and the bar's padding;
+ * size and touch reach the buttons (the thumbnails are at least the touch
+ * target under .ds-touch). No tone.
+ *
+ * Phones (600px and below): the arrows lie over the image's sides, the
+ * thumbnails are smaller, the caption takes the safe area.
+ *
+ * Motion: the viewer opens as a dialog (the box fades and grows from
+ * --ds-scale-enter over --ds-dur-slow on the spring); a new image enters
+ * with DS.motion.enter()'s swap; zoom and pan glide over --ds-dur-medium on
+ * --ds-ease-out (a size that fills the frame never overshoots); a drag
+ * follows the pointer; a swipe that does not go far enough glides back.
+ *
+ * Forced colours: the current thumbnail's ring is SelectedItem (a choice in
+ * a set); the gallery's items and the thumbnails keep a CanvasText edge;
+ * the error's icon and words are CanvasText.
+ *
+ * Hooks: --ds-lightbox-bg, --ds-lightbox-ink, --ds-lightbox-thumb-size
+ * (56px, 48px on phones), --ds-lightbox-item-size (120px: the gallery's
+ * columns), --ds-lightbox-radius (--ds-radius-sm: items and thumbnails).
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin scrollbar on the row of
+ *   thumbnails): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.lightbox {
+  /* ── The gallery ─────────────────────────────────── */
+
+  .ds-lightbox__gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--ds-lightbox-item-size, 120px), 1fr));
+    gap: calc(var(--ds-space-2) + var(--ds-density, 0) * 1px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-lightbox__gallery > li {
+    display: contents;
+  }
+
+  .ds-lightbox__item {
+    position: relative;
+    display: block;
+    aspect-ratio: 1;
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-lightbox-radius, var(--ds-radius-sm)) * var(--ds-shape, 1));
+    background: var(--ds-surface-low);
+    color: var(--ds-text);
+    cursor: zoom-in;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-lightbox__item > img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* The state layer over the image: hover and press. */
+  .ds-lightbox__item::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-lightbox__item:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-lightbox__item:active::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-lightbox__item:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  /* ── The viewer ──────────────────────────────────── */
+
+  .ds-lightbox {
+    padding: 0;
+  }
+
+  /* The viewer is its own dark surface: the blocked look and the focus
+     ring of its controls follow its ink, so they read on it. */
+  .ds-lightbox__box {
+    --_ink: var(--ds-lightbox-ink, light-dark(var(--ds-on-inverse), var(--ds-text)));
+    --_bg: var(--ds-lightbox-bg, light-dark(var(--ds-inverse), var(--ds-backdrop)));
+    --ds-disabled-ink: color-mix(in srgb, var(--_ink) calc(var(--ds-state-disabled) * 100%), transparent);
+    --ds-focus-outline: var(--ds-focus-width) solid var(--_ink);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 0;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 0;
+    background: var(--_bg);
+    color: var(--_ink);
+    box-shadow: none;
+  }
+
+  .ds-lightbox__bar {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+    padding:
+      calc(var(--ds-space-2) + var(--ds-density, 0) * 2px + env(safe-area-inset-top))
+      max(var(--ds-space-2), env(safe-area-inset-right))
+      calc(var(--ds-space-2) + var(--ds-density, 0) * 2px)
+      max(var(--ds-space-4), env(safe-area-inset-left));
+  }
+
+  .ds-lightbox__count {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font: var(--ds-font-label);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-lightbox__stage {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-height: 0;
+    padding-inline: var(--ds-space-2);
+  }
+
+  .ds-lightbox__figure {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: var(--ds-space-3);
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+  }
+
+  .ds-lightbox__frame {
+    --_zoom: var(--ds-lightbox-zoom, 1);
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: 0;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    cursor: zoom-in;
+  }
+
+  .ds-lightbox__frame[data-zoomed] {
+    cursor: grab;
+  }
+
+  .ds-lightbox__frame[data-dragging] {
+    cursor: grabbing;
+  }
+
+  .ds-lightbox__image {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    scale: var(--_zoom);
+    translate: var(--ds-lightbox-x, 0px) var(--ds-lightbox-y, 0px);
+    transition:
+      scale var(--ds-dur-medium) var(--ds-ease-out),
+      translate var(--ds-dur-medium) var(--ds-ease-out);
+  }
+
+  /* A drag follows the pointer. */
+  .ds-lightbox__frame[data-dragging] > .ds-lightbox__image {
+    transition: none;
+  }
+
+  .ds-lightbox__frame[data-failed] > .ds-lightbox__image {
+    display: none;
+  }
+
+  /* Loading: the spinner after the loader delay, over the frame. */
+  .ds-lightbox__frame > .ds-spinner {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    visibility: hidden;
+  }
+
+  .ds-lightbox__frame[data-loading] > .ds-spinner {
+    visibility: visible;
+    animation-delay: var(--ds-delay-loader);
+  }
+
+  .ds-lightbox__error {
+    display: none;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin: 0;
+    font: var(--ds-font-body);
+  }
+
+  .ds-lightbox__frame[data-failed] > .ds-lightbox__error {
+    display: flex;
+  }
+
+  .ds-lightbox__caption {
+    min-height: 1lh;
+    margin: 0;
+    font: var(--ds-font-body);
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  .ds-lightbox__caption:empty {
+    visibility: hidden;
+  }
+
+  .ds-lightbox__thumbs {
+    position: relative;
+    display: flex;
+    justify-content: safe center;
+    gap: var(--ds-space-2);
+    overflow-x: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--_ink) transparent;
+    padding:
+      var(--ds-space-2)
+      max(var(--ds-space-4), env(safe-area-inset-right))
+      calc(var(--ds-space-3) + env(safe-area-inset-bottom))
+      max(var(--ds-space-4), env(safe-area-inset-left));
+  }
+
+  .ds-lightbox__thumbs:empty {
+    display: none;
+  }
+
+  .ds-lightbox__thumb {
+    --_t: max(var(--ds-target-min, 0px), var(--ds-lightbox-thumb-size, 56px));
+    position: relative;
+    flex: none;
+    width: var(--_t);
+    height: var(--_t);
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: calc(var(--ds-lightbox-radius, var(--ds-radius-sm)) * var(--ds-shape, 1));
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    opacity: var(--ds-state-stale);
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-lightbox__thumb > img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* The press: a state layer over the picture, in --ds-dur-micro, and the full opacity. */
+  .ds-lightbox__thumb::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-lightbox__thumb:hover {
+      opacity: 1;
+    }
+  }
+
+  .ds-lightbox__thumb:active {
+    opacity: 1;
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-lightbox__thumb:active::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  /* The current image: full opacity and a ring in the ink (not colour alone: aria-current). */
+  .ds-lightbox__thumb[aria-current="true"] {
+    opacity: 1;
+    box-shadow: inset 0 0 0 2px var(--_ink);
+  }
+
+  .ds-lightbox__thumb:focus-visible {
+    opacity: 1;
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  @media (max-width: 600px) {
+    .ds-lightbox__stage {
+      grid-template-columns: minmax(0, 1fr);
+      padding-inline: 0;
+    }
+
+    .ds-lightbox__figure {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    /* The arrows lie over the image's sides, on a veil of the canvas so
+       they read on any image. */
+    .ds-lightbox__nav {
+      --ds-btn-bg: color-mix(in srgb, var(--_bg) calc(var(--ds-state-stale) * 100%), transparent);
+      position: absolute;
+      inset-block-start: 50%;
+      z-index: var(--ds-z-raised);
+      translate: 0 -50%;
+    }
+
+    .ds-lightbox__nav--prev {
+      inset-inline-start: var(--ds-space-1);
+    }
+
+    .ds-lightbox__nav--next {
+      inset-inline-end: var(--ds-space-1);
+    }
+
+    .ds-lightbox__thumb {
+      --_t: max(var(--ds-target-min, 0px), var(--ds-lightbox-thumb-size, 48px));
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-lightbox__item,
+    .ds-lightbox__thumb {
+      border-color: CanvasText;
+    }
+
+    .ds-lightbox__thumb[aria-current="true"] {
+      forced-color-adjust: none;
+      box-shadow: inset 0 0 0 3px SelectedItem;
+    }
+
+    .ds-lightbox__error {
+      color: CanvasText;
+    }
+  }
+
+  @media print {
+    .ds-lightbox {
+      display: none;
+    }
+  }
+}

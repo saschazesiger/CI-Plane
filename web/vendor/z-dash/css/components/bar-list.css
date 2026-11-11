@@ -1,0 +1,187 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Bar list: ranked rows of a label and a value, each on a bar as long as
+ * its share of the largest value (top pages, tickets per device, errors
+ * per service). The page sorts the rows and sets each share; the bar says
+ * nothing the figure does not, so the figure always shows.
+ *
+ *   <ol class="ds-bar-list" aria-label="Open tickets per device type">
+ *     <li class="ds-bar-list__item" style="--ds-share: 1">
+ *       <span class="ds-bar-list__label">(printer 16) <span>Printers</span></span>
+ *       <span class="ds-bar-list__value">412</span>
+ *     </li>
+ *     <li class="ds-bar-list__item ds-tone-error" style="--ds-share: .42">
+ *       <a class="ds-bar-list__label" href="...">Laptops</a>
+ *       <span class="ds-bar-list__value">173</span>
+ *     </li>
+ *   </ol>
+ *
+ *   .ds-bar-list__item    a row: the bar behind the label, the figure at
+ *                         its end; --ds-share (0 ... 1, registered) is
+ *                         the bar's length, set by the page
+ *   .ds-bar-list__label   the label, an optional 16px icon before it; an
+ *                         <a> when the row opens something (the link, not
+ *                         the row, takes focus); a long one ends in an
+ *                         ellipsis on its bar
+ *   .ds-bar-list__value   the figure, tabular, never cut
+ *   .ds-bar-list--plain   the bar in the track colour, for a list where
+ *                         every row shares one meaning and a tint would
+ *                         be loud
+ *
+ * Tone: from the class on the row itself (an inherited tone would tint
+ * every row of a tinted region): the bar takes the tone's container and
+ * the label its ink. The tone adds nothing a word does not: the label or
+ * the figure says why the row stands out.
+ *
+ * Options (src/core/options.css, docs/options.md), on the list or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: the row 8px per step (32px at md)
+ *   density   .ds-density-*: the row 4px per step, the gap between rows
+ *             1px per step
+ *   shape     .ds-shape-*: the bar's corners times --ds-shape (never above
+ *             half the row)
+ *   touch     .ds-touch: a row whose label is a link is at least
+ *             --ds-target-min high
+ *   tone      above
+ *
+ * The share glides on --ds-ease-value over --ds-dur-glide when it changes;
+ * the first render fills from zero with .ds-enter--fill
+ * (DS.motion.enterAll(rows, 'fill')). Reorders go through DS.motion.flip.
+ *
+ * Accessibility: an <ol> (ranked) or <ul> with a name; each row reads its
+ * label and figure. The bar is a background and says nothing of its own.
+ * Forced colours: the bar is an outline of CanvasText that ends (closed)
+ * at its share, the text CanvasText. Printed, the bars keep their colours.
+ *
+ * Hooks: --ds-bar-list-height (32px), --ds-bar-list-bar (--ds-accent),
+ * --ds-bar-list-ink (--ds-text).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.bar-list {
+  .ds-bar-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: calc(var(--ds-space-1) + var(--ds-density, 0) * 1px) var(--ds-space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-bar-list__item {
+    --_h: calc(var(--ds-bar-list-height, 32px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_radius: min(calc(var(--ds-radius-sm) * var(--ds-shape, 1)), calc(var(--_h) / 2));
+    --_bar: var(--ds-bar-list-bar, var(--ds-accent));
+    --_ink: var(--ds-bar-list-ink, var(--ds-text));
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+    align-items: center;
+    min-height: var(--_h);
+    transition: --ds-share var(--ds-dur-glide) var(--ds-ease-value);
+  }
+
+  /* A row that holds a link is a target: touch makes it tall enough. */
+  .ds-bar-list__item:has(> a.ds-bar-list__label) {
+    min-height: max(var(--ds-target-min, 0px), var(--_h));
+  }
+
+  .ds-bar-list__label {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    align-self: stretch;
+    min-width: 0;
+    padding-inline: var(--ds-space-2);
+    border-radius: var(--_radius);
+    color: var(--_ink);
+    font: var(--ds-font-label);
+    text-decoration: none;
+  }
+
+  /* A link's inset ring rests on the edge; only its offset moves. */
+  a.ds-bar-list__label {
+    outline-offset: 0;
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* The bar: behind the label, clipped at the share, so its end keeps its
+     corners as it glides. */
+  .ds-bar-list__label::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--_bar);
+    clip-path: inset(0 calc((1 - var(--ds-share, 0)) * 100%) 0 0 round var(--_radius));
+  }
+
+  .ds-bar-list__label:dir(rtl)::before {
+    clip-path: inset(0 0 0 calc((1 - var(--ds-share, 0)) * 100%) round var(--_radius));
+  }
+
+  .ds-bar-list__label > svg {
+    flex: none;
+  }
+
+  .ds-bar-list__label > span,
+  .ds-bar-list__label:not(:has(> *)) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (hover: hover) {
+    a.ds-bar-list__label:hover > span,
+    a.ds-bar-list__label:not(:has(> span)):hover {
+      text-decoration: underline;
+    }
+  }
+
+  a.ds-bar-list__label:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: calc(-1 * var(--ds-focus-width));
+  }
+
+  .ds-bar-list__value {
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+    white-space: nowrap;
+  }
+
+  .ds-bar-list--plain .ds-bar-list__item {
+    --_bar: var(--ds-chart-track);
+  }
+
+  .ds-bar-list__item:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --_bar: var(--ds-tone-container);
+    --_ink: var(--ds-on-tone-container);
+  }
+
+  /* The outline closes at the share: the box ends there instead of a clip,
+     which would cut the outline's end away. */
+  @media (forced-colors: active) {
+    .ds-bar-list__label::before,
+    .ds-bar-list__label:dir(rtl)::before {
+      inset-inline-end: calc((1 - var(--ds-share, 0)) * 100%);
+      background: transparent;
+      outline: 1px solid CanvasText;
+      outline-offset: -1px;
+      clip-path: none;
+    }
+  }
+
+  @media print {
+    .ds-bar-list__label::before {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+}

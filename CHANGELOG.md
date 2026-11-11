@@ -10,6 +10,9 @@ All notable changes to CI-Plane. Versions follow [Semantic Versioning](https://s
   use every CPU nothing else wants. Memory is reserved and limited as before.
 - **CPU priority per worker** (*normal*, *low*, *background*), so that servers which do other work can be workers:
   in the background, jobs only get CPU time nothing else wants.
+- **Interface on Z-Dash 3** (formerly Dashboard-Style 2.2), vendored in `web/vendor/z-dash/`. Tones and sizes are
+  option classes now (`ds-tone-*`, `ds-sm`), the page loads the minified build, and the binary embeds only the
+  files the page loads. The nightly update workflow is now *Update Z-Dash* and runs the project check.
 - New setting *A new runner holds its CPUs for* (120 seconds): over how long a runner whose job just began lets go
   of the CPUs of its size, until only its real load counts.
 - Existing databases are upgraded when CI-Plane starts. Existing workers keep the priority *normal*.

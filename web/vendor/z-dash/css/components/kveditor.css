@@ -1,0 +1,198 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Key-value editor (3.0): rows of a key and a value (environment variables,
+ * labels, headers), added and removed, filled by pasting KEY=value lines,
+ * with a warning on a key that comes twice and secret values that hide
+ * until revealed. DS.kveditor (kveditor.js) renders the rows.
+ *
+ *   <fieldset class="ds-kveditor ds-kveditor--code" data-ds-kveditor data-ds-kveditor-name="env">
+ *     <legend class="ds-fieldset__legend">Environment variables</legend>
+ *     <div class="ds-kveditor__head" aria-hidden="true"><span>Key</span><span>Value</span></div>
+ *     <ul class="ds-kveditor__rows">
+ *       <li class="ds-kveditor__row" data-ds-key="kv-1" [data-secret] [data-status="warning"]>
+ *         <input class="ds-input ds-kveditor__key" aria-label="Key, row 1">
+ *         <div class="ds-kveditor__value [ds-input-group]">
+ *           <input class="ds-input ds-kveditor__input" aria-label="Value of API_URL">
+ *           [<button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm ds-kveditor__reveal" aria-pressed="false">(eye)</button>]
+ *         </div>
+ *         <button class="ds-btn ds-btn--quiet ds-btn--icon ds-kveditor__remove" aria-label="Remove API_URL">(close)</button>
+ *         <p class="ds-kveditor__hint" hidden>(alert 16)<span>…</span></p>
+ *       </li>
+ *     </ul>
+ *     <div class="ds-kveditor__foot"><button class="ds-btn ds-btn--text ds-kveditor__add">(plus) Add variable</button></div>
+ *   </fieldset>
+ *
+ * A row is a grid: the key, the value (the wider), Remove; its hint spans
+ * under them. Under 480px of the editor (a container query) the key and
+ * Remove share the first line and the value takes the second, and a
+ * hairline parts the rows. A secret value (data-secret) is the field's
+ * input group with a reveal button (aria-pressed; the password field of
+ * Form). A warning (data-status="warning": a key that comes twice, a value
+ * without a key) gives the key the warning edge and says it in the hint,
+ * with its icon, named by the key's aria-describedby.
+ *
+ * --code: keys and values in the monospace family (--ds-font-mono) at the
+ * field's size, for names such as API_TOKEN.
+ *
+ * Options (src/core/options.css, docs/options.md), on the editor or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: the fields and buttons step themselves
+ *             (Form, Button)
+ *   density   .ds-density-*: the room between the rows and inside a row
+ *             2px per step; the fields 4px per step (Form)
+ *   shape     .ds-shape-*: the fields and buttons follow (Form, Button)
+ *   touch     .ds-touch: fields and buttons take --ds-touch-target
+ *   tone      none: a warning is data-status, with its icon and words
+ *
+ * Hooks: --ds-kveditor-key-width (2fr: the key's share of a row beside the
+ * value's 3fr), --ds-kveditor-gap (--ds-space-2: the room between the rows
+ * and inside a row). The hint reads --ds-field-warning-color (Form). The private --_gap is
+ * computed here: never set it.
+ *
+ * Motion: rows come and go through DS.motion.flip() (a new row fades in
+ * over --ds-dur-fast, the others glide); the hint fades in (ds-fade-in).
+ *
+ * Forced colours: a warning key keeps a 2px CanvasText edge, the hint its
+ * icon and words; fields and buttons are Form's and Button's.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.kveditor {
+  .ds-kveditor {
+    --_gap: max(var(--ds-space-1), calc(var(--ds-kveditor-gap, var(--ds-space-2)) + var(--ds-density, 0) * 2px));
+    container: ds-kveditor / inline-size;
+    display: grid;
+    gap: var(--_gap);
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  /* The column labels line up with the fields; on one column they go. */
+  .ds-kveditor__head {
+    display: grid;
+    grid-template-columns: minmax(0, var(--ds-kveditor-key-width, 2fr)) minmax(0, 3fr) max(var(--ds-target-min, 0px), 40px);
+    gap: var(--_gap);
+    color: var(--ds-text-2);
+    font: var(--ds-font-label);
+  }
+
+  .ds-kveditor__rows {
+    display: grid;
+    gap: var(--_gap);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-kveditor__rows:empty {
+    display: none;
+  }
+
+  .ds-kveditor__row {
+    --ds-enter-duration: var(--ds-dur-fast);
+    display: grid;
+    grid-template-columns: minmax(0, var(--ds-kveditor-key-width, 2fr)) minmax(0, 3fr) auto;
+    align-items: start;
+    gap: var(--ds-space-1) var(--_gap);
+  }
+
+  .ds-kveditor__key,
+  .ds-kveditor__value {
+    min-width: 0;
+  }
+
+  .ds-kveditor__value > .ds-kveditor__input {
+    width: 100%;
+  }
+
+  .ds-kveditor__reveal,
+  .ds-kveditor__remove {
+    flex: none;
+  }
+
+  .ds-kveditor__hint {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    gap: var(--ds-space-1);
+    margin: 0;
+    color: var(--ds-field-warning-color, var(--ds-on-warning-container));
+    font: var(--ds-font-meta);
+    animation: ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) backwards;
+  }
+
+  .ds-kveditor__hint[hidden] {
+    display: none;
+  }
+
+  .ds-kveditor__hint > svg {
+    flex: none;
+    margin-block: calc((1lh - 16px) / 2);
+  }
+
+  .ds-kveditor__row[data-status="warning"] > .ds-kveditor__key {
+    border-color: var(--ds-warning);
+  }
+
+  .ds-kveditor__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2);
+  }
+
+  .ds-kveditor__add {
+    justify-self: start;
+  }
+
+  .ds-kveditor--code :is(.ds-kveditor__key, .ds-kveditor__input) {
+    font-family: var(--ds-font-mono);
+  }
+
+  /* One column: the key and Remove on the first line, the value under. */
+  @container ds-kveditor (max-width: 480px) {
+    .ds-kveditor__head {
+      display: none;
+    }
+
+    .ds-kveditor__rows {
+      gap: 0;
+    }
+
+    .ds-kveditor__row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      padding-block: var(--_gap);
+      border-block-start: 1px solid var(--ds-line);
+    }
+
+    .ds-kveditor__row:first-child {
+      border-block-start: 0;
+      padding-block-start: 0;
+    }
+
+    .ds-kveditor__row > .ds-kveditor__value {
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .ds-kveditor__row > .ds-kveditor__remove {
+      grid-column: 2;
+      grid-row: 1;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-kveditor__row[data-status="warning"] > .ds-kveditor__key {
+      outline: 1px solid CanvasText;
+      outline-offset: -2px;
+    }
+
+    .ds-kveditor__hint {
+      color: CanvasText;
+    }
+  }
+}

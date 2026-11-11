@@ -1,0 +1,74 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Date picker: a segmented date field and a calendar in a picker popover
+ * (the WAI-ARIA date picker dialog); with type datetime the field takes the
+ * time too, the popover a list of times beside the calendar, and the field
+ * may name the zone of its wall time. DS.datepicker (datepicker.js) builds
+ * the popover inside the root: the field is a .ds-datefield, the popover a
+ * .ds-picker__popover with a .ds-calendar (and a .ds-timepicker__list).
+ *
+ *   <span class="ds-field__label" id="due-label">Due date</span>
+ *   <div class="ds-picker" data-ds-datepicker data-ds-value="2026-11-04" [data-ds-datepicker-type="datetime"]>
+ *     <div class="ds-datefield" role="group" aria-labelledby="due-label">
+ *       <button class="ds-btn ds-btn--quiet ds-btn--icon ds-datefield__toggle" type="button" aria-label="Choose date">(calendar)</button>
+ *     </div>
+ *     (rendered:)
+ *     <div class="ds-picker__popover" role="dialog" aria-modal="true" aria-label="Choose date" hidden>
+ *       <div class="ds-picker__panes">
+ *         <div class="ds-picker__pane"><div class="ds-calendar">...</div></div>
+ *         [<div class="ds-picker__pane ds-datepicker__times"><div class="ds-timepicker__list">...</div></div>]
+ *       </div>
+ *       <div class="ds-picker__foot">(Today or Now) <span class="ds-picker__spacer"></span> (Clear)</div>
+ *     </div>
+ *   </div>
+ *
+ * The list of times is as tall as the calendar beside it and scrolls inside;
+ * on a phone (600px or less) it goes under the calendar, 200px high.
+ *
+ * Options: those of the field, the calendar and the popover, each in its
+ * own component (size, density, shape, touch); the date picker adds none.
+ *
+ * Motion: the popover's (it grows from the button); a turned month slides.
+ *
+ * Forced colours: the parts' own.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin scrollbar on the list of
+ *   times): without them the platform scrollbar shows.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.datepicker {
+  /* The times beside the calendar: as tall as it, scrolling inside. */
+  .ds-datepicker__times {
+    position: relative;
+    align-self: stretch;
+    inline-size: 128px;
+    border-inline-start: 1px solid var(--ds-line);
+  }
+
+  .ds-datepicker__times > .ds-timepicker__list {
+    position: absolute;
+    inset: 0;
+    padding-inline-start: var(--ds-space-2);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+  }
+
+  @media (max-width: 600px) {
+    .ds-datepicker__times {
+      inline-size: auto;
+      border-inline-start: 0;
+    }
+
+    .ds-datepicker__times > .ds-timepicker__list {
+      position: static;
+      max-block-size: 200px;
+      padding-inline-start: 0;
+    }
+  }
+}

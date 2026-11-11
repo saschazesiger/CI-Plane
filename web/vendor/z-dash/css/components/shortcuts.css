@@ -1,0 +1,176 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Shortcut sheet: every shortcut of the page in a dialog that "?" opens,
+ * grouped by scope (when more than one has shortcuts) and by group, each
+ * with its keys. The groups flow into columns as the box allows.
+ *
+ *   <dialog class="ds-dialog ds-dialog--lg ds-shortcuts" id="keys" data-ds-shortcuts aria-labelledby="keys-title">
+ *     <div class="ds-dialog__backdrop" data-ds-close></div>
+ *     <div class="ds-dialog__box">
+ *       <div class="ds-dialog__head">
+ *         <h2 class="ds-dialog__title" id="keys-title">Keyboard shortcuts</h2>
+ *         <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Close" data-ds-close>(close)</button>
+ *       </div>
+ *       [<input class="ds-input ds-shortcuts__filter" type="search" aria-label="Find a shortcut" placeholder="Find a shortcut">]
+ *       <div class="ds-dialog__body ds-shortcuts__list">  shortcuts.js renders:
+ *         [<section class="ds-shortcuts__scope"><h3 class="ds-shortcuts__title">Board</h3>]   with several scopes
+ *         <div class="ds-shortcuts__groups">
+ *           <section class="ds-shortcuts__group"><h3 class="ds-shortcuts__heading">Editing</h3>
+ *             <dl class="ds-shortcuts__items">
+ *               <div class="ds-shortcuts__item [data-off]">
+ *                 <dt class="ds-shortcuts__label">Save [<span class="ds-shortcuts__off">Not available here</span>]</dt>
+ *                 <dd class="ds-shortcuts__keys"><span class="ds-shortcuts__combo" role="img" aria-label="Ctrl+S"><kbd class="ds-kbd">Ctrl</kbd><kbd class="ds-kbd">S</kbd></span>
+ *                   [<span class="ds-shortcuts__or">or</span> ...]</dd>
+ *         <p class="ds-shortcuts__empty">No keyboard shortcuts here.</p>   none, or none that match
+ *
+ * data-off: a shortcut that does nothing as the page stands (a disabled
+ * control): the disabled ink and the words, never the colour alone.
+ *
+ * Options (docs/options.md), computed here:
+ *   size      type only: the label takes --ds-size-font
+ *   density   any container: a row's block padding 2px per step, the gap
+ *             between groups 4px per step
+ *   shape     the keys' radius (utilities.css)
+ *   tone      none
+ *
+ * The groups are columns of at least --ds-shortcuts-column (240px), so a
+ * phone shows one.
+ *
+ * Hooks: --ds-shortcuts-column (240px).
+ *
+ * Forced colours: the hairlines between rows are borders; a shortcut that
+ * is off reads GrayText.
+ *
+ * Motion: the dialog's (DS.overlay).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.shortcuts {
+  /* The title lines up with the list under it; the close button still
+     reaches into the box's padding. */
+  .ds-shortcuts .ds-dialog__head {
+    margin-inline-start: 0;
+  }
+
+  .ds-shortcuts__filter {
+    flex: none;
+  }
+
+  .ds-shortcuts__list {
+    display: grid;
+    align-content: start;
+    gap: calc(var(--ds-space-6) + var(--ds-density, 0) * 4px);
+  }
+
+  .ds-shortcuts__scope {
+    display: grid;
+    gap: var(--ds-space-3);
+  }
+
+  .ds-shortcuts__scope + .ds-shortcuts__scope {
+    padding-top: calc(var(--ds-space-6) + var(--ds-density, 0) * 4px);
+    border-top: 1px solid var(--ds-line);
+  }
+
+  .ds-shortcuts__title {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-subtitle);
+  }
+
+  .ds-shortcuts__groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(var(--ds-shortcuts-column, 240px), 100%), 1fr));
+    align-items: start;
+    gap: calc(var(--ds-space-6) + var(--ds-density, 0) * 4px) var(--ds-space-6);
+  }
+
+  .ds-shortcuts__group {
+    display: grid;
+    gap: var(--ds-space-1);
+    min-width: 0;
+  }
+
+  .ds-shortcuts__heading {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+  }
+
+  .ds-shortcuts__items {
+    display: grid;
+    margin: 0;
+  }
+
+  /* The label takes what the keys leave and wraps, so the keys stay on its
+     line, at the end, also with the note under a label that is off. */
+  .ds-shortcuts__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--ds-space-1) var(--ds-space-3);
+    padding-block: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px);
+    border-bottom: 1px solid var(--ds-line);
+  }
+
+  .ds-shortcuts__item:last-child {
+    border-bottom: 0;
+  }
+
+  .ds-shortcuts__label {
+    min-width: 0;
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-size-font, var(--ds-font-body));
+  }
+
+  .ds-shortcuts__keys {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ds-space-1) var(--ds-space-2);
+    margin: 0;
+  }
+
+  .ds-shortcuts__combo {
+    display: inline-flex;
+    gap: var(--ds-space-1);
+  }
+
+  .ds-shortcuts__or {
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  /* Off as the page stands: the disabled ink, and the words say it. */
+  .ds-shortcuts__item[data-off] .ds-shortcuts__label,
+  .ds-shortcuts__item[data-off] .ds-shortcuts__combo {
+    color: var(--ds-disabled-ink, var(--ds-text-2));
+  }
+
+  /* Under the label: what the shortcut does, then that it does nothing now. */
+  .ds-shortcuts__off {
+    display: block;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-shortcuts__empty {
+    margin: 0;
+    padding: var(--ds-space-6) 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    text-align: center;
+  }
+
+  @media (forced-colors: active) {
+    .ds-shortcuts__item[data-off] .ds-shortcuts__label,
+    .ds-shortcuts__item[data-off] .ds-shortcuts__combo,
+    .ds-shortcuts__item[data-off] .ds-kbd {
+      color: GrayText;
+    }
+  }
+}

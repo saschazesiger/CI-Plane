@@ -1,0 +1,182 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Page base for full apps (opt-in): the backdrop, body type, selection,
+ * headings on the type roles (h1 headline, h2 subtitle, h3 to h6 the
+ * label role, no margins), links (an icon at either end of a plain link
+ * keeps its distance), inline code (just text inside a pre or a link), a
+ * rule (hr, a hairline like .ds-divider), marked text (mark, on the tint)
+ * and the focus ring. Rendered rich text keeps a hierarchy of its own in
+ * .ds-prose. Under .ds-base `hidden` always hides; never add a [hidden]
+ * rule of your own. (Border-box sizing applies to all of .ds-theme, see
+ * global.css.)
+ *
+ *   <html class="ds-theme ds-base">
+ *
+ * Every rule is scoped to .ds-base through :where(), which adds no
+ * specificity: the rules weigh exactly what bare element selectors would,
+ * so any class of the page still wins over them. An embedded widget puts
+ * .ds-base on its root element: the html/body rules never match there, so
+ * the host page stays untouched.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.base {
+  /* Under .ds-base `hidden` beats everything, page CSS included. Without
+     it (a widget that leaves it off), motion.css still hides ds components that
+     carry `hidden` inside .ds-theme, in ds.utilities. */
+  :where(.ds-base) [hidden] {
+    display: none !important;
+  }
+
+  html:where(.ds-base),
+  :where(.ds-base) body {
+    margin: 0;
+    height: 100%;
+  }
+
+  /* The tinted backdrop of the whole app: white panels sit on it. */
+  html:where(.ds-base) {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    background: var(--ds-backdrop);
+  }
+
+  :where(.ds-base) body {
+    font: var(--ds-font-body);
+    color: var(--ds-text);
+    background: var(--ds-backdrop);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  :where(.ds-base) ::selection {
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+  }
+
+  /* Set while a modal layer is open (the page behind must not scroll). */
+  :where(.ds-base) body.ds-no-scroll {
+    overflow: hidden;
+  }
+
+  /* Links are told apart from text by the underline, not by colour. */
+  :where(.ds-base) a {
+    color: var(--ds-link);
+    text-decoration-line: underline;
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+    text-underline-offset: var(--ds-link-underline-offset);
+    text-decoration-color: var(--ds-link-underline);
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      text-decoration-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  @media (hover: hover) {
+    :where(.ds-base) a:hover {
+      text-decoration-color: var(--ds-link-underline-hover);
+    }
+  }
+
+  /* An icon at the end of a plain link (an external link, "Open") or at its
+     start keeps a gap to the text and sits on its centre line. */
+  :where(.ds-base) :where(a:not([class])) > svg:last-child {
+    margin-inline-start: var(--ds-space-1);
+    vertical-align: -0.125em;
+  }
+
+  :where(.ds-base) :where(a:not([class])) > svg:first-child {
+    margin-inline-end: var(--ds-space-1);
+    vertical-align: -0.125em;
+  }
+
+  /* Bare headings take the type roles, without the browser's margins:
+     element weight only, in ds.base, so every component class and every
+     unlayered project rule wins. Two weights, as everywhere. */
+  :where(.ds-base) :is(h1, h2, h3, h4, h5, h6) {
+    margin: 0;
+    color: var(--ds-text);
+    letter-spacing: 0;
+  }
+
+  :where(.ds-base) h1 {
+    font: var(--ds-font-headline);
+  }
+
+  :where(.ds-base) h2 {
+    font: var(--ds-font-subtitle);
+  }
+
+  :where(.ds-base) :is(h3, h4, h5, h6) {
+    font: var(--ds-font-label);
+  }
+
+  /* A rule: a hairline, as .ds-divider. */
+  :where(.ds-base) hr {
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--ds-line);
+  }
+
+  /* Marked text (a search hit): on the tint. Forced colours map it to Mark
+     by themselves. */
+  :where(.ds-base) mark {
+    border-radius: var(--ds-radius-xs);
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+  }
+
+  /* Inline code takes the size and colour of the text around it, only the
+     typeface changes (a layered reset's code colour does not reach it).
+     Its own box is just its glyphs: the monospace font sits higher on the
+     baseline and would open up the line by a pixel. */
+  :where(.ds-base) code {
+    font-family: var(--ds-font-mono);
+    font-size: inherit;
+    color: inherit;
+    line-height: 1;
+    background: var(--ds-code-bg);
+    border: 1px solid var(--ds-line);
+    border-radius: var(--ds-radius-xs);
+    padding: 0 var(--ds-space-1);
+  }
+
+  /* Code in a block or a link is part of it: no chip per line. */
+  :where(.ds-base) :where(pre, a) code {
+    padding: 0;
+    border: 0;
+    background: none;
+    line-height: inherit;
+  }
+
+  :where(.ds-base) button,
+  :where(.ds-base) input,
+  :where(.ds-base) select,
+  :where(.ds-base) textarea {
+    font-family: inherit;
+  }
+
+  /* Two weights, 400 and the label weight: emphasis in UI copy is a label,
+     not the browser's bold. */
+  :where(.ds-base) strong,
+  :where(.ds-base) b {
+    font-weight: var(--ds-weight-label);
+  }
+
+  /* The ring is solid from the first frame and snaps in: links (above),
+     disclosure summaries and focusable elements rest one ring width further
+     out. Other elements, and programmatic focus targets (tabindex -1, such
+     as the drawer, whose forced-colours edge is an outline), show it at
+     once. The outline follows the element's radius. */
+  :where(.ds-base) :where(summary, [tabindex]:not([tabindex^="-"])) {
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  :where(.ds-base) :focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+}

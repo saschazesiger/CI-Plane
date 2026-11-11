@@ -1,0 +1,109 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * State label (lozenge): the workflow state of one item in a bold, filled
+ * pill: open, in review, merged, closed, draft. One per item, in its head
+ * (a ticket's title row, a change request), where the state is the first
+ * thing to read. A status chip (.ds-status) says how a thing is doing; a
+ * tag (.ds-tag) adds a word; the lozenge says where an item stands in its
+ * workflow.
+ *
+ *   <span class="ds-lozenge ds-tone-success">(circleDot 16) <span>Open</span></span>
+ *   <span class="ds-lozenge ds-tone-neutral">(pencil 16) <span>Draft</span></span>
+ *   <span class="ds-lozenge ds-lozenge--subtle ds-tone-error">(circleX 16) <span>Closed</span></span>
+ *
+ *   (none)              filled: the tone's colour with its on-colour
+ *   --subtle            the tone's container pair, for a list of many
+ *   .ds-tone-*          from the class on the lozenge itself (an inherited
+ *                       tone would recolour every state in a tinted
+ *                       region); without one, neutral
+ *
+ * Always a word, and usually an icon: the state is never the colour
+ * alone, and the same state keeps the same icon everywhere.
+ *
+ * Options (src/core/options.css, docs/options.md), on the lozenge or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: 4px per step (28px at md), the side
+ *             padding 2px per step; the type and the icon stay
+ *   shape     .ds-shape-*: the radius times --ds-shape (a pill at the
+ *             default, never rounder than half its height)
+ *   tone      above
+ *   density, touch: not read. A lozenge is no target and sits in a line.
+ *
+ * Accessibility: plain text in the item's head; nothing takes focus. A
+ * state that changes while the page is open is announced by the page
+ * (DS.a11y.announce), not by the lozenge.
+ * Forced colours: a transparent outline becomes its CanvasText edge, the
+ * text CanvasText.
+ *
+ * Hooks: --ds-lozenge-height (28px), --ds-lozenge-radius
+ * (--ds-radius-action).
+ *
+ * A state that changes glides its colours over --ds-dur-medium; render
+ * with DS.dom.morphHtml so the element stays and the class change
+ * transitions.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.lozenge {
+  .ds-lozenge {
+    --_h: calc(var(--ds-lozenge-height, 28px) + var(--ds-size-step, 0) * 4px);
+    --_half: calc(max(var(--_h), 1lh) / 2);
+    --_bg: var(--ds-text-2);
+    --_ink: var(--ds-surface);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+    min-height: var(--_h);
+    max-width: 100%;
+    padding: 0 calc(var(--ds-space-3) + var(--ds-size-step, 0) * 2px);
+    border-radius: min(calc(min(var(--ds-lozenge-radius, var(--ds-radius-action)), var(--_half)) * var(--ds-shape, 1)), var(--_half));
+    outline: 1px solid transparent;
+    outline-offset: -1px;
+    background: var(--_bg);
+    color: var(--_ink);
+    font: var(--ds-font-label);
+    white-space: nowrap;
+    vertical-align: middle;
+    transition: background-color var(--ds-dur-medium) var(--ds-ease-in-out), color var(--ds-dur-medium) var(--ds-ease-in-out);
+  }
+
+  .ds-lozenge > svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+  }
+
+  .ds-lozenge:has(> svg:first-child) {
+    padding-inline-start: calc(var(--ds-space-2) + var(--ds-size-step, 0) * 2px);
+  }
+
+  .ds-lozenge > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ds-lozenge:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --_bg: var(--ds-tone);
+    --_ink: var(--ds-on-tone);
+  }
+
+  .ds-lozenge--subtle {
+    --_bg: var(--ds-surface-high);
+    --_ink: var(--ds-text);
+  }
+
+  .ds-lozenge--subtle:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --_bg: var(--ds-tone-container);
+    --_ink: var(--ds-on-tone-container);
+  }
+
+  @media print {
+    .ds-lozenge {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+}

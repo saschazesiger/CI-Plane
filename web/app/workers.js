@@ -155,7 +155,7 @@ function sheetHtml(d) {
     ['Added', day(w.createdAt)],
     ['Last seen', w.lastSeenAt ? ago(w.lastSeenAt) : 'never'],
   ];
-  const bar = (value) => `<span class="ds-meter${value >= 0.95 ? ' ds-meter--error' : value >= 0.85 ? ' ds-meter--warning' : ''}" aria-hidden="true" style="--ds-share: ${value.toFixed(3)}"></span>`;
+  const bar = (value) => `<span class="ds-meter${value >= 0.95 ? ' ds-tone-error' : value >= 0.85 ? ' ds-tone-warning' : ''}" aria-hidden="true" style="--ds-share: ${value.toFixed(3)}"></span>`;
   return '<div class="ds-stack">' +
     `<div class="cp-row">${workerChip(w)}</div>${reason}` +
     (task ? `<div class="ds-card ds-card--filled">${taskSteps(task)}${task.state === 'failed' ? `<div class="cp-row">${busyButton('ds-btn', 'Try again', 'Starting', 'Started', `data-act="prepare"`, 'sync')}</div>` : ''}</div>` : '') +
@@ -307,7 +307,7 @@ const view = {
   },
 
   html(d) {
-    const action = `<a class="ds-btn ds-btn--primary" href="#/workers/add">${icon('plus', 16)}Add worker</a>`;
+    const action = `<a class="ds-btn ds-btn--filled" href="#/workers/add">${icon('plus', 16)}Add worker</a>`;
     const lead = 'The servers that run your jobs. Tier 1 is filled first; inside a tier, the worker that is least busy right now gets the job.';
     if (!d.workers.length) {
       return head('Workers', lead, action) + `<section class="ds-card">${empty({ glyph: 'server', title: 'No worker yet',

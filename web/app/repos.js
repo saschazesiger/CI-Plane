@@ -22,7 +22,7 @@ function repoRow(a, p) {
     `<td><div class="ds-field"><label class="ds-sr" for="limit-r${p.id}">Parallel jobs of ${esc(p.fullName)}, 0 for no limit</label>` +
       `<input class="ds-input cp-limit" id="limit-r${p.id}" type="number" min="0" max="1000" step="1" inputmode="numeric" value="${p.maxParallel}" data-limit-repo="${p.id}" data-name="${esc(p.fullName)}"></div></td>` +
     `<td>${switchHtml({ id: `repo-${p.id}`, attrs: `data-repo="${p.id}"`, label: `Run the jobs of ${p.fullName}`, checked: p.enabled, srLabel: true })}</td>` +
-    `<td class="ds-table__actions"><span class="ds-hover-actions"><button class="ds-btn ds-btn--quiet ds-btn--icon ds-btn--sm" type="button" data-remove-repo="${p.id}" data-name="${esc(p.fullName)}" aria-label="Remove ${esc(p.fullName)}" data-tip="Remove">${icon('trash', 18)}</button></span></td></tr>`;
+    `<td class="ds-table__actions"><span class="ds-hover-actions"><button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm" type="button" data-remove-repo="${p.id}" data-name="${esc(p.fullName)}" aria-label="Remove ${esc(p.fullName)}" data-tip="Remove">${icon('trash', 18)}</button></span></td></tr>`;
 }
 
 function accountCard(a) {
@@ -35,7 +35,7 @@ function accountCard(a) {
   let notes = '';
   if (!a.installationId) {
     notes += alertHtml('warning', 'The app is not installed yet', `No jobs of ${esc(a.owner)} arrive until the app is installed on the repositories that should use CI-Plane.`,
-      `<a class="ds-btn ds-btn--text ds-btn--sm" href="${esc(a.installUrl)}">Install on GitHub${icon('external', 16)}</a>`);
+      `<a class="ds-btn ds-btn--text ds-sm" href="${esc(a.installUrl)}">Install on GitHub${icon('external', 16)}</a>`);
   }
   if (a.health.lastError) notes += alertHtml('warning', 'GitHub reports a problem', esc(a.health.lastError));
   if (!a.enabled) notes += alertHtml('', `${esc(a.owner)} is switched off`, 'Its jobs are ignored until you switch it on again.');
@@ -45,7 +45,7 @@ function accountCard(a) {
       `<th scope="col"><span class="ds-sr">Actions</span></th></tr></thead><tbody>${a.repos.map((p) => repoRow(a, p)).join('')}</tbody></table></div>`
     : `<p class="ds-muted">${a.installationId ? 'The app is installed, but on no repository yet. Choose repositories on GitHub.' : 'Repositories show up here once the app is installed.'}</p>`;
   return `<section class="ds-card" data-ds-key="a${a.id}" aria-labelledby="acc-${a.id}">` +
-    `<div class="ds-card__row"><h2 class="ds-card__title" id="acc-${a.id}">${icon(org ? 'building' : 'user', 20)}${esc(a.owner)} <span class="ds-tag ds-tag--neutral">${org ? 'Organisation' : 'Personal account'}</span></h2>` +
+    `<div class="ds-card__row"><h2 class="ds-card__title" id="acc-${a.id}">${icon(org ? 'building' : 'user', 20)}${esc(a.owner)} <span class="ds-tag ds-tone-neutral">${org ? 'Organisation' : 'Personal account'}</span></h2>` +
       switchHtml({ id: `acc-on-${a.id}`, attrs: `data-account="${a.id}"`, label: `Run the jobs of ${a.owner}`, checked: a.enabled, srLabel: true }) + '</div>' +
     `<p class="ds-meta">${meta}</p>${notes}` +
     `<div class="ds-inline-form"><div class="ds-field"><label class="ds-field__label" for="limit-a${a.id}">Parallel jobs of ${esc(a.owner)}</label>` +
@@ -84,7 +84,7 @@ export default {
   load: () => api.get('/api/accounts'),
 
   html(d) {
-    const action = `<a class="ds-btn ds-btn--primary" href="#/repositories/add">${icon('plus', 16)}Add repository or organisation</a>`;
+    const action = `<a class="ds-btn ds-btn--filled" href="#/repositories/add">${icon('plus', 16)}Add repository or organisation</a>`;
     const lead = 'The GitHub accounts and organisations whose jobs CI-Plane runs. A repository that is switched off is ignored.';
     if (!d.accounts.length) {
       return head('Repositories', lead, action) + `<section class="ds-card">${empty({ glyph: 'folder', title: 'No GitHub account connected yet',

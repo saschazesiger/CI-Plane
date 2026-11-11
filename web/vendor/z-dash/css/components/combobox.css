@@ -1,0 +1,858 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Combobox: a searchable list under an outlined field (ARIA combobox
+ * pattern; the page filters and chooses, DS.overlay opens and closes). The
+ * field keeps its look, a chevron at the end says there is a list, and the
+ * list opens as a white surface on the popover elevation. Each entry shows
+ * a name and, quieter, a line of meta. The active entry (keyboard or
+ * pointer, data-active) gets the hover layer, the chosen one
+ * (aria-selected) the tint and the label weight, never colour alone.
+ *
+ *   <div class="ds-combo">
+ *     <input class="ds-input ds-combo__input" role="combobox" aria-expanded="false" aria-controls="list" aria-autocomplete="list" aria-activedescendant="opt-2">
+ *     <button class="ds-combo__toggle" type="button" tabindex="-1" aria-label="Show list">(chevronDown)</button>
+ *     <div class="ds-combo__popup" hidden data-state="open | closed" [data-placement="top"] [data-anchored]>
+ *       <ul class="ds-combo__list" id="list" role="listbox">
+ *         <li class="ds-combo__option" id="opt-2" role="option" aria-selected="true" data-active>
+ *           <span class="ds-combo__name">Name</span><span class="ds-combo__meta">Meta</span>
+ *       <p class="ds-combo__status" role="status">12 of 240</p>
+ *
+ * Select-only (.ds-combo--select: pick one of a few rich options, no
+ * typing): the field is a button that shows the choice, its value and an
+ * optional meta in one row (start-aligned, ellipsis); options may hold any
+ * content. The keys (Enter, Space and the arrows open; type-ahead) are the
+ * page's script, as for every combobox.
+ *
+ *   <div class="ds-combo ds-combo--select">
+ *     <button class="ds-input ds-combo__input" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="plan-list" aria-labelledby="plan-label plan-value">
+ *       <span class="ds-combo__value" id="plan-value">Standard</span><span class="ds-combo__meta">4 devices</span>
+ *     </button>
+ *     <button class="ds-combo__toggle" type="button" tabindex="-1" aria-label="Show list">(chevronDown)</button>
+ *     <div class="ds-combo__popup" hidden> ... the same list ... </div>
+ *
+ * aria-disabled="true" on an option: the disabled ink, no active layer.
+ * Without a toggle the field keeps only its own end padding.
+ *
+ *   DS.overlay.open(popup, { opener: input });   DS.overlay.close(popup);
+ *
+ * Groups (the WAI grouped listbox; the list is then a div, a group a ul): a
+ * .ds-combo__heading names each group in caption type and never takes
+ * data-active; the page's keys walk the options as ever. A group whose
+ * options are all hidden goes with them, its heading and its line too, so
+ * a filter only hides options. A .ds-combo__description is a longer line
+ * under the name that wraps, where __meta stays on one line:
+ *
+ *   <div class="ds-combo__list" id="list" role="listbox">
+ *     <ul class="ds-combo__group" role="group" aria-labelledby="h-a">
+ *       <li class="ds-combo__heading" id="h-a" role="presentation">Laptops</li>
+ *       <li class="ds-combo__option" id="opt-1" role="option" aria-selected="false">
+ *         <span class="ds-combo__name">Name</span><span class="ds-combo__description">What it is for, in a sentence</span></li>
+ *     </ul>
+ *   </div>
+ *
+ * Clearable: a .ds-combo__clear before the toggle (the page empties the
+ * field and sets `hidden` while there is nothing to clear; the field keeps
+ * room for it only while it shows). It stays in the tab order, so it has
+ * the ring; the toggle does not.
+ *
+ *   <button class="ds-combo__clear" type="button" aria-label="Clear model" hidden>(close)</button>
+ *
+ * Creatable: a last option .ds-combo__option--create, an icon and the
+ * words ("Create ...") in the action ink. The page creates the value.
+ *
+ * Several values (.ds-combo--multi; the list takes aria-multiselectable):
+ * the .ds-combo draws the field box and holds the chosen values as input
+ * chips before the typing field, which wraps under them; the box grows, the
+ * toggle stays on its first line. Backspace, choosing and a press on an empty
+ * part of the box (which only a script can send to the field) are the page's.
+ *
+ *   <div class="ds-combo ds-combo--multi">
+ *     <button class="ds-chip ds-chip--input" type="button">...</button>
+ *     <input class="ds-input ds-combo__input" role="combobox" aria-expanded="false" aria-controls="order-list" aria-autocomplete="list">
+ *     <button class="ds-combo__toggle" type="button" tabindex="-1" aria-label="Show all">(chevronDown)</button>
+ *     <div class="ds-combo__popup" hidden> ... the list ... </div>
+ *
+ * Nothing found: .ds-combo__list `hidden` and the status says so; the list
+ * stays open. Loading (a search on the way): a .ds-spinner in the status
+ * line and aria-busy="true" on the list. A disabled field takes its toggle
+ * (the disabled ink, no pointer) and its clear button (gone, so out of the
+ * tab order too) with it; the chips of several values lose the pointer, and
+ * the page sets `disabled` on them, since CSS cannot block their keys.
+ *
+ * Options (src/core/options.css, docs/options.md), on the .ds-combo or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: the field, its toggle and an option 8px per
+ *             step, the name's type role (--ds-size-font, its weight stays
+ *             regular, the chosen one the label's)
+ *   density   .ds-density-*: the field, its toggle and an option 4px per
+ *             step (the toggle lives in the field, so unlike an icon button
+ *             it follows), the block padding of options and the status line
+ *             2px per step; type and side padding stay
+ *   shape     .ds-shape-*: multiplies the list's radius and the rest and
+ *             pressed radius of the toggle and the clear button
+ *   touch     .ds-touch: field, toggle, clear button and options at least
+ *             --ds-touch-target (48px), whatever the size and the density
+ *   tone      none: a combobox shows no status of its own; the invalid look
+ *             is the field's (aria-invalid="true")
+ *
+ * Motion (D17): the list grows out of the field. It fades in over
+ * --ds-dur-fast while its clip opens from the field's edge (clip-path from
+ * --ds-clip-from) and it grows from --ds-scale-popup at the field
+ * (--ds-motion-origin), both over --ds-dur-medium on the spring;
+ * DS.motion.originFrom() writes both hooks. The resting clip reaches
+ * --ds-space-6 beyond the box, so the shadow is there from the first
+ * frame. It leaves with a fade only (--ds-dur-instant). DS.overlay drives
+ * data-state ("closed", flushed, "open"; "closed" to hide), so a list
+ * closed mid-way turns back from where it is. Without data-state (a page
+ * that only toggles hidden) the list plays ds-fade-in and ds-clip-in once
+ * when it shows. Closed, the list takes no pointer.
+ *
+ * The chevron follows aria-expanded on the field (DS.overlay sets it) and
+ * turns 180deg on the spring with the list (the disclosure rotation of
+ * the motion rules).
+ * The active entry's layer fades in over --ds-dur-micro and goes at once,
+ * so a held arrow key leaves no trail; pointer and keyboard share
+ * data-active, there is no separate hover layer.
+ *
+ * Placement: below the field. When it does not fit below and there is
+ * more room above (in the viewport, narrowed by every clipping box around
+ * the field), DS.overlay sets data-placement="top" and the list opens
+ * above it, revealed from its bottom edge. It is never taller than the
+ * room on its side (the list scrolls inside, the status line stays), so
+ * it never covers the field being typed into. Inside a scrolling box (a
+ * dialog's box, a sheet's body) the absolute list is clipped by that box
+ * where the progressive path below is missing: there the room is that
+ * box's, so keep a combobox off the very end of a dialog.
+ *
+ * Cut edges: a list that scrolls fades at each edge with more to show, a
+ * mask --ds-scroll-fade long (default --ds-space-8; 0px turns it off) on
+ * the registered numbers --ds-scroll-edge-start and --ds-scroll-edge-end
+ * (registered in tokens.css, so a page without scroller.css keeps the
+ * fades; the .ds-scroll-x model on the block axis; the scrollbar strip, --ds-scrollbar-width, stays opaque). Where scroll
+ * timelines exist ds-scroll-edge-start and ds-scroll-edge-end drive them
+ * on the list's own scroll; elsewhere DS.overlay attaches
+ * DS.dom.scrollEdges(list, { axis: 'block' }) while the list is open, and
+ * data-ds-overflow-start / -end set them over --ds-dur-fast. The active
+ * option, scrolled into view, lands clear of them (scroll-padding).
+ *
+ * Hooks: --ds-input-height (the base of the field and its toggle, 40px),
+ * --ds-combo-option-height (the base of an option, 48px), --ds-combo-radius
+ * (the list, --ds-radius-xs). A .ds-progress on the chosen option takes
+ * --ds-surface as its track (the tint behind it). The private --_h, --_box,
+ * --_end, --_half and --_radius are computed here: never set them.
+ *
+ * The toggle is a round target as tall as the field: a state layer in its
+ * colour (hover, press in --ds-dur-micro), the ripple (js/ripple.js) and the
+ * press morph of every pill (squarer to --ds-radius-action-pressed in
+ * --ds-dur-micro, back on the spatial spring). It stays tabindex="-1", so it
+ * has no ring. The clear button is its twin with a ring. Options have no
+ * ripple: a press selects and closes the list.
+ *
+ * Forced colours: the list keeps an edge (its transparent outline), the
+ * chosen option is SelectedItem / SelectedItemText, the active one has a
+ * Highlight outline (CanvasText on the chosen one), a blocked one GrayText
+ * (chosen too: on Canvas with a GrayText outline);
+ * the box of several values keeps its border (GrayText disabled) and takes a
+ * 2px Highlight outline while focused, as a single field does.
+ *
+ * Behaviour by the system (data-ds-combobox, DS.combobox): the module
+ * filters as the field changes and marks the matched letters of each name
+ * in a .ds-combo__match (the label weight and an underline, never colour
+ * alone), asks a source with a spinner in the status line, adds the
+ * "Create" option, the clear button's state and the chips of several
+ * values; the markup and the look stay the same.
+ *
+ * Print: an open list is not printed.
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar in the
+ *   list): without them the platform scrollbar shows.
+ * - CSS anchor positioning (anchor-name on the field, position-anchor,
+ *   position-area, position-try-fallbacks and anchor-size() on the list,
+ *   behind @supports; DS.overlay then opens the list in the top layer with
+ *   data-anchored, as wide as the field, below it or flipped above, so a
+ *   scrolling dialog never clips it): without it the list is absolute, and
+ *   the script flips it up.
+ * - scroll-driven animations (animation-timeline: scroll(), animation-range;
+ *   the edge fades follow the scroll position): without them the
+ *   data-ds-overflow-* attributes of DS.dom.scrollEdges() (attached by
+ *   DS.overlay) set the fades, or none show.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.combobox {
+  /* The field's height, which the field, its toggle and its clear button
+     share: the formula of every field (form.css), so a combobox lines up
+     with the fields around it, and never less than the toggle's icon. --_end
+     is the room at the field's end. */
+  .ds-combo {
+    --_h: max(var(--ds-space-6), calc(var(--ds-input-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    --_end: calc(var(--ds-space-1) + var(--_box));
+    position: relative;
+  }
+
+  /* A field of a row form (form.css, .ds-form--rows) caps its control as it
+     caps an input. */
+  .ds-form--rows .ds-field > .ds-combo {
+    max-width: var(--ds-form-rows-control-max, 480px);
+  }
+
+  /* Without a toggle there is nothing to keep room for. */
+  .ds-combo:not(:has(.ds-combo__toggle)) {
+    --_end: var(--ds-space-3);
+  }
+
+  /* The clear button's room exists only while it shows. */
+  .ds-combo:has(> .ds-combo__clear:not([hidden])):not(:has(> .ds-combo__input:disabled)) {
+    --_end: calc(var(--ds-space-1) + 2 * var(--_box));
+  }
+
+  .ds-combo:has(> .ds-combo__clear:not([hidden])):not(:has(.ds-combo__toggle, > .ds-combo__input:disabled)) {
+    --_end: calc(var(--ds-space-1) + var(--_box));
+  }
+
+  /* No block padding: the height is the formula's, also where it is less
+     than a line and the field's padding; the text centres by itself. The box
+     is the .ds-combo's, not the one .ds-input computes for itself: field and
+     toggle stay one height. */
+  .ds-combo__input {
+    --_box: inherit;
+    min-height: var(--_box);
+    padding-block: 0;
+    padding-inline-end: var(--_end);
+    text-overflow: ellipsis;
+  }
+
+  /* Several values: the .ds-combo is the field box (form.css's look and
+     hooks), chips and the typing field wrap inside it. */
+  .ds-combo--multi {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-1);
+    min-height: var(--_box);
+    padding-inline: var(--ds-space-1) var(--_end);
+    border: 1px solid var(--ds-input-border, var(--ds-outline));
+    border-radius: calc(var(--ds-input-radius, var(--ds-radius-field)) * var(--ds-shape, 1));
+    background: var(--ds-input-bg, var(--ds-surface));
+    cursor: text;
+    transition:
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* The list is no part of the field: the text cursor stops at it. */
+  .ds-combo--multi > .ds-combo__popup {
+    cursor: default;
+  }
+
+  /* Room around the chips only: empty, the box is the field's height at every
+     step, and the typing field centres in it. */
+  .ds-combo--multi:has(> .ds-chip) {
+    padding-block: calc(var(--ds-space-1) - 1px);
+  }
+
+  /* The typing field is only text in the box: the box shows hover, focus,
+     error, disabled and read-only. No border at all, since forced colours
+     paint a transparent one, and that would be a second box inside the box. */
+  .ds-combo--multi > .ds-combo__input,
+  .ds-combo--multi > .ds-combo__input:focus,
+  .ds-combo--multi > .ds-combo__input:disabled,
+  .ds-combo--multi > .ds-combo__input[readonly],
+  .ds-combo--multi > .ds-combo__input[aria-invalid="true"] {
+    flex: 1 1 8ch;
+    width: auto;
+    min-width: 8ch;
+    min-height: calc(var(--_box) - 2 * var(--ds-space-1));
+    padding-inline: var(--ds-space-2);
+    border: 0;
+    outline: none;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  @media (hover: hover) {
+    .ds-combo--multi:hover:not(:has(> .ds-combo__input:is(:focus, :disabled, [readonly], [aria-invalid="true"]))) {
+      border-color: var(--ds-text);
+    }
+  }
+
+  .ds-combo--multi:has(> .ds-combo__input:focus) {
+    border-color: var(--ds-input-focus-color, var(--ds-primary));
+    box-shadow: inset 0 0 0 1px var(--ds-input-focus-color, var(--ds-primary));
+    transition-duration: 0s;
+  }
+
+  .ds-combo--multi:has(> .ds-combo__input[aria-invalid="true"]) {
+    border-color: var(--ds-error);
+  }
+
+  /* Hovered: darker on the box, as on a single field. */
+  @media (hover: hover) {
+    .ds-combo--multi:hover:has(> .ds-combo__input[aria-invalid="true"]:not(:focus, :disabled, [readonly])) {
+      border-color: var(--ds-on-error-container);
+    }
+  }
+
+  .ds-combo--multi:has(> .ds-combo__input[aria-invalid="true"]:focus) {
+    border-color: var(--ds-error);
+    box-shadow: inset 0 0 0 1px var(--ds-error);
+  }
+
+  .ds-combo--multi:has(> .ds-combo__input:is(:disabled, [readonly])) {
+    border-color: var(--ds-line);
+    background: var(--ds-surface-low);
+  }
+
+  .ds-combo--multi:has(> .ds-combo__input:disabled) {
+    cursor: not-allowed;
+  }
+
+  /* Select-only: a button that reads like the field, value and meta in one
+     row. A field, not an action: no ripple, no press morph (like a select). */
+  /* Its row never widens the field: what does not fit ends in an ellipsis. */
+  .ds-combo--select {
+    min-width: 0;
+  }
+
+  .ds-combo--select .ds-combo__input {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-width: 0;
+    overflow: hidden;
+    text-align: start;
+    cursor: default;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ds-combo__value {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ds-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-combo__input > .ds-combo__meta {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  /* Disabled is one model: the button's ink, not their own. */
+  .ds-combo__input:disabled > :is(.ds-combo__value, .ds-combo__meta) {
+    color: inherit;
+  }
+
+  /* A round target at the field's end, as tall as the field. Pressed it
+     turns squarer and springs back like every pill; the toggle stays out of
+     the tab order (the field opens the list from the keyboard), so it has no
+     ring. The clear button is its twin, one place further in. */
+  .ds-combo__toggle,
+  .ds-combo__clear {
+    --_half: calc(var(--_box) / 2);
+    --_radius: min(calc(min(var(--ds-radius-action), var(--_half)) * var(--ds-shape, 1)), var(--_half));
+    position: absolute;
+    top: 0;
+    inset-inline-end: var(--ds-space-1);
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--_box);
+    height: var(--_box);
+    padding: 0;
+    border: 0;
+    border-radius: var(--_radius);
+    background: transparent;
+    color: var(--ds-text-2);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  .ds-combo__clear {
+    inset-inline-end: calc(var(--ds-space-1) + var(--_box));
+    /* The ring rests one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-combo:not(:has(.ds-combo__toggle)) > .ds-combo__clear {
+    inset-inline-end: var(--ds-space-1);
+  }
+
+  /* Hidden also without .ds-base. */
+  .ds-combo__clear[hidden] {
+    display: none;
+  }
+
+  /* On the box of several values: its top is inside the border. */
+  .ds-combo--multi > :is(.ds-combo__toggle, .ds-combo__clear) {
+    top: -1px;
+  }
+
+  /* State layer in the content colour. */
+  .ds-combo__toggle::before,
+  .ds-combo__clear::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-combo__toggle:hover::before,
+    .ds-combo__clear:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  /* Press-in in --ds-dur-micro (.ds-pressed: js/ripple.js holds it). */
+  .ds-combo__toggle:active::before,
+  .ds-combo__toggle.ds-pressed::before,
+  .ds-combo__clear:active::before,
+  .ds-combo__clear.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-combo__toggle:active:not(:disabled, [aria-disabled="true"], [aria-busy="true"]),
+  .ds-combo__toggle.ds-pressed:not(:disabled, [aria-disabled="true"], [aria-busy="true"]),
+  .ds-combo__clear:active:not(:disabled, [aria-disabled="true"], [aria-busy="true"]),
+  .ds-combo__clear.ds-pressed:not(:disabled, [aria-disabled="true"], [aria-busy="true"]) {
+    border-radius: min(calc(var(--ds-radius-action-pressed) * var(--ds-shape, 1)), var(--_radius));
+    transition: border-radius var(--ds-dur-micro) var(--ds-ease-out);
+  }
+
+  /* With DS.ripple.attach() the ripple brings the press; the flat layer
+     stays at its hover value (ripple.css has the toggle's rule). */
+  :where(.ds-ripples) .ds-combo__clear:where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *)):is(:active, .ds-pressed)::before {
+    opacity: 0;
+  }
+
+  @media (hover: hover) {
+    :where(.ds-ripples) .ds-combo__clear:where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *)):is(:active, .ds-pressed)::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-combo__clear:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-combo__clear:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  /* A disabled field takes them with it: no layer, no pointer. The clear
+     button is in the tab order and has nothing to do, so it goes; hidden, its
+     keys go too. */
+  .ds-combo__input:disabled ~ :is(.ds-combo__toggle, .ds-combo__clear) {
+    color: var(--ds-disabled-ink);
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  .ds-combo__input:disabled ~ .ds-combo__clear {
+    visibility: hidden;
+  }
+
+  /* The chips stand before the field, out of a sibling rule's reach. This is
+     the pointer only: their keys need `disabled`, which the page sets. */
+  .ds-combo--multi:has(> .ds-combo__input:disabled) > .ds-chip {
+    pointer-events: none;
+  }
+
+  /* The chevron turns over with the list (a disclosure rotation, D25):
+     it follows aria-expanded on the field, on the spatial spring. */
+  .ds-combo__toggle svg {
+    transition: rotate var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  .ds-combo__input[aria-expanded="true"] ~ .ds-combo__toggle svg {
+    rotate: 180deg;
+  }
+
+  .ds-combo__popup {
+    position: absolute;
+    top: calc(100% + var(--ds-space-1));
+    inset-inline: 0;
+    z-index: var(--ds-z-popover);
+    /* A column: under a cap (the room on its side) the list scrolls inside
+       it and the status line stays. */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: calc(var(--ds-combo-radius, var(--ds-radius-xs)) * var(--ds-shape, 1));
+    background: var(--ds-surface-popover);
+    box-shadow: var(--ds-elev-popover);
+    /* Invisible; forced colors paint it, so the list keeps an edge. */
+    outline: 1px solid transparent;
+    /* Grows at the field (originFrom() writes the origin); its clip rests
+       --ds-space-6 beyond the box, room for the shadow. */
+    transform-origin: var(--ds-motion-origin, 50% 0%);
+    clip-path: inset(calc(-1 * var(--ds-space-6)));
+  }
+
+  /* Above the field: it is revealed from its bottom edge. */
+  .ds-combo__popup[data-placement="top"] {
+    top: auto;
+    bottom: calc(100% + var(--ds-space-1));
+    transform-origin: var(--ds-motion-origin, 50% 100%);
+  }
+
+  /* Shown by hand (no data-state): the reveal plays once. */
+  .ds-combo__popup:not([data-state]) {
+    animation:
+      ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) backwards,
+      ds-clip-in var(--ds-dur-medium) var(--ds-ease-spatial) backwards;
+  }
+
+  /* Driven by DS.overlay: transitions keyed on data-state, so a list
+     closed mid-way continues from where it is. */
+  .ds-combo__popup[data-state] {
+    animation: none;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-medium) var(--ds-ease-spatial),
+      clip-path var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  /* The exit only fades, in --ds-dur-instant; scale and clip go back to
+     their start once the list is invisible, ready for the next entrance. */
+  .ds-combo__popup[data-state="closed"] {
+    opacity: 0;
+    scale: var(--ds-motion-scale, var(--ds-scale-popup));
+    clip-path: var(--ds-clip-from, inset(0 0 100% 0));
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in-out),
+      scale 0ms var(--ds-ease-in-out) var(--ds-dur-instant),
+      clip-path 0ms var(--ds-ease-in-out) var(--ds-dur-instant);
+  }
+
+  .ds-combo__popup[hidden] {
+    display: none;
+  }
+
+  /* Anchor positioning: in the top layer (popover="manual"), as wide as
+     the field, below it or above it (data-placement="top", the side
+     DS.overlay chose; the margins flip with it), never taller than the
+     room on that side: its position-area is its containing block, so the
+     cap follows the field while a dialog scrolls. The UA box of a popover
+     (inset 0, auto margins, a border, padding, its own colour) goes. */
+  @supports (position-area: block-end) and (width: anchor-size(width)) {
+    .ds-combo__popup[data-anchored] {
+      position: fixed;
+      inset: auto;
+      width: anchor-size(width);
+      height: auto;
+      max-height: calc(100% - 2 * var(--ds-space-1));
+      margin: var(--ds-space-1) 0;
+      padding: 0;
+      border: 0;
+      color: inherit;
+      position-area: block-end span-inline-end;
+      position-try-fallbacks: flip-block;
+    }
+
+    .ds-combo__popup[data-anchored][data-placement="top"] {
+      position-area: block-start span-inline-end;
+    }
+  }
+
+  .ds-combo__list {
+    /* The offset parent of the options (scrolling to the active one). */
+    position: relative;
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 320px;
+    margin: 0;
+    padding: var(--ds-space-2) 0;
+    overflow-y: auto;
+    list-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+    /* The active option, scrolled into view, lands clear of the fades. */
+    scroll-padding-block: var(--ds-scroll-fade, var(--ds-space-8));
+    /* The cut edges fade (scroller.css, on the block axis): a gradient
+       whose ends are the registered numbers times --ds-scroll-fade, over
+       the content; the scrollbar strip at the end (--ds-scrollbar-width)
+       stays opaque. */
+    mask-image:
+      linear-gradient(to bottom, transparent, #000 calc(var(--ds-scroll-edge-start) * var(--ds-scroll-fade, var(--ds-space-8))), #000 calc(100% - var(--ds-scroll-edge-end) * var(--ds-scroll-fade, var(--ds-space-8))), transparent),
+      linear-gradient(#000, #000);
+    mask-size: calc(100% - var(--ds-scrollbar-width, 0px)) 100%, var(--ds-scrollbar-width, 0px) 100%;
+    mask-position: 0 0, 100% 0;
+    mask-repeat: no-repeat;
+    transition:
+      --ds-scroll-edge-start var(--ds-dur-fast) var(--ds-ease-in-out),
+      --ds-scroll-edge-end var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* The fallback: DS.dom.scrollEdges() (attached by DS.overlay while the
+     list is open) says which end has more. Where a scroll timeline drives
+     the numbers, the animation wins over these. */
+  .ds-combo__list[data-ds-overflow-start] {
+    --ds-scroll-edge-start: 1;
+  }
+
+  .ds-combo__list[data-ds-overflow-end] {
+    --ds-scroll-edge-end: 1;
+  }
+
+  /* Scroll-linked: the shorthand first (it resets animation-timeline);
+     one timeline for both animations. */
+  @supports (animation-timeline: scroll()) {
+    .ds-combo__list {
+      animation: ds-scroll-edge-start linear both, ds-scroll-edge-end linear both;
+      animation-timeline: scroll(self block);
+      animation-range: 0 var(--ds-space-8), calc(100% - var(--ds-space-8)) 100%;
+    }
+  }
+
+  /* A group: no list marks, and no box of its own (the options' offset
+     parent stays the list). */
+  .ds-combo__group {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A line between groups, but not above the first one that still shows. */
+  .ds-combo__group:not([hidden]):has(> .ds-combo__option:not([hidden])) ~ .ds-combo__group {
+    margin-block-start: var(--ds-space-2);
+    padding-block-start: var(--ds-space-2);
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  /* Options a filter hid: gone also without .ds-base, and a group with
+     nothing left goes with them. */
+  .ds-combo__option[hidden],
+  .ds-combo__group[hidden],
+  .ds-combo__group:not(:has(> .ds-combo__option:not([hidden]))) {
+    display: none;
+  }
+
+  .ds-combo__heading {
+    display: block;
+    margin: 0;
+    padding: var(--ds-space-2) var(--ds-space-4) var(--ds-space-1);
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    cursor: default;
+  }
+
+  .ds-combo__option {
+    --_h: calc(var(--ds-combo-option-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    position: relative;
+    display: grid;
+    align-content: center;
+    gap: 2px;
+    min-height: max(var(--ds-target-min, 0px), var(--_h));
+    padding: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px) var(--ds-space-4);
+    cursor: pointer;
+  }
+
+  /* Creatable: an icon and the words in the action ink, beside each other. */
+  .ds-combo__option--create {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--ds-space-2);
+    color: var(--ds-primary);
+  }
+
+  /* Cannot be chosen: the disabled ink, and no active layer. */
+  .ds-combo__option[aria-disabled="true"] {
+    color: var(--ds-disabled-ink, var(--ds-text));
+    cursor: default;
+  }
+
+  .ds-combo__option[aria-disabled="true"][data-active]::before {
+    opacity: 0;
+  }
+
+  /* A share on the chosen option keeps a track that shows on the tint. */
+  .ds-combo__option[aria-selected="true"] .ds-progress {
+    --ds-progress-track: var(--ds-surface);
+  }
+
+  /* State layer of the active entry, as in the drawer: it fades in over
+     --ds-dur-micro and goes at once, so a held arrow key leaves no trail
+     (keyboard and pointer share data-active; no separate hover layer). */
+  .ds-combo__option::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--ds-text);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-micro) var(--ds-ease-in-out);
+  }
+
+  .ds-combo__option:not([data-active])::before {
+    transition-duration: 0ms;
+  }
+
+  .ds-combo__option[data-active]::before {
+    opacity: var(--ds-state-hover);
+  }
+
+  .ds-combo__option[aria-selected="true"] {
+    background: var(--ds-accent);
+  }
+
+  /* The type of the size (a role carries its own weight), at the weight
+     that says "chosen": regular here, the label's below. */
+  .ds-combo__name {
+    position: relative;
+    overflow: hidden;
+    color: var(--ds-text);
+    font: var(--ds-size-font, var(--ds-font-body));
+    font-weight: var(--ds-weight-regular);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-combo__option--create .ds-combo__name {
+    color: inherit;
+  }
+
+  .ds-combo__option[aria-selected="true"] .ds-combo__name {
+    color: var(--ds-on-accent);
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-combo__meta {
+    position: relative;
+    overflow: hidden;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* A longer line under the name: it wraps, where the meta stays on one. */
+  .ds-combo__description {
+    position: relative;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  /* The letters the filter matched (DS.combobox): weight and a line, not
+     colour. */
+  .ds-combo__match {
+    background: transparent;
+    color: inherit;
+    font-weight: var(--ds-weight-label);
+    text-decoration: underline;
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+    text-underline-offset: var(--ds-link-underline-offset);
+  }
+
+  .ds-combo__option[aria-selected="true"] :is(.ds-combo__meta, .ds-combo__description) {
+    color: var(--ds-on-accent);
+  }
+
+  /* After the chosen ink: an option both chosen and blocked reads as blocked,
+     and the tint and the weight still say that it is the choice. */
+  .ds-combo__option[aria-disabled="true"] :is(.ds-combo__name, .ds-combo__meta, .ds-combo__description) {
+    color: inherit;
+  }
+
+  /* A row: the count or the words, and a spinner while a search runs. */
+  .ds-combo__status {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin: 0;
+    padding: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px) var(--ds-space-4);
+    border-top: 1px solid var(--ds-line);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-combo__list[hidden] + .ds-combo__status {
+    border-top: 0;
+  }
+
+  @media (forced-colors: active) {
+    .ds-combo__option[data-active] {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+
+    /* The chosen option in the system's selection colours (the tint is
+       gone); name and meta follow it. */
+    .ds-combo__option[aria-selected="true"] {
+      forced-color-adjust: none;
+      background: SelectedItem;
+      color: SelectedItemText;
+    }
+
+    .ds-combo__option[aria-selected="true"] .ds-combo__name,
+    .ds-combo__option[aria-selected="true"] .ds-combo__meta,
+    .ds-combo__option[aria-selected="true"] .ds-combo__description {
+      color: inherit;
+    }
+
+    /* The active option on the chosen one: a ring of the text colour
+       inside the fill (Highlight would vanish on SelectedItem). */
+    .ds-combo__option[aria-selected="true"][data-active] {
+      outline-color: CanvasText;
+    }
+
+    /* Blocked is one system colour (D8). */
+    .ds-combo__option[aria-disabled="true"] {
+      color: GrayText;
+    }
+
+    /* Chosen and blocked: GrayText has no contrast on SelectedItem, so no
+       fill, and an edge says that it is the choice. */
+    .ds-combo__option[aria-selected="true"][aria-disabled="true"] {
+      background: Canvas;
+      outline: 1px solid GrayText;
+      outline-offset: -1px;
+    }
+
+    /* The box of several values keeps its edge. Its inset ring is a shadow,
+       which forced colours drop, and the field inside has no outline: the box
+       takes the outline of a focused field. */
+    .ds-combo--multi:has(> .ds-combo__input:focus) {
+      border-color: Highlight;
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+
+    .ds-combo--multi:has(> .ds-combo__input:disabled),
+    .ds-combo__input:disabled ~ :is(.ds-combo__toggle, .ds-combo__clear) {
+      border-color: GrayText;
+      color: GrayText;
+    }
+  }
+
+  @media print {
+    .ds-combo__popup {
+      display: none;
+    }
+  }
+}

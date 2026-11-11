@@ -1,0 +1,2402 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Forms (Material 3, dense): 40px outlined fields with the label above,
+ * filled fields and a filled toolbar search, checkboxes, radio and checkbox
+ * cards, fieldsets and form sections.
+ * Focus shows as a 2px ring drawn inside the field (border plus inset
+ * shadow), so nothing shifts; it appears at once and never snaps: typing
+ * needs to see the field at once. Checkboxes and radios are drawn on the
+ * native input (appearance: none, no wrapper; the section below) with a
+ * halo for hover, press and focus; they and radio cards take the outline
+ * ring of every other control, solid from the first frame and snapping
+ * from offset + width to the offset (outline-offset, --ds-dur-fast). A
+ * radio card's input has no halo: the card's own layer is its hover,
+ * press and (with the ring, at once) focus layer (--ds-state-focus).
+ * Chips and the switch have files of their own.
+ *
+ *   <label class="ds-check"><input type="checkbox" name="managed"> Managed</label>
+ *   <input class="ds-checkbox" type="checkbox" aria-label="Select all">   (a checkbox anywhere)
+ *   <input class="ds-radio-input" type="radio" name="plan" aria-label="Standard">
+ *   <label class="ds-radio"><input type="radio" name="plan"><span><strong>Standard</strong><small>...</small></span></label>
+ *   <label class="ds-check-card"><input class="ds-checkbox" type="checkbox" name="backup"><span><strong>Backups</strong><small>...</small></span></label>
+ *
+ *   <div class="ds-radios ds-radios--tiles" role="radiogroup" aria-label="Kind">   (radio tiles)
+ *     <label class="ds-radio"><input type="radio" name="kind"><span class="ds-radio__icon" aria-hidden="true">(icon)</span>
+ *       <span><strong>Laptop</strong><small>...</small></span><span class="ds-radio__mark" aria-hidden="true">(check)</span></label>
+ *   <fieldset class="ds-field"><legend class="ds-field__label">Status</legend>
+ *     <div class="ds-check-list"> <label class="ds-check"><input type="checkbox"><span>Active</span><span class="ds-check__count">47</span></label> ...
+ *   <div class="ds-check-group"> <label class="ds-check">(parent)</label>
+ *     <div class="ds-check-group__children" role="group" aria-label="Sites"> <label class="ds-check">...</label> ...
+ *
+ * Hooks: --ds-check-size (18px box), --ds-check-target (40px halo),
+ * --ds-check-height (40px row), --ds-check-list-max-height (264px), --ds-radio-padding (16px),
+ * --ds-form-actions-bleed (the inline padding of the container a sticky
+ * action bar runs through; default --ds-content-pad-x, in a .ds-card
+ * --ds-card-pad).
+ *
+ *   <form class="ds-form">         (--rows: editing in rows, hairlines between the fields)
+ *     <div class="ds-form-grid">  (3 columns, the first wider; --2: two; --3: three equal)
+ *       <div class="ds-field">     (--changed: a dot after the label; --outlined, the default; --filled:
+ *                                    the tonal box; --inset: the label inside the tonal box; --warning,
+ *                                    --success: the state of the control, with a hint that says so)
+ *         <label class="ds-field__label" for="name">Name <span class="ds-field__optional">(optional)</span></label>
+ *         <input class="ds-input" id="name" aria-describedby="name-hint">
+ *         <small class="ds-field__hint" id="name-hint">Shown on the label.</small>
+ *           (--error, --warning, --success: an icon first, the message fades in)
+ *       <div class="ds-field">
+ *         <label class="ds-field__label" for="room">Room <span class="ds-field__changed ds-sr">(changed)</span></label>
+ *         <div class="ds-field__row"> <input class="ds-input" id="room"> <button class="ds-btn ...">...</button>   (--top: beside a textarea)
+ *         <div class="ds-input-group">   (--filled)
+ *           <span class="ds-input-group__leading" aria-hidden="true">(icon)</span>
+ *           <span class="ds-input-group__prefix" aria-hidden="true">https://</span>
+ *           <input class="ds-input" id="quota">
+ *           <span class="ds-input-group__suffix" aria-hidden="true">GB</span>
+ *           <span class="ds-input-group__trailing">(icon, tag or a button)</span>
+ *         <div class="ds-field__foot"> <small class="ds-field__hint">...</small> <span class="ds-field__counter" aria-hidden="true">12 / 80</span>   (--over: past the limit)
+ *       <div class="ds-field" role="group" aria-labelledby="serial-l">
+ *         <span class="ds-field__label" id="serial-l">Serial</span> <span class="ds-field__value">SN-0042</span>
+ *     <div class="ds-form-actions"> <button class="ds-btn ds-btn--filled">Save</button> ...   (--sticky: stays at the bottom on phones)
+ *
+ *   <fieldset class="ds-fieldset">   (--outlined: inside a frame)
+ *     <legend class="ds-fieldset__legend">Address</legend> <p class="ds-fieldset__hint">...</p> (fields)
+ *   <section class="ds-form-section" aria-labelledby="s">   (--columns: the head beside the body, for settings)
+ *     <div class="ds-form-section__head"><h3 class="ds-form-section__title" id="s">Alerts</h3><p class="ds-form-section__text">...</p></div>
+ *     <div class="ds-form-section__body">(fields)</div>
+ *
+ *   <label class="ds-field__label" for="a">Name <span class="ds-field__required" aria-hidden="true">*</span></label>  (with required on the input)
+ *   <div class="ds-search">(search icon)<input class="ds-input" type="search" aria-keyshortcuts="/" placeholder="Search">
+ *     <kbd class="ds-kbd ds-search__key" aria-hidden="true">/</kbd></div>
+ *   <textarea class="ds-input ds-input--grow" rows="1"></textarea>   (grows with its text)
+ *   <select class="ds-input ds-select"><button><selectedcontent></selectedcontent></button>
+ *     <option value="laptop">(icon)Laptop</option> ...</select>   (a customizable select, progressive)
+ *   <textarea class="ds-input" maxlength="200" data-ds-counter></textarea>   (with a .ds-field__counter: DS.form counts)
+ *
+ * Field hooks: --ds-input-height (40px), --ds-input-padding-x (12px),
+ * --ds-input-bg, --ds-input-border, --ds-input-radius,
+ * --ds-input-focus-color (the ring and the label tint), --ds-input-font,
+ * --ds-input-weight, --ds-input-grow-max (50vh), --ds-field-error-color,
+ * --ds-field-warning-color, --ds-field-success-color,
+ * --ds-field-changed-color, --ds-form-rows-control-max (480px). The
+ * composer (.ds-composer) has a folder of its own. The computed
+ * values (--_h, --_box, --_radius, --_px, --_py and the like) are private:
+ * never set them.
+ *
+ * Options (src/core/options.css, docs/options.md), on the control or any
+ * ancestor; each is computed here, in the control's own rule:
+ *   size      .ds-xs ... .ds-xl: 8px of height per step (24, 32, 40, 48,
+ *             56px for a field; a .ds-check row and the halo too), 4px of
+ *             side padding per step, 2px of checkbox and radio per step and
+ *             the text of the size's role at the regular weight. Labels and
+ *             hints keep their roles.
+ *   density   .ds-density-*: 4px of height per step (fields, input groups,
+ *             the filled field, .ds-check rows, the halo); 2px of padding
+ *             per step on radio and checkbox cards. Not the side padding.
+ *   shape     .ds-shape-*: multiplies the radius of fields, the search pill,
+ *             checkboxes, the check list and the cards, and
+ *             the press morph of a card. A radio stays round.
+ *   touch     .ds-touch: at least --ds-touch-target (48px) high, and field
+ *             text at --ds-font-input; touch wins over size and density.
+ * There is no tone here: a field shows its state through aria-invalid,
+ * --warning and --success, each with a hint in words.
+ *
+ * Field text is --ds-font-body and switches to --ds-font-input (16px) on
+ * screens up to 600px at every size, where iOS would zoom into smaller
+ * text. A theme that wants one size everywhere sets --ds-input-font.
+ *
+ * Grids narrow by container queries on "ds-content" (and by the window
+ * width everywhere, also in sheets and dialogs).
+ *
+ * The label takes the ring's colour with the ring (at once: primary, or the
+ * state's on a warning or success field) and the error ink on an invalid
+ * field; an error, warning or success message fades
+ * in when it appears. A changed field's dot fades in on --ds-dur-fast and out
+ * on --ds-dur-instant (the word "(changed)" joins the label's name only
+ * while it shows). The search key fades back on --ds-dur-fast and goes on
+ * --ds-dur-instant once the field has the focus or a value. A radio
+ * tile's check pops from --ds-scale-small on the spring.
+ *
+ * aria-disabled="true" on a checkbox or radio looks like disabled (no
+ * hover or press halo, the disabled ink; a radio card with a blocked input
+ * takes the quiet look of .ds-radio--disabled) but keeps its focus halo
+ * and its place in the tab order; DS.motion's action guard blocks its
+ * click.
+ *
+ * Forced colours: focused fields and input groups show a
+ * Highlight outline (their inset ring is a shadow, which forced colours
+ * drop); the filled field keeps a transparent border,
+ * their edge there; a warning or success field keeps the system's edge (its
+ * word says which); a disabled field or group, a disabled fieldset's legend
+ * and a blocked card's title are GrayText; a selected card's edge and input
+ * are Highlight. Print: a
+ * check list shows every row, sticky actions stay in the flow, drawn
+ * checkboxes and radios keep their colours (print-color-adjust).
+ *
+ * Progressive:
+ * - text-wrap (hints and radio card descriptions avoid a lone last word):
+ *   without it they wrap as usual.
+ * - interpolate-size (the room of an error, warning or success message that
+ *   appears while focus is in its form or field opens from height 0 on
+ *   --ds-ease-out, never on load): without it the message only fades in.
+ * - scrollbar-color (a thin, quiet scrollbar in .ds-check-list): without it
+ *   the platform scrollbar shows.
+ * - field-sizing (.ds-input--grow grows with its text): without it
+ *   DS.dom.autosize(textarea) sets the height (DS.form does it for every
+ *   textarea.ds-input--grow), and without a script the field keeps its
+ *   height and scrolls.
+ * - appearance: base-select (.ds-select: the list as the system's own
+ *   picker, rich options, <selectedcontent>): without it the styled
+ *   native select with the platform's list.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.form {
+  /* A dialog's box that is the form (<form class="ds-dialog__box ds-form">)
+     keeps the dialog's layout: dialog.css comes earlier, so the base rule
+     leaves it out by selector. */
+  .ds-form:where(:not(.ds-dialog__box)) {
+    display: grid;
+    gap: var(--ds-space-5);
+  }
+
+  /* Editing in rows keeps its own rhythm (.ds-form--rows, below). */
+  .ds-card.ds-form:not(.ds-form--rows) {
+    gap: var(--ds-space-4);
+  }
+
+  .ds-card.ds-form > * + * {
+    margin-top: 0;
+  }
+
+  .ds-form-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: var(--ds-space-4);
+  }
+
+  .ds-form-grid--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ds-form-grid--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* By the content area's width (page.css): next to the persistent drawer
+     three fields per row would put their labels on two lines. Side sheets
+     and dialogs lie outside that container: they follow the window. */
+  @container ds-content (max-width: 760px) {
+    .ds-form-grid,
+    .ds-form-grid--2,
+    .ds-form-grid--3 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (max-width: 760px) {
+    .ds-form-grid,
+    .ds-form-grid--2,
+    .ds-form-grid--3 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .ds-form-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2) var(--ds-space-3);
+    flex-wrap: wrap;
+  }
+
+  /* On a phone the actions of a long form stay at the bottom of its
+     scroller: a surface bar with a static hairline that bleeds to the edges
+     of its page (or card) and keeps clear of the home indicator. In a
+     padded container of the page's own (a project card, a sheet section)
+     the page names that padding in --ds-form-actions-bleed. */
+  @media (max-width: 600px) {
+    .ds-form-actions--sticky {
+      position: sticky;
+      inset-block-end: 0;
+      z-index: var(--ds-z-sticky);
+      margin-inline: calc(-1 * var(--ds-form-actions-bleed, var(--ds-content-pad-x, 0px)));
+      padding-block: var(--ds-space-3) calc(var(--ds-space-3) + env(safe-area-inset-bottom));
+      padding-inline: var(--ds-form-actions-bleed, var(--ds-content-pad-x, 0px));
+      border-block-start: 1px solid var(--ds-line);
+      background: var(--ds-surface);
+    }
+
+    .ds-card .ds-form-actions--sticky {
+      margin-inline: calc(-1 * var(--ds-form-actions-bleed, var(--ds-card-pad)));
+      padding-inline: var(--ds-form-actions-bleed, var(--ds-card-pad));
+    }
+  }
+
+  /*
+   * Editing in rows (a record's fields one under the other): the label
+   * stays above its control (never a label column), the fields sit on
+   * hairlines with row padding instead of the form's gap, and controls stop
+   * at a readable width.
+   */
+  .ds-form--rows {
+    gap: 0;
+  }
+
+  .ds-form--rows > .ds-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .ds-form--rows > .ds-field,
+  .ds-form--rows > .ds-form-grid > .ds-field {
+    padding-block: var(--ds-space-3);
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  .ds-form--rows > .ds-field:first-child,
+  .ds-form--rows > .ds-form-grid:first-child > .ds-field:first-child {
+    border-block-start: 0;
+  }
+
+  .ds-form--rows .ds-field > :is(.ds-input, .ds-input-group, .ds-field__row) {
+    max-width: var(--ds-form-rows-control-max, 480px);
+  }
+
+  .ds-form--rows > .ds-form-actions {
+    margin-block-start: var(--ds-space-4);
+  }
+
+  /* Fields next to each other that wrap (filters, a lookup). */
+  .ds-inline-form,
+  .ds-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--ds-space-3);
+  }
+
+  .ds-inline-form .ds-field {
+    width: min(100%, 220px);
+  }
+
+  /* The height of its fields, resolved here: a size on the button alone must
+     not change what the button centres on. */
+  .ds-inline-form {
+    --_field: max(var(--ds-target-min, 0px), calc(var(--ds-input-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+  }
+
+  /* A button of another height than the field: centred on it, while flex-end
+     keeps both under the label. */
+  .ds-inline-form > .ds-btn {
+    margin-bottom: calc((var(--_field) - max(var(--ds-target-min, 0px), calc(var(--ds-btn-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px))) / 2);
+  }
+
+  .ds-filters .ds-field:not(.ds-field--grow) {
+    width: 160px;
+  }
+
+  @media (max-width: 720px) {
+    .ds-filters .ds-field:not(.ds-field--grow) {
+      width: calc(50% - var(--ds-space-2));
+    }
+
+    /* Two dates side by side at 320px: less padding, so the value is not
+       cut off early. Only where fields stand side by side: a date alone in
+       its row keeps the field's padding. */
+    :is(.ds-filters, .ds-inline-form, .ds-form-grid--2, .ds-form-grid--3) .ds-input:is([type="date"], [type="datetime-local"], [type="month"], [type="week"], [type="time"]) {
+      padding-inline: var(--ds-space-2);
+    }
+  }
+
+  /* A toolbar of filters: the fields in one row, the chips in the next. */
+  .ds-toolbar {
+    display: grid;
+    gap: var(--ds-space-3);
+  }
+
+  /* A toolbar with a table's selection bar in a .ds-swap slot (table.css):
+     the slot keeps the bar's height, so the table stays where it is while
+     a shorter toolbar stands in it. The bar's own least height, or its icon
+     buttons, which step with size only: so the crossing never moves the
+     table. */
+  .ds-toolbar > .ds-swap {
+    min-height: max(var(--ds-target-min, 0px), calc(var(--ds-selection-bar-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px), calc(var(--ds-btn-icon-size, 40px) + var(--ds-size-step, 0) * 8px));
+  }
+
+  /* An action bar above a list: search, buttons and a count in one row that
+     wraps; the search takes the room that is left, up to a readable width. */
+  .ds-action-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2) var(--ds-space-3);
+    min-width: 0;
+  }
+
+  .ds-action-bar > .ds-search {
+    flex: 1 1 240px;
+    max-width: 420px;
+  }
+
+  /* A narrow page: the search takes a row of its own, the buttons and the
+     count follow together (as .ds-filters does at 980px). */
+  @container ds-content (max-width: 600px) {
+    .ds-action-bar > .ds-search {
+      flex-basis: 100%;
+      max-width: none;
+    }
+  }
+
+  /* ── Field: label, control, hint ──────────────── */
+
+  .ds-field {
+    display: grid;
+    gap: var(--ds-space-1);
+    align-content: start;
+    min-width: 0;
+  }
+
+  .ds-field--full {
+    grid-column: 1 / -1;
+  }
+
+  /* A state that is no error: the control's border and ring take the state's
+     colour (--_field-state, read by the controls below), and a hint in words
+     says what it means, so it never shows by colour alone. */
+  .ds-field--warning {
+    --_field-state: var(--ds-warning);
+  }
+
+  .ds-field--success {
+    --_field-state: var(--ds-success);
+  }
+
+  .ds-field--grow {
+    flex: 1 1 240px;
+  }
+
+  /* The search keeps room for a placeholder of about 224px between the icon
+     and the end padding. When the row cannot hold that and the 160px
+     filters, it takes a row of its own and the filters follow together,
+     instead of a lone field wrapping under them. */
+  .ds-filters .ds-field--grow {
+    flex-basis: calc(224px + var(--ds-space-4) * 2 + 20px + var(--ds-space-3) + 2px);
+  }
+
+  @container ds-content (max-width: 980px) {
+    .ds-filters .ds-field--grow {
+      flex-basis: 100%;
+    }
+  }
+
+  .ds-field__label {
+    color: var(--ds-text-2);
+    font: var(--ds-font-caption);
+    transition: color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* The label takes the ring's colour with the ring (at once) and fades
+     back on blur; an invalid field keeps its label in the error ink, also
+     while focused. A fieldset tints its legend while focus is inside. */
+  .ds-field:focus-within > .ds-field__label {
+    color: var(--_field-state, var(--ds-input-focus-color, var(--ds-primary)));
+    transition-duration: 0s;
+  }
+
+  /* Also through an input group, a field row or a combobox; bounded to
+     them, so an invalid field never reaches a field it sits in. */
+  .ds-field:has(> [aria-invalid="true"], > :is(.ds-input-group, .ds-field__row, .ds-combo) > [aria-invalid="true"]) > .ds-field__label {
+    color: var(--ds-on-error-container);
+  }
+
+  /* A group of checkboxes or radio cards is a fieldset whose legend is the
+     label: without the browser's frame and indent. */
+  fieldset.ds-field {
+    margin-inline: 0;
+    margin-block-end: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  /* Its top margin too, but under a card's subtitle the card's own spacing
+     (card.css, an earlier sublayer) stays: the selector leaves it out. */
+  fieldset.ds-field:where(:not(.ds-card__subtitle + *)) {
+    margin-block-start: 0;
+  }
+
+  /* A layered reset (Bootstrap's reboot) floats a legend, widens it and
+     gives it a margin; ds sets all three, so a group label sits as close to
+     its first option as a field's label to its field. */
+  legend.ds-field__label {
+    float: none;
+    width: auto;
+    margin: 0;
+    padding: 0;
+  }
+
+  .ds-field__hint {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    text-wrap: pretty;
+  }
+
+  .ds-field__hint:empty {
+    display: none;
+  }
+
+  /* A hint led by an icon (a live check, a note): the icon beside the
+     first line, the text wrapping beside it. */
+  .ds-field__hint:has(> svg:first-child) {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-1);
+  }
+
+  .ds-field__hint > svg {
+    flex-shrink: 0;
+    color: var(--ds-text-2);
+  }
+
+  /* Markers in the label: "(optional)" on the few optional fields (the
+     recommended way), or an asterisk where most fields are optional; the
+     input carries required, so the asterisk is decoration. */
+  .ds-field__optional {
+    color: var(--ds-text-2);
+    font-weight: var(--ds-weight-regular);
+  }
+
+  .ds-field__required {
+    color: var(--ds-on-error-container);
+  }
+
+  /* A hint and a counter in one row under the field: the counter at the
+     end, in tabular figures (aria-hidden; the page announces near the
+     limit). */
+  .ds-field__foot {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-1) var(--ds-space-3);
+    min-width: 0;
+  }
+
+  .ds-field__foot > .ds-field__hint {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ds-field__counter {
+    flex: none;
+    margin-inline-start: auto;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Past the limit: the figures say it, the error ink repeats it. */
+  .ds-field__counter--over {
+    color: var(--ds-field-error-color, var(--ds-on-error-container));
+  }
+
+  /*
+   * A changed field: a dot after its label and the word "(changed)" for
+   * screen readers (.ds-field__changed.ds-sr, shown only while the field
+   * carries --changed). The dot always takes its room, so the label never
+   * shifts: only its opacity changes, in on --ds-dur-fast and out on
+   * --ds-dur-instant.
+   */
+  .ds-field__label::after {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-inline-start: var(--ds-space-1);
+    vertical-align: middle;
+    border-radius: 50%;
+    background: var(--ds-field-changed-color, var(--ds-primary));
+    opacity: 0;
+    transition: opacity var(--ds-dur-instant) var(--ds-ease-in);
+  }
+
+  .ds-field--changed > .ds-field__label::after {
+    opacity: 1;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-field:not(.ds-field--changed) .ds-field__changed {
+    display: none;
+  }
+
+  /* A value that is read, not edited (set by another system): as tall as a
+     field's text row, without a box that would look like a field. A value
+     that must be focusable or submitted is an <input class="ds-input"
+     readonly> instead. */
+  .ds-field__value {
+    margin: 0;
+    padding-block: var(--ds-space-2);
+    color: var(--ds-text);
+    font: var(--ds-font-body);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+
+  /* A field and its buttons in one row (copy, reveal, look up): the field
+     takes the room, the buttons keep their size. --top aligns them to the
+     start, beside a textarea. */
+  .ds-field__row {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-field__row > :first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ds-field__row > .ds-btn {
+    flex: none;
+  }
+
+  .ds-field__row--top {
+    align-items: flex-start;
+  }
+
+  /* ── Text input, select, textarea ─────────────── */
+
+  .ds-input {
+    /* The options, computed here (docs/options.md). The height: the hook
+       (size md, comfortable) plus 8px per size step and 4px per density
+       step; never below the touch minimum (.ds-touch). */
+    --_h: calc(var(--ds-input-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    /* The corners times the shape, at most half the box. */
+    --_radius: min(calc(var(--ds-input-radius, var(--ds-radius-field)) * var(--ds-shape, 1)), calc(var(--_box) / 2));
+    /* Side padding: 4px per size step; density leaves it alone. */
+    --_px: calc(var(--ds-input-padding-x, var(--ds-space-3)) + var(--ds-size-step, 0) * 4px);
+    /* Around one line, leaving 2px of the box free for a native control
+       taller than its line (a date field). */
+    --_py: max(0px, calc((var(--_box) - 1lh) / 2 - 2px));
+    width: 100%;
+    min-height: var(--_box);
+    margin: 0;
+    padding: var(--_py) var(--_px);
+    border: 1px solid var(--_field-state, var(--ds-input-border, var(--ds-outline)));
+    border-radius: var(--_radius);
+    background: var(--ds-input-bg, var(--ds-surface));
+    color: var(--ds-text);
+    /* The text of the size's role, always at the regular weight (the roles
+       of the sizes are written for labels). */
+    font: var(--ds-input-font, var(--ds-size-font, var(--ds-font-body)));
+    font-weight: var(--ds-input-weight, var(--ds-weight-regular));
+    /* On blur border, inset shadow and text leave together, so the ring
+       never fades as half a ring (a primary border without its inner
+       pixel); focus sets 0s below, so the ring itself appears at once. */
+    transition:
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* The default look, named explicitly (one control in a .ds-field--filled). */
+  .ds-input--outlined,
+  :where(.ds-field--outlined) > .ds-input {
+    border-color: var(--_field-state, var(--ds-input-border, var(--ds-outline)));
+    background-color: var(--ds-input-bg, var(--ds-surface));
+  }
+
+  /* A multi-line field: about three lines tall, taller only by hand. */
+  textarea.ds-input {
+    display: block;
+    min-height: calc(88px + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    resize: vertical;
+  }
+
+  /* A field that grows with its text (a message, a note): one row at
+     first, up to --ds-input-grow-max, then it scrolls. Where field-sizing
+     is missing, DS.dom.autosize(textarea) sets the height (never
+     animated). */
+  textarea.ds-input--grow {
+    min-height: var(--_box);
+    max-height: var(--ds-input-grow-max, 50vh);
+    overflow-y: auto;
+    resize: none;
+  }
+
+  @supports (field-sizing: content) {
+    textarea.ds-input--grow {
+      field-sizing: content;
+    }
+  }
+
+  /* 16px on phones: iOS Safari zooms the page into any smaller field. */
+  /* The padding keeps the height's whole room around the taller line: 42px at
+     md on a phone, as in 2.x, so a finger gets a little more than the desktop
+     field. */
+  @media (max-width: 600px) {
+    .ds-input {
+      --_py: max(0px, calc((var(--_h) - 1lh) / 2));
+      font: var(--ds-input-font, var(--ds-font-input));
+      font-weight: var(--ds-input-weight, var(--ds-weight-regular));
+    }
+  }
+
+  /* Zero specificity beyond .ds-input itself: the filled toolbar fields
+     (search pill, selects, dates) keep their own hover without an outline. */
+  @media (hover: hover) {
+    .ds-input:where(:hover:not(:focus-within, :disabled, [readonly], [aria-readonly="true"], [aria-invalid="true"])) {
+      border-color: var(--_field-state, var(--ds-text));
+    }
+  }
+
+  .ds-input::placeholder {
+    color: var(--ds-text-3);
+    opacity: 1;
+  }
+
+  /* The ring is the field's own 1px border plus 1px inside: 2px, no shift.
+     It appears at once: the hover fade of the border must not carry over.
+     In Chromium the calendar button of a date field is a tab stop of its
+     own inside the field: the field is not :focus then, but keeps the ring. */
+  .ds-input:focus,
+  .ds-input[type="date"]:focus-within,
+  .ds-input:is([type="datetime-local"], [type="month"], [type="week"], [type="time"]):focus-within {
+    outline: none;
+    border-color: var(--_field-state, var(--ds-input-focus-color, var(--ds-primary)));
+    box-shadow: inset 0 0 0 1px var(--_field-state, var(--ds-input-focus-color, var(--ds-primary)));
+    transition-duration: 0s;
+  }
+
+  /* Error: the 1px border in the error colour at rest and the 2px ring when
+     focused (Material 3), so the focused field still stands out; the
+     message sits under the field (.ds-field__hint--error), never the colour
+     alone. */
+  .ds-input[aria-invalid="true"] {
+    border-color: var(--ds-error);
+    box-shadow: none;
+  }
+
+  @media (hover: hover) {
+    .ds-input[aria-invalid="true"]:hover:not(:focus-within) {
+      border-color: var(--ds-on-error-container);
+    }
+  }
+
+  .ds-input[aria-invalid="true"]:focus,
+  .ds-input[aria-invalid="true"]:focus-within {
+    border-color: var(--ds-error);
+    box-shadow: inset 0 0 0 1px var(--ds-error);
+  }
+
+  /* The message fades in when it appears (inserted, or filled from
+     :empty), not when its text changes; it never lifts. Where height can
+     animate to auto its room opens too (below); removal is instant. A
+     confirmation (--success: "Available") enters the same way; a hint that
+     turns from error to success keeps its animation (the same name), so
+     only its text and icon change. The error keeps its own layout, also
+     without an icon and outside a .ds-field. */
+  .ds-field__hint--error {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-1);
+    color: var(--ds-field-error-color, var(--ds-on-error-container));
+  }
+
+  .ds-field__hint--warning {
+    color: var(--ds-field-warning-color, var(--ds-on-warning-container));
+  }
+
+  .ds-field__hint--success {
+    color: var(--ds-field-success-color, var(--ds-text-2));
+  }
+
+  .ds-field__hint--error,
+  .ds-field__hint--warning,
+  .ds-field__hint--success {
+    animation: ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) backwards;
+  }
+
+  .ds-field__hint--warning > svg {
+    color: var(--ds-warning);
+  }
+
+  .ds-field__hint--success > svg {
+    color: var(--ds-success);
+  }
+
+  /* The room opens from 0 to the message's height on a curve that never
+     overshoots (a layout size, D29), but only for a message that appears
+     while someone works in the form (focus in its form or field: validation
+     on blur or on submit). @starting-style also matches the first render,
+     so a message already in the markup would push the page down on load;
+     without focus it only fades in. */
+  @supports (interpolate-size: allow-keywords) {
+    .ds-field__hint--error {
+      interpolate-size: allow-keywords;
+      overflow: clip;
+      transition: height var(--ds-dur-base) var(--ds-ease-out);
+    }
+
+    .ds-field__hint--warning {
+      interpolate-size: allow-keywords;
+      overflow: clip;
+      transition: height var(--ds-dur-base) var(--ds-ease-out);
+    }
+
+    .ds-field__hint--success {
+      interpolate-size: allow-keywords;
+      overflow: clip;
+      transition: height var(--ds-dur-base) var(--ds-ease-out);
+    }
+
+    @starting-style {
+      :where(form, .ds-form, .ds-field):focus-within .ds-field__hint--error,
+      :where(form, .ds-form, .ds-field):focus-within .ds-field__hint--warning,
+      :where(form, .ds-form, .ds-field):focus-within .ds-field__hint--success {
+        height: 0;
+      }
+    }
+  }
+
+  .ds-field__hint--error > svg {
+    flex-shrink: 0;
+    color: var(--ds-error);
+  }
+
+  /* Under an inline form the message follows the row closely. */
+  .ds-card > .ds-inline-form + .ds-field__hint--error {
+    margin-top: var(--ds-space-1);
+  }
+
+  /* Disabled and read-only: the quiet surface and the quieter text. A select
+     has no readonly: aria-readonly="true" gives it the look, and the page
+     keeps its value. A read-only field stays in the tab order, so its border
+     gives way to the ring while it has the focus (:where() keeps the weight). */
+  .ds-input:disabled,
+  .ds-input:is([readonly], [aria-readonly="true"]) {
+    background: var(--ds-surface-low);
+    color: var(--ds-text-2);
+  }
+
+  .ds-input:disabled,
+  .ds-input:is([readonly], [aria-readonly="true"]):where(:not(:focus-within)) {
+    border-color: var(--ds-line);
+  }
+
+  .ds-input:disabled {
+    cursor: not-allowed;
+  }
+
+  .ds-input:disabled::placeholder {
+    color: var(--ds-text-2);
+  }
+
+  /*
+   * Select: the native control without its arrow, and M3's drop-down triangle
+   * drawn by two gradients in the quieter text colour (no image file). A
+   * field with suggestions (datalist) shows the same triangle at
+   * rest; Chromium's own arrow, which only appears on hover, stays on top of
+   * it invisibly, so a click there still opens the list.
+   */
+  /* Physical on purpose (D9): the arrow's background-position is
+     physical, so its padding and the invisible picker over it stay on the
+     right with it. */
+  select.ds-input,
+  input.ds-input[list] {
+    padding-right: calc(var(--_px) + var(--ds-space-5));
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--ds-text-2) 50%),
+      linear-gradient(-45deg, transparent 50%, var(--ds-text-2) 50%);
+    background-repeat: no-repeat;
+    background-position:
+      right calc(var(--_px) + 5px) top 50%,
+      right var(--_px) top 50%;
+    background-size: 5px 5px;
+  }
+
+  select.ds-input {
+    appearance: none;
+    cursor: pointer;
+  }
+
+  /* Laid over the triangle (in the field's right padding), so a click on
+     the triangle opens the list. */
+  input.ds-input[list]::-webkit-calendar-picker-indicator {
+    width: var(--ds-space-8);
+    margin: 0 calc(-1 * var(--ds-space-8)) 0 0;
+    padding: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  /* Date fields: the native picker button, drawn as the line set's calendar
+     in the quieter text colour (like the select's triangle and the search
+     icon) instead of Chromium's black filled glyph. Without a minimum width
+     of its own, the field fits its filter column (two per row at 320px).
+     The other date and time types take the same button (a time field the
+     line set's clock). */
+  .ds-input[type="date"],
+  .ds-input:is([type="datetime-local"], [type="month"], [type="week"], [type="time"]) {
+    min-width: 0;
+  }
+
+  .ds-input[type="date"]::-webkit-calendar-picker-indicator,
+  .ds-input:is([type="datetime-local"], [type="month"], [type="week"], [type="time"])::-webkit-calendar-picker-indicator {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: var(--ds-text-2);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4'/%3E%3Cpath d='M16 2v4'/%3E%3Crect width='18' height='18' x='3' y='4' rx='2'/%3E%3Cpath d='M3 10h18'/%3E%3C/svg%3E") center / 20px no-repeat;
+    opacity: 1;
+    cursor: pointer;
+  }
+
+  .ds-input[type="time"]::-webkit-calendar-picker-indicator {
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E") center / 20px no-repeat;
+  }
+
+  /*
+   * A customizable select (.ds-select on a select.ds-input): where
+   * appearance: base-select exists, the list opens as the system's own
+   * picker, a popup on the menu's surface with rows of the menu's height,
+   * a check before the chosen row and option content of any markup (an
+   * icon, a second line), shown in the field through <selectedcontent>.
+   * Elsewhere it is the styled native select above, with the platform's
+   * list. The keyboard, type-ahead, form value and validation are the
+   * engine's either way.
+   */
+  @supports (appearance: base-select) {
+    select.ds-select,
+    select.ds-select::picker(select) {
+      appearance: base-select;
+    }
+
+    select.ds-select {
+      display: flex;
+      align-items: center;
+      gap: var(--ds-space-2);
+      /* The engine's chevron sits in the flow: both ends take the field's
+         padding again (both sides, so the physical room of the triangle
+         rule goes in either direction). */
+      padding-inline: var(--_px);
+      background-image: none;
+    }
+
+    /* The engine's chevron in the quieter ink, turned while the list is open. */
+    select.ds-select::picker-icon {
+      color: var(--ds-text-2);
+      transition: rotate var(--ds-dur-medium) var(--ds-ease-spatial);
+    }
+
+    select.ds-select:open::picker-icon {
+      rotate: 180deg;
+    }
+
+    select.ds-select > button {
+      display: contents;
+    }
+
+    select.ds-select selectedcontent {
+      display: flex;
+      flex: 1 1 auto;
+      align-items: center;
+      gap: var(--ds-space-2);
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    select.ds-select::picker(select) {
+      margin-block: var(--ds-space-1);
+      padding-block: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px);
+      border: 0;
+      border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+      background: var(--ds-surface-popover);
+      color: var(--ds-text);
+      box-shadow: var(--ds-elev-popover);
+      /* Invisible; forced colours paint it, so the list keeps an edge. */
+      outline: 1px solid transparent;
+      opacity: 1;
+      transition:
+        opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+        display var(--ds-dur-fast) allow-discrete,
+        overlay var(--ds-dur-fast) allow-discrete;
+    }
+
+    @starting-style {
+      select.ds-select:open::picker(select) {
+        opacity: 0;
+      }
+    }
+
+    select.ds-select:not(:open)::picker(select) {
+      opacity: 0;
+      transition-duration: var(--ds-dur-instant);
+    }
+
+    /* A row: the menu's height at every size and density, the check first. */
+    select.ds-select option {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: var(--ds-space-3);
+      min-height: max(var(--ds-target-min, 0px), calc(var(--ds-menu-item-height, 48px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+      padding: 0 var(--ds-space-3);
+      font: var(--ds-input-font, var(--ds-size-font, var(--ds-font-body)));
+      outline: none;
+    }
+
+    select.ds-select option::checkmark {
+      color: var(--ds-primary);
+    }
+
+    /* The chosen row says so by its check and its weight, never the tint alone. */
+    select.ds-select option:checked {
+      font-weight: var(--ds-weight-label);
+    }
+
+    select.ds-select option::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: currentColor;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+    }
+
+    @media (hover: hover) {
+      select.ds-select option:hover::before {
+        opacity: var(--ds-state-hover);
+      }
+    }
+
+    select.ds-select option:focus-visible::before {
+      opacity: var(--ds-state-focus);
+      transition-duration: 0s;
+    }
+
+    select.ds-select option:disabled {
+      color: var(--ds-disabled-ink, var(--ds-text-2));
+    }
+
+    select.ds-select option > svg {
+      flex: none;
+      color: var(--ds-text-2);
+    }
+
+    @media (forced-colors: active) {
+      select.ds-select option:checked {
+        background: SelectedItem;
+        color: SelectedItemText;
+      }
+
+      select.ds-select option:focus-visible {
+        outline: 2px solid CanvasText;
+        outline-offset: -2px;
+      }
+    }
+  }
+
+  /* Firefox: no dotted inner focus line. */
+  select.ds-input:-moz-focusring {
+    color: transparent;
+    text-shadow: 0 0 0 var(--ds-text);
+  }
+
+  /* Filled: the control sits on the tonal fill, no outline at rest (a state
+     keeps its border). On one control, or on the field for all of its own;
+     :where() keeps the weight of the single class, so focus, error and
+     read-only stay on top. */
+  .ds-input--filled,
+  :where(.ds-field--filled) > .ds-input:where(:not(.ds-input--outlined)),
+  :where(.ds-field--filled > .ds-field__row) > .ds-input:where(:not(.ds-input--outlined)) {
+    border-color: var(--_field-state, transparent);
+    background-color: var(--ds-surface-high);
+  }
+
+  /* On the tonal fill text-3 falls short of 4.5:1; text-2 keeps it. */
+  .ds-input--filled::placeholder,
+  :where(.ds-field--filled) > .ds-input::placeholder,
+  :where(.ds-field--filled > .ds-field__row) > .ds-input::placeholder,
+  .ds-search .ds-input::placeholder {
+    color: var(--ds-text-2);
+  }
+
+  @media (hover: hover) {
+    .ds-input--filled:hover:not(:focus-within, :disabled, [readonly], [aria-readonly="true"], [aria-invalid="true"]),
+    :where(.ds-field--filled) > .ds-input:hover:not(:focus-within, :disabled, [readonly], [aria-readonly="true"], [aria-invalid="true"], .ds-input--outlined),
+    :where(.ds-field--filled > .ds-field__row) > .ds-input:hover:not(:focus-within, :disabled, [readonly], [aria-readonly="true"], [aria-invalid="true"], .ds-input--outlined) {
+      border-color: var(--_field-state, transparent);
+      background-color: var(--ds-surface-highest);
+    }
+  }
+
+  /* Search: a filled pill with a leading icon (toolbars). */
+  .ds-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .ds-search > svg {
+    position: absolute;
+    inset-inline-start: calc(var(--ds-space-4) + var(--ds-size-step, 0) * 4px);
+    color: var(--ds-text-2);
+    pointer-events: none;
+  }
+
+  .ds-search .ds-input {
+    /* The pill at the default shape (at most half the box, times the shape),
+       like every action. */
+    --_radius: min(calc(min(var(--ds-radius-action), calc(var(--_box) / 2)) * var(--ds-shape, 1)), calc(var(--_box) / 2));
+    --_px: calc(var(--ds-space-4) + var(--ds-size-step, 0) * 4px);
+    padding-inline: calc(var(--_px) + 20px + var(--ds-space-3)) var(--_px);
+    border-color: transparent;
+    background: var(--ds-surface-high);
+  }
+
+  @media (hover: hover) {
+    .ds-search .ds-input:hover:not(:focus) {
+      border-color: transparent;
+      background: var(--ds-surface-highest);
+    }
+  }
+
+  .ds-search .ds-input:focus {
+    border-color: var(--ds-input-focus-color, var(--ds-primary));
+    background: var(--ds-surface);
+  }
+
+  /*
+   * The search key: a .ds-kbd ("/") in the field's end, shown while the
+   * field rests empty. The field keeps room for it, so the caret is never
+   * under it. It goes once the field has the focus, a value or is
+   * disabled (in --ds-dur-instant, then hidden) and comes back on
+   * --ds-dur-fast; touch screens have no key to press, so it is never
+   * shown there. aria-keyshortcuts on the input names the shortcut; the
+   * key itself is aria-hidden.
+   */
+  .ds-search__key {
+    position: absolute;
+    inset-inline-end: var(--ds-space-3);
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      visibility 0s;
+  }
+
+  .ds-search > .ds-input:has(~ .ds-search__key) {
+    padding-inline-end: calc(var(--ds-space-3) + var(--ds-space-5) + var(--ds-space-2));
+  }
+
+  .ds-search .ds-input:is(:focus, :not(:placeholder-shown), :disabled) ~ .ds-search__key {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in-out),
+      visibility 0s linear var(--ds-dur-instant);
+  }
+
+  @media (hover: none) {
+    .ds-search__key {
+      display: none;
+    }
+  }
+
+  /* Chromium's clear button is a blue glyph of its own: the icon set's close icon in the quieter text colour instead, a
+     mask like the date fields' calendar. A click still clears the field. */
+  .ds-search .ds-input::-webkit-search-decoration {
+    appearance: none;
+  }
+
+  .ds-search .ds-input::-webkit-search-cancel-button {
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    margin-block: 0;
+    margin-inline: var(--ds-space-2) 0;
+    background: var(--ds-text-2);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+  }
+
+  /* Number fields are typed in like every other
+     field: no native spinner showing up on hover. Arrow keys still step. */
+  input.ds-input[type="number"] {
+    appearance: textfield;
+  }
+
+  input.ds-input[type="number"]::-webkit-inner-spin-button,
+  input.ds-input[type="number"]::-webkit-outer-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+
+  /*
+   * Input group: a unit or prefix inside the field (an aria-hidden
+   * .ds-input-group__prefix or __suffix; the unit is in the label too) or a trailing
+   * quiet icon button (a password reveal with aria-pressed). The group
+   * draws the field (border, radius, background, height); the input inside
+   * loses its box. The ring moves to the group while the input has the
+   * focus, appearing at once and fading back on blur like a field's; a
+   * focused trailing button shows its own ring instead. Invalid and
+   * disabled (or read-only) follow the input.
+   */
+  .ds-input-group {
+    /* The options, as on .ds-input: the group draws the field. */
+    --_h: calc(var(--ds-input-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    --_radius: min(calc(var(--ds-input-radius, var(--ds-radius-field)) * var(--ds-shape, 1)), calc(var(--_box) / 2));
+    --_px: calc(var(--ds-input-padding-x, var(--ds-space-3)) + var(--ds-size-step, 0) * 4px);
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-width: 0;
+    min-height: var(--_box);
+    padding-inline: var(--_px);
+    border: 1px solid var(--_field-state, var(--ds-input-border, var(--ds-outline)));
+    border-radius: var(--_radius);
+    background: var(--ds-input-bg, var(--ds-surface));
+    color: var(--ds-text);
+    transition:
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-input-group:has(> .ds-btn:last-child) {
+    padding-inline-end: var(--ds-space-1);
+  }
+
+  .ds-input-group > .ds-input,
+  .ds-input-group > .ds-input:focus,
+  .ds-input-group > .ds-input:focus-within {
+    flex: 1 1 auto;
+    align-self: stretch;
+    min-width: 0;
+    min-height: 0;
+    padding-block: 0;
+    padding-inline: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  /* A textarea's text starts at the top: it keeps its padding. So does an input
+     on a phone: the group is 42px there, as a field is. */
+  .ds-input-group > textarea.ds-input {
+    padding-block: var(--_py);
+  }
+
+  @media (max-width: 600px) {
+    .ds-input-group > .ds-input,
+    .ds-input-group > .ds-input:focus,
+    .ds-input-group > .ds-input:focus-within {
+      padding-block: var(--_py);
+    }
+
+    /* The inset box pads the value's row itself, as for a plain input. */
+    .ds-field--inset > .ds-input-group > .ds-input,
+    .ds-field--inset > .ds-input-group > .ds-input:focus,
+    .ds-field--inset > .ds-input-group > .ds-input:focus-within {
+      padding-block: 0;
+    }
+  }
+
+  /* The field's border does not add to the button's height, so a small icon
+     button fits a dense field. */
+  .ds-input-group > .ds-btn,
+  .ds-input-group__trailing > .ds-btn {
+    flex: none;
+    margin-block: -1px;
+  }
+
+  /* The slots. Leading and trailing hold an icon (decoration, aria-hidden) or
+     a tag; the trailing one also a button, which keeps its pointer. Prefix
+     and suffix hold text that belongs to the value (https://, GB), aria-hidden,
+     so the unit belongs in the label too. */
+  .ds-input-group__leading,
+  .ds-input-group__trailing {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-1);
+    color: var(--ds-text-2);
+  }
+
+  .ds-input-group__leading {
+    pointer-events: none;
+  }
+
+  .ds-input-group:has(> .ds-input-group__trailing:last-child > .ds-btn:last-child) {
+    padding-inline-end: var(--ds-space-1);
+  }
+
+  .ds-input-group__prefix,
+  .ds-input-group__suffix {
+    flex: none;
+    color: var(--ds-text-2);
+    font: var(--ds-input-font, var(--ds-size-font, var(--ds-font-body)));
+    font-weight: var(--ds-input-weight, var(--ds-weight-regular));
+    user-select: none;
+  }
+
+  @media (max-width: 600px) {
+    .ds-input-group__prefix,
+    .ds-input-group__suffix {
+      font: var(--ds-input-font, var(--ds-font-input));
+      font-weight: var(--ds-input-weight, var(--ds-weight-regular));
+    }
+  }
+
+  @media (hover: hover) {
+    .ds-input-group:hover:not(:focus-within, :has(> .ds-input:is(:disabled, [readonly], [aria-readonly="true"], [aria-invalid="true"]))) {
+      border-color: var(--_field-state, var(--ds-text));
+    }
+  }
+
+  .ds-input-group:has(> .ds-input:focus) {
+    border-color: var(--_field-state, var(--ds-input-focus-color, var(--ds-primary)));
+    box-shadow: inset 0 0 0 1px var(--_field-state, var(--ds-input-focus-color, var(--ds-primary)));
+    transition-duration: 0s;
+  }
+
+  .ds-input-group:has(> [aria-invalid="true"]) {
+    border-color: var(--ds-error);
+  }
+
+  .ds-input-group:has(> [aria-invalid="true"]:focus) {
+    border-color: var(--ds-error);
+    box-shadow: inset 0 0 0 1px var(--ds-error);
+  }
+
+  /* The filled group, on the tonal fill like a filled field; the weight of the
+     single class, so its states stay on top. */
+  .ds-input-group--filled,
+  :where(.ds-field--filled) > .ds-input-group,
+  :where(.ds-field--filled > .ds-field__row) > .ds-input-group {
+    border-color: var(--_field-state, transparent);
+    background-color: var(--ds-surface-high);
+  }
+
+  .ds-input-group--filled > .ds-input::placeholder,
+  :where(.ds-field--filled) > .ds-input-group > .ds-input::placeholder,
+  :where(.ds-field--filled > .ds-field__row) > .ds-input-group > .ds-input::placeholder {
+    color: var(--ds-text-2);
+  }
+
+  @media (hover: hover) {
+    .ds-input-group--filled:hover:not(:focus-within, :has(> .ds-input:is(:disabled, [readonly], [aria-readonly="true"], [aria-invalid="true"]))),
+    :where(.ds-field--filled) > .ds-input-group:hover:not(:focus-within, :has(> .ds-input:is(:disabled, [readonly], [aria-readonly="true"], [aria-invalid="true"]))),
+    :where(.ds-field--filled > .ds-field__row) > .ds-input-group:hover:not(:focus-within, :has(> .ds-input:is(:disabled, [readonly], [aria-readonly="true"], [aria-invalid="true"]))) {
+      border-color: var(--_field-state, transparent);
+      background-color: var(--ds-surface-highest);
+    }
+  }
+
+  .ds-input-group:has(> .ds-input:is(:disabled, [readonly], [aria-readonly="true"])) {
+    background: var(--ds-surface-low);
+    color: var(--ds-text-2);
+  }
+
+  /* Not while the input has the focus: the ring takes the border. */
+  .ds-input-group:has(> .ds-input:is(:disabled, [readonly], [aria-readonly="true"]):not(:focus)) {
+    border-color: var(--ds-line);
+  }
+
+  /*
+   * The filled field (Material 3): the label sits inside a tonal box above
+   * the value (still a real <label>), a hairline closes the box at the
+   * bottom and turns into a 2px line in --ds-input-focus-color while the
+   * control has the focus (at once, back on blur). The box is the field's
+   * ::before over the label's and the control's rows; hints follow below
+   * it. In forced colours the fill is gone, so the box keeps a transparent
+   * border (its edge there) and the focused control the outline below. It
+   * holds a .ds-input or a .ds-input-group with its slots.
+   */
+  .ds-field--inset {
+    /* The padding above the label and below the value: 4px per size step and
+       2px per density step on both ends, so the box moves 8px and 4px. */
+    --_inset-y: max(0px, calc(var(--ds-space-2) + var(--ds-size-step, 0) * 4px + var(--ds-density, 0) * 2px));
+    --_inset-x: calc(var(--ds-input-padding-x, var(--ds-space-3)) + var(--ds-size-step, 0) * 4px);
+    --_inset-radius: calc(var(--ds-input-radius, var(--ds-radius-field)) * var(--ds-shape, 1));
+    row-gap: 0;
+  }
+
+  .ds-field--inset::before {
+    content: '';
+    grid-area: 1 / 1 / 3 / 2;
+    /* Spanning both rows, it holds the box at the touch minimum. */
+    min-height: var(--ds-target-min, 0px);
+    border: 1px solid transparent;
+    border-start-start-radius: var(--_inset-radius);
+    border-start-end-radius: var(--_inset-radius);
+    background: var(--ds-surface-high);
+    box-shadow: inset 0 -1px 0 0 var(--_field-state, var(--ds-input-border, var(--ds-outline)));
+    pointer-events: none;
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out);
+    box-sizing: border-box;
+  }
+
+  .ds-field--inset > .ds-field__label {
+    grid-area: 1 / 1;
+    padding: var(--_inset-y) var(--_inset-x) 0;
+  }
+
+  .ds-field--inset > .ds-input,
+  .ds-field--inset > .ds-input:focus,
+  .ds-field--inset > .ds-input:focus-within {
+    grid-area: 2 / 1;
+    min-height: 0;
+    padding-block: var(--ds-space-1) var(--_inset-y);
+    padding-inline: var(--_inset-x);
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  /* The room of the triangle (physical, like the rule it stands in for). */
+  .ds-field--inset > select.ds-input,
+  .ds-field--inset > select.ds-input:focus,
+  .ds-field--inset > input.ds-input[list],
+  .ds-field--inset > input.ds-input[list]:focus {
+    padding-right: calc(var(--_px) + var(--ds-space-5));
+  }
+
+  /* An input group inside: the slots in the value's row, the group's own box
+     gone. */
+  .ds-field--inset > .ds-input-group,
+  .ds-field--inset > .ds-input-group:has(> .ds-input:focus) {
+    grid-area: 2 / 1;
+    min-height: 0;
+    padding-block: var(--ds-space-1) var(--_inset-y);
+    padding-inline: var(--_inset-x);
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  .ds-field--inset > .ds-field__hint,
+  .ds-field--inset > .ds-field__foot {
+    margin-block-start: var(--ds-space-1);
+    padding-inline: var(--_inset-x);
+  }
+
+  .ds-field--inset > .ds-field__hint:empty {
+    margin-block-start: 0;
+  }
+
+  @media (hover: hover) {
+    .ds-field--inset:hover:not(:focus-within, :has(> .ds-input:is(:disabled, [readonly], [aria-readonly="true"])), :has(> .ds-input-group > .ds-input:is(:disabled, [readonly], [aria-readonly="true"])))::before {
+      background-color: var(--ds-surface-highest);
+    }
+  }
+
+  .ds-field--inset:has(> .ds-input:focus, > .ds-input-group > .ds-input:focus)::before {
+    box-shadow: inset 0 -2px 0 0 var(--_field-state, var(--ds-input-focus-color, var(--ds-primary)));
+    transition-duration: 0s;
+  }
+
+  .ds-field--inset:has(> [aria-invalid="true"], > .ds-input-group > [aria-invalid="true"])::before {
+    box-shadow: inset 0 -1px 0 0 var(--ds-error);
+  }
+
+  .ds-field--inset:has(> [aria-invalid="true"]:focus, > .ds-input-group > [aria-invalid="true"]:focus)::before {
+    box-shadow: inset 0 -2px 0 0 var(--ds-error);
+  }
+
+  .ds-field--inset:has(> .ds-input:is(:disabled, [readonly], [aria-readonly="true"]), > .ds-input-group > .ds-input:is(:disabled, [readonly], [aria-readonly="true"]))::before {
+    background-color: var(--ds-surface-low);
+  }
+
+  /* Not while the input has the focus: the focus line stays. */
+  .ds-field--inset:has(> .ds-input:is(:disabled, [readonly], [aria-readonly="true"]):not(:focus), > .ds-input-group > .ds-input:is(:disabled, [readonly], [aria-readonly="true"]):not(:focus))::before {
+    box-shadow: inset 0 -1px 0 0 var(--ds-line);
+  }
+
+  /* ── Checkbox and radio cards ─────────────────── */
+
+  /* A long label wraps (also a bare text node: overflow-wrap: anywhere
+     lowers its min-content size) and the box stays beside its first line:
+     the row pads to --ds-check-height around one 20px line, the box centres
+     on that line. A single line looks as with align-items: center. */
+  .ds-check {
+    /* The options, computed here: the row like a field, never below the
+       touch minimum, padded around one line of its own text. */
+    --_h: calc(var(--ds-check-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    display: inline-flex;
+    align-items: flex-start;
+    gap: var(--ds-space-3);
+    max-width: 100%;
+    min-height: var(--_box);
+    padding-block: max(0px, calc((var(--_box) - 1lh) / 2));
+    color: var(--ds-text);
+    font: var(--ds-size-font, var(--ds-font-body));
+    font-weight: var(--ds-weight-regular);
+    overflow-wrap: anywhere;
+    cursor: pointer;
+    /* The label fades to the quieter ink with a disabled box. */
+    transition: color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /*
+   * Checkbox and radio, drawn on the native input itself (appearance:
+   * none, no wrapper), so forms, labels and keyboard stay native. The
+   * input is the box (2px border, --ds-radius-check) or the ring;
+   * ::before is the check (a mask of the icon set's check at stroke 3,
+   * 2.25px at 18px), ::after the indeterminate dash or the radio dot.
+   *
+   * The check wipes in from the short arm (clip-path, after
+   * --ds-dur-micro, decelerating) and fades out; the dash grows from the
+   * centre while the check collapses into it (indeterminate, both ways);
+   * the radio dot grows on the spatial spring. Transitions only, so
+   * boxes rendered checked are still on load.
+   *
+   * The halo (box-shadow, 40px across: a circle on radios, a square with
+   * 13px corners on checkboxes) is the state layer and the press of the
+   * input: hover (also on the .ds-check row), press in --ds-dur-micro,
+   * keyboard focus with the ring. On touch screens it rests at 0 and a tap
+   * grows it from the centre (the inputs' ripple; js/ripple.js skips
+   * them). Radio cards (.ds-radio) keep their card layer instead.
+   *
+   * A table draws its bare checkboxes too, but not the hidden inputs of a
+   * switch or a chip in a cell (:where() keeps the specificity).
+   *
+   * Hooks: --ds-check-size (18px), --ds-check-target (40px).
+   */
+  .ds-check input,
+  .ds-radio input,
+  .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)),
+  .ds-checkbox,
+  .ds-radio-input {
+    /* The box: 2px per size step, with its halo (8px per size step, 4px per
+       density step, never below the touch minimum). */
+    --_size: calc(var(--ds-check-size, 18px) + var(--ds-size-step, 0) * 2px);
+    --_halo: max(var(--ds-target-min, 0px), calc(var(--ds-check-target, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    --_spread: calc((var(--_halo) - var(--_size)) / 2);
+    appearance: none;
+    position: relative;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    width: var(--_size);
+    height: var(--_size);
+    /* An empty box would sit on the baseline; inline (a table cell) it
+       centres on the text like the native control did. */
+    vertical-align: middle;
+    border: 2px solid var(--ds-text-2);
+    border-radius: calc(var(--ds-radius-check) * var(--ds-shape, 1));
+    background: transparent;
+    color: var(--ds-text);
+    cursor: pointer;
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-check input:focus-visible,
+  .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)):focus-visible,
+  .ds-checkbox:focus-visible,
+  .ds-radio-input:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  /* The box adds no margin of its own: rows and table cells place it, the
+     same in every engine (a UA margin would make a table head 49px). */
+  .ds-check input,
+  .ds-radio input,
+  .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)),
+  .ds-checkbox,
+  .ds-radio-input {
+    margin: 0;
+  }
+
+  /* On the first line of the row: the input takes the row's font, so 1lh is
+     that line. */
+  .ds-check > input {
+    margin-block: calc((1lh - var(--_size)) / 2);
+    font: inherit;
+  }
+
+  :is(.ds-check input[type="radio"], .ds-radio input, .ds-radio-input) {
+    border-radius: 50%;
+  }
+
+  /* Checked (or mixed): the box fills in the primary colour; the halo
+     follows it. */
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):is(:checked, :indeterminate),
+  :is(.ds-check input[type="radio"], .ds-radio input, .ds-radio-input):checked {
+    border-color: var(--ds-primary);
+    color: var(--ds-primary);
+  }
+
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):is(:checked, :indeterminate) {
+    background: var(--ds-primary);
+  }
+
+  /* The check: the glyph runs left to right, so the wipe reads as drawing.
+     It leaves by fading, then the wipe resets unseen. */
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox)::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: var(--ds-on-primary);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath pathLength='1' d='M4 12l5 5L20 6'/%3E%3C/svg%3E") center / 100% no-repeat;
+    clip-path: inset(0 100% 0 0);
+    opacity: 0;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in),
+      clip-path 0s linear var(--ds-dur-fast);
+  }
+
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):checked::before {
+    clip-path: inset(0);
+    opacity: 1;
+    transition:
+      opacity 0s,
+      clip-path var(--ds-dur-medium) var(--ds-ease-out) var(--ds-dur-micro);
+  }
+
+  /* Mixed: the check collapses to the centre while the dash grows out of
+     it (and back), so one mark morphs into the other. */
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):indeterminate::before {
+    clip-path: inset(0 50%);
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in),
+      clip-path var(--ds-dur-fast) var(--ds-ease-in);
+  }
+
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox)::after {
+    content: '';
+    position: absolute;
+    top: calc(50% - 1px);
+    inset-inline: 2px;
+    height: 2px;
+    background: var(--ds-on-primary);
+    clip-path: inset(0 50%);
+    transition: clip-path var(--ds-dur-fast) var(--ds-ease-in);
+  }
+
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):indeterminate::after {
+    clip-path: inset(0);
+    transition: clip-path var(--ds-dur-medium) var(--ds-ease-out);
+  }
+
+  /* The radio dot grows on the spring and shrinks away accelerating. */
+  :is(.ds-check input[type="radio"], .ds-radio input, .ds-radio-input)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: calc(var(--_size) * 4 / 9);
+    height: calc(var(--_size) * 4 / 9);
+    margin: auto;
+    border-radius: 50%;
+    background: var(--ds-primary);
+    scale: 0;
+    transition: scale var(--ds-dur-fast) var(--ds-ease-in);
+  }
+
+  :is(.ds-check input[type="radio"], .ds-radio input, .ds-radio-input):checked::after {
+    scale: 1;
+    transition: scale var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  /* The halo of the inputs that are their own control (not radio cards). */
+  :is(.ds-check input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input) {
+    box-shadow: 0 0 0 var(--_spread) transparent;
+  }
+
+  @media (hover: hover) {
+    :is(.ds-check input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input):not(:disabled, [aria-disabled="true"]):hover,
+    .ds-check:hover input:not(:disabled, [aria-disabled="true"]) {
+      box-shadow: 0 0 0 var(--_spread) color-mix(in srgb, currentColor calc(var(--ds-state-hover) * 100%), transparent);
+    }
+  }
+
+  /* Keyboard focus: the halo appears with the ring (and fades on blur). */
+  :is(.ds-check input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input):focus-visible:not(:disabled) {
+    box-shadow: 0 0 0 var(--_spread) color-mix(in srgb, currentColor calc(var(--ds-state-focus) * 100%), transparent);
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow 0s,
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  :is(.ds-check input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input):not(:disabled, [aria-disabled="true"]):active,
+  .ds-check:active input:not(:disabled, [aria-disabled="true"]) {
+    box-shadow: 0 0 0 var(--_spread) color-mix(in srgb, currentColor calc(var(--ds-state-pressed) * 100%), transparent);
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-micro) var(--ds-ease-in-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* Touch: no hover, so the halo rests at 0 and a tap grows it from the
+     centre, the press feedback of an input (it cannot hold a ripple). */
+  @media (hover: none) {
+    :is(.ds-check input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input) {
+      box-shadow: 0 0 0 0 transparent;
+    }
+
+    :is(.ds-check input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input):not(:disabled, [aria-disabled="true"]):active,
+    .ds-check:active input:not(:disabled, [aria-disabled="true"]) {
+      transition:
+        background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+        border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+        box-shadow var(--ds-dur-medium) var(--ds-ease-out),
+        opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+        outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+    }
+  }
+
+  /* Error: the border, the fill and the dot in the error colour, the mark
+     on it in the surface colour. */
+  :is(.ds-check input, .ds-radio input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input)[aria-invalid="true"]:not(:disabled, [aria-disabled="true"]) {
+    border-color: var(--ds-error);
+  }
+
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox)[aria-invalid="true"]:not(:disabled, [aria-disabled="true"]):is(:checked, :indeterminate) {
+    background: var(--ds-error);
+  }
+
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox)[aria-invalid="true"]:not(:disabled, [aria-disabled="true"])::before,
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox)[aria-invalid="true"]:not(:disabled, [aria-disabled="true"])::after {
+    background: var(--ds-surface);
+  }
+
+  :is(.ds-check input[type="radio"], .ds-radio input, .ds-radio-input)[aria-invalid="true"]:not(:disabled, [aria-disabled="true"])::after {
+    background: var(--ds-error);
+  }
+
+  /* Disabled: the neutral ink for border, fill and dot (a theme that dims
+     instead keeps the control's colours), the mark in the surface colour,
+     no halo. aria-disabled="true" looks the same; it keeps its focus halo
+     (it stays in the tab order, so its reason in a tooltip can be read). */
+  :is(.ds-check input, .ds-radio input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input):is(:disabled, [aria-disabled="true"]) {
+    border-color: var(--ds-disabled-ink, var(--ds-text-2));
+    opacity: var(--ds-disabled-opacity, var(--ds-state-disabled));
+    cursor: not-allowed;
+  }
+
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):is(:disabled, [aria-disabled="true"]):is(:checked, :indeterminate) {
+    background: var(--ds-disabled-ink, var(--ds-primary));
+  }
+
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):is(:disabled, [aria-disabled="true"])::before,
+  :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):is(:disabled, [aria-disabled="true"])::after {
+    background: var(--ds-surface);
+  }
+
+  :is(.ds-check input[type="radio"], .ds-radio input, .ds-radio-input):is(:disabled, [aria-disabled="true"])::after {
+    background: var(--ds-disabled-ink, var(--ds-primary));
+  }
+
+  .ds-check:has(input:is(:disabled, [aria-disabled="true"])) {
+    color: var(--ds-text-2);
+    cursor: not-allowed;
+  }
+
+  /* A hint under a checkbox lines up with the label text, not the box
+     (the box plus the gap). */
+  .ds-check + .ds-field__hint {
+    padding-inline-start: calc(var(--ds-check-size, 18px) + var(--ds-size-step, 0) * 2px + var(--ds-space-3));
+  }
+
+  /*
+   * Check list: many values from a long set (a filter sheet's statuses):
+   * an outlined box of rows on hairlines that scrolls on its own after
+   * about six rows (--ds-check-list-max-height; none shows them all). The
+   * row padding keeps the halo and the ring of every box inside the box,
+   * also in the first and the last row. A count sits at the end of a row;
+   * a checked row's label takes the label weight (at once, never
+   * animated), so the selection shows by more than the check.
+   */
+  .ds-check-list {
+    position: relative;
+    display: grid;
+    /* Rows keep their content's height in a box shorter than they are (an
+       auto row would shrink to the row's min-height there). */
+    grid-auto-rows: max-content;
+    max-height: var(--ds-check-list-max-height, 264px);
+    overflow-y: auto;
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-radius-card) * var(--ds-shape, 1));
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+  }
+
+  .ds-check-list > .ds-check {
+    display: flex;
+    padding-inline: var(--ds-space-4);
+  }
+
+  .ds-check-list > .ds-check + .ds-check {
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  /* On the row itself (the count sets its own font): a :has() before a
+     combinator would restyle far more on every change in the page. */
+  .ds-check-list > .ds-check:has(> input:checked) {
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-check__count {
+    flex: none;
+    align-self: center;
+    margin-inline-start: auto;
+    padding-inline-start: var(--ds-space-3);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A parent checkbox and its children (role="group"): the children's
+     boxes line up under the parent's label (box plus gap). The page keeps
+     the parent in step (checked, or indeterminate while only some are). */
+  .ds-check-group {
+    display: grid;
+    justify-items: start;
+  }
+
+  .ds-check-group__children {
+    display: grid;
+    justify-items: start;
+    padding-inline-start: calc(var(--ds-check-size, 18px) + var(--ds-size-step, 0) * 2px + var(--ds-space-3));
+  }
+
+  .ds-radios,
+  .ds-check-cards {
+    display: grid;
+    gap: var(--ds-space-2);
+  }
+
+  /*
+   * Radio tiles: a few big options side by side (two columns, one below
+   * 480px of the content or the window). The radio itself is hidden: a
+   * leading icon disc and a trailing check circle show the choice (the card
+   * keeps its ring and tint), and keyboard focus rings the tile. The check
+   * pops from --ds-scale-small on the spring and fades in; it leaves faster,
+   * accelerating. With the documented indicator
+   * (DS.indicator.create(group, { active: '.ds-radio:has(input:checked)',
+   * className: 'ds-radios__indicator' }), and its update() on the group's
+   * change event) the tint is a pill that glides from tile to tile; the
+   * ring and the check change at once.
+   */
+  .ds-radios--tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @container ds-content (max-width: 480px) {
+    .ds-radios--tiles {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .ds-radios--tiles {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .ds-radios--tiles > .ds-radio {
+    align-items: center;
+  }
+
+  .ds-radios--tiles > .ds-radio > input {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    margin: 0;
+    clip-path: inset(50%);
+    pointer-events: none;
+  }
+
+  .ds-radios--tiles > .ds-radio > span:not(.ds-radio__icon, .ds-radio__mark) {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ds-radio > .ds-radio__icon {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: var(--ds-space-10);
+    height: var(--ds-space-10);
+    border-radius: 50%;
+    background: var(--ds-fill-round);
+    color: var(--ds-text-2);
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-radio > input:checked ~ .ds-radio__icon {
+    background: var(--ds-primary);
+    color: var(--ds-on-primary);
+  }
+
+  .ds-radio > .ds-radio__mark {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: var(--ds-space-5);
+    height: var(--ds-space-5);
+    margin-inline-start: auto;
+    border: 2px solid var(--ds-text-2);
+    border-radius: 50%;
+    color: var(--ds-on-primary);
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-radio__mark > svg {
+    opacity: 0;
+    scale: var(--ds-scale-small);
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in),
+      scale var(--ds-dur-fast) var(--ds-ease-in);
+  }
+
+  .ds-radio > input:checked ~ .ds-radio__mark {
+    border-color: var(--ds-primary);
+    background: var(--ds-primary);
+  }
+
+  .ds-radio > input:checked ~ .ds-radio__mark > svg {
+    opacity: 1;
+    scale: 1;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  .ds-radio--disabled > :is(.ds-radio__icon, .ds-radio__mark),
+  .ds-radio > input:is(:disabled, [aria-disabled="true"]) ~ :is(.ds-radio__icon, .ds-radio__mark) {
+    opacity: var(--ds-disabled-opacity, var(--ds-state-disabled));
+  }
+
+  /* The pill of the indicator is the tint: the tiles let it show through
+     and keep their ring. */
+  .ds-radios__indicator {
+    --ds-indicator-radius: calc(var(--ds-radius-card) * var(--ds-shape, 1));
+    background: var(--ds-surface-low);
+  }
+
+  .ds-radios.ds-has-indicator > .ds-radio:not(.ds-radio--disabled) {
+    background: transparent;
+  }
+
+  /* The selected card takes a 2px primary outline (its border plus 1px
+     inside, no shift) besides the filled radio: never the tint alone.
+     Pressed, the card turns squarer (--ds-radius-card-pressed, in
+     --ds-dur-micro) and springs back on release; its state layer and the
+     ripple (js/ripple.js) are the press, also when its radio is pressed. */
+  .ds-radio,
+  .ds-check-card {
+    /* The options: the corners times the shape; 2px of padding per density
+       step. The pressed corners follow the shape, never rounder than at rest. */
+    --_radius: calc(var(--ds-radius-card) * var(--ds-shape, 1));
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-3);
+    /* Never below the touch minimum, as tall as its content otherwise. */
+    min-height: var(--ds-target-min, 0px);
+    padding: calc(var(--ds-radio-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px);
+    border: 1px solid var(--ds-line-2);
+    border-radius: var(--_radius);
+    background: var(--ds-surface);
+    cursor: pointer;
+    /* The ring (on keyboard focus of its input) rests one width further out
+       and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-medium) var(--ds-ease-spatial),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* State layer in the content colour, over the border like a chip's. */
+  .ds-radio::before,
+  .ds-check-card::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-radio:hover:not(.ds-radio--disabled, :has(input:is(:disabled, [aria-disabled="true"]))),
+    .ds-check-card:hover:not(:has(input:is(:disabled, [aria-disabled="true"]))) {
+      border-color: var(--ds-outline);
+    }
+
+    .ds-radio:hover:not(.ds-radio--disabled, :has(input:is(:disabled, [aria-disabled="true"])))::before,
+    .ds-check-card:hover:not(:has(input:is(:disabled, [aria-disabled="true"])))::before {
+      opacity: var(--ds-state-hover-lg);
+    }
+  }
+
+  /* Keyboard focus lays the focus layer under the card's ring (its input
+   * has no halo inside a card). :where(input) keeps the weight of the hover
+   * and press rules, so source order puts the press on top. */
+  .ds-radio:has(:where(input):focus-visible):not(.ds-radio--disabled, :has(input:disabled))::before,
+  .ds-check-card:has(:where(input):focus-visible):not(:has(input:disabled))::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  .ds-radio:active:not(.ds-radio--disabled, :has(input:is(:disabled, [aria-disabled="true"]))),
+  .ds-radio.ds-pressed:not(.ds-radio--disabled, :has(input:is(:disabled, [aria-disabled="true"]))),
+  .ds-check-card:not(:has(input:is(:disabled,[aria-disabled="true"]))):is(:active, .ds-pressed) {
+    border-radius: min(calc(var(--ds-radius-card-pressed) * var(--ds-shape, 1)), var(--_radius));
+    transition:
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-radius var(--ds-dur-micro) var(--ds-ease-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-radio:active:not(.ds-radio--disabled, :has(input:is(:disabled, [aria-disabled="true"])))::before,
+  .ds-radio.ds-pressed:not(.ds-radio--disabled, :has(input:is(:disabled, [aria-disabled="true"])))::before,
+  .ds-check-card:not(:has(input:is(:disabled,[aria-disabled="true"]))):is(:active, .ds-pressed)::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  /* With the ripple on the page the ripple brings the press: the flat layer
+     stays at its rest value (the radio card's rules are in ripple.css). A
+     press on the box itself takes no ripple (an input's press is its own, in
+     DS.ripple), so the flat layer stays for it. */
+  :where(.ds-ripples) .ds-check-card:not(:has(input:is(:disabled,[aria-disabled="true"]))):where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *)):is(:active, .ds-pressed):not(:has(input:active))::before {
+    opacity: 0;
+  }
+
+  @media (hover: hover) {
+    :where(.ds-ripples) .ds-check-card:not(:has(input:is(:disabled,[aria-disabled="true"]))):where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *)):is(:active, .ds-pressed):not(:has(input:active))::before {
+      opacity: var(--ds-state-hover-lg);
+    }
+  }
+
+  :where(.ds-ripples) .ds-check-card:not(:has(input:is(:disabled,[aria-disabled="true"]))):where(:not([data-ds-ripple="off"], [data-ds-ripple="off"] *)):has(:where(input):focus-visible):is(:active, .ds-pressed):not(:has(input:active))::before {
+    opacity: var(--ds-state-focus);
+  }
+
+  .ds-radio:has(input:checked),
+  .ds-check-card:has(input:checked) {
+    border-color: var(--ds-primary);
+    background: var(--ds-surface-low);
+    box-shadow: inset 0 0 0 1px var(--ds-primary);
+  }
+
+  .ds-radio input,
+  .ds-check-card > input {
+    margin-top: 1px;
+  }
+
+  /* A checkbox card's input is a .ds-checkbox without its halo (no spread):
+     the card's own layer is its hover, press and focus layer. */
+  .ds-check-card > input {
+    --_spread: 0px;
+  }
+
+  /* Keyboard focus rings the whole card, not the control inside. */
+  .ds-radio input:focus-visible,
+  .ds-check-card > input:focus-visible {
+    outline: none;
+  }
+
+  .ds-radio:has(input:focus-visible),
+  .ds-check-card:has(input:focus-visible) {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-radio span,
+  .ds-check-card span {
+    display: grid;
+    gap: var(--ds-space-1);
+  }
+
+  .ds-radio strong,
+  .ds-check-card strong {
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+  }
+
+  .ds-radio small,
+  .ds-check-card small {
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    text-wrap: pretty;
+  }
+
+  /* An option that cannot be chosen says why (icon and text, not only greyed out). */
+  .ds-radio--disabled {
+    border-color: var(--ds-line);
+    background: var(--ds-surface-low);
+    cursor: not-allowed;
+  }
+
+  .ds-radio:has(input:is(:disabled, [aria-disabled="true"])),
+  .ds-check-card:has(input:is(:disabled, [aria-disabled="true"])) {
+    cursor: not-allowed;
+  }
+
+  /* A card whose input is blocked (disabled, aria-disabled) looks like
+     .ds-radio--disabled; a checked one keeps its selected look, like a
+     checked .ds-radio--disabled. */
+  .ds-radio:has(input:is(:disabled, [aria-disabled="true"])):not(:has(input:checked)),
+  .ds-check-card:has(input:is(:disabled, [aria-disabled="true"])):not(:has(input:checked)) {
+    border-color: var(--ds-line);
+    background: var(--ds-surface-low);
+  }
+
+  .ds-radio--disabled strong,
+  .ds-radio:has(input:is(:disabled, [aria-disabled="true"])) strong,
+  .ds-check-card:has(input:is(:disabled, [aria-disabled="true"])) strong {
+    color: var(--ds-text-2);
+  }
+
+  .ds-radio small.ds-radio__note,
+  .ds-check-card small.ds-radio__note {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin-top: var(--ds-space-1);
+    color: var(--ds-on-warning-container);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-radio__note svg {
+    flex-shrink: 0;
+    color: var(--ds-warning);
+  }
+
+  /* ── Fieldset and form section ───────────────── */
+
+  /* Fields that belong together, under a legend: without the browser's frame
+     and indent. --outlined puts them in a frame. A disabled fieldset quiets
+     its legend; its controls take their own disabled look. */
+  .ds-fieldset {
+    display: grid;
+    gap: var(--ds-space-3);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .ds-fieldset__legend {
+    float: none;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+  }
+
+  .ds-fieldset__hint {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    text-wrap: pretty;
+  }
+
+  .ds-fieldset:disabled > .ds-fieldset__legend {
+    color: var(--ds-text-2);
+  }
+
+  .ds-fieldset--outlined {
+    padding: calc(var(--ds-space-4) + var(--ds-density, 0) * 2px);
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-radius-card) * var(--ds-shape, 1));
+  }
+
+  .ds-fieldset--outlined > .ds-fieldset__legend {
+    padding-inline: var(--ds-space-1);
+  }
+
+  /* A titled part of a long form. Sections after the first stand on a hairline.
+     --columns (settings): the title and its text beside the fields; the labels
+     stay above their fields (never a label column). It narrows with the
+     content (a side sheet or dialog: with the window). */
+  .ds-form-section {
+    display: grid;
+    gap: var(--ds-space-4);
+    min-width: 0;
+  }
+
+  .ds-form-section + .ds-form-section {
+    padding-block-start: calc(var(--ds-space-5) + var(--ds-density, 0) * 2px);
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  .ds-form-section__head {
+    display: grid;
+    align-content: start;
+    gap: var(--ds-space-1);
+    min-width: 0;
+  }
+
+  .ds-form-section__title {
+    margin: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-subtitle);
+    text-wrap: balance;
+  }
+
+  .ds-form-section__text {
+    margin: 0;
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+    text-wrap: pretty;
+  }
+
+  .ds-form-section__body {
+    display: grid;
+    gap: var(--ds-space-4);
+    min-width: 0;
+  }
+
+  .ds-form-section--columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: var(--ds-space-4) var(--ds-space-6);
+  }
+
+  @container ds-content (max-width: 760px) {
+    .ds-form-section--columns {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (max-width: 760px) {
+    .ds-form-section--columns {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* "Add a row" under an editable table: a text button whose padding hangs
+     into the gutter, so its icon lines up with the table's first column. */
+  .ds-add-row {
+    justify-self: start;
+    margin-inline-start: calc(-1 * var(--ds-space-3));
+  }
+
+  /*
+   * Forced colors drop background images and fills: the select's triangle is
+   * gone there, so the native controls come back. The date field's calendar
+   * and the search's clear button are masks over a fill, which forced colors
+   * would paint in the field's own background: they keep the mask, filled in
+   * the system text colour.
+   */
+  @media (forced-colors: active) {
+    select.ds-input {
+      appearance: auto;
+      background-image: none;
+    }
+
+    input.ds-input[list] {
+      background-image: none;
+    }
+
+    input.ds-input[list]::-webkit-calendar-picker-indicator {
+      opacity: 1;
+    }
+
+    .ds-input[type="date"]::-webkit-calendar-picker-indicator,
+    .ds-input:is([type="datetime-local"], [type="month"], [type="week"], [type="time"])::-webkit-calendar-picker-indicator,
+    .ds-search .ds-input::-webkit-search-cancel-button {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+
+    /* The inset ring of a focused field is a shadow, which forced colours
+       drop (and outline: none took the rest): an outline in its place, on
+       the box that draws the field. */
+    .ds-input:focus,
+    .ds-input[type="date"]:focus-within,
+    .ds-input:is([type="datetime-local"], [type="month"], [type="week"], [type="time"]):focus-within,
+    .ds-input-group:has(> .ds-input:focus),
+    .ds-field--inset:has(> .ds-input:focus, > .ds-input-group > .ds-input:focus)::before {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+
+    .ds-input-group > .ds-input:focus,
+    .ds-field--inset > .ds-input:focus,
+    .ds-field--inset > .ds-input:focus-within,
+    .ds-field--inset > .ds-input-group:has(> .ds-input:focus) {
+      outline: none;
+    }
+
+    /* Blocked is GrayText: a disabled field, its group and the words that name
+       a blocked choice. */
+    .ds-input:disabled,
+    .ds-input-group:has(> .ds-input:disabled) {
+      border-color: GrayText;
+      color: GrayText;
+    }
+
+    .ds-fieldset:disabled > .ds-fieldset__legend,
+    :is(.ds-radio--disabled, .ds-radio:has(input:is(:disabled, [aria-disabled="true"])), .ds-check-card:has(input:is(:disabled, [aria-disabled="true"]))) strong {
+      color: GrayText;
+    }
+
+    /* A selected card: its edge too, not only the box inside. */
+    .ds-radio:has(input:checked),
+    .ds-check-card:has(input:checked) {
+      border-color: Highlight;
+    }
+
+    .ds-radio:has(input:checked:is(:disabled, [aria-disabled="true"])),
+    .ds-check-card:has(input:checked:is(:disabled, [aria-disabled="true"])) {
+      border-color: GrayText;
+    }
+
+    /* The changed dot is a fill: the text colour keeps it (the word is the
+       cue that needs no colour at all). */
+    .ds-field__label::after {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+
+    /* Radio tiles hide their radio: the check circle carries the choice. */
+    .ds-radio > .ds-radio__mark {
+      forced-color-adjust: none;
+      border-color: CanvasText;
+      background: Canvas;
+      color: HighlightText;
+    }
+
+    .ds-radio > input:checked ~ .ds-radio__mark {
+      border-color: Highlight;
+      background: Highlight;
+    }
+
+    .ds-radio--disabled > .ds-radio__mark,
+    .ds-radio > input:is(:disabled, [aria-disabled="true"]) ~ .ds-radio__mark {
+      border-color: GrayText;
+    }
+
+    .ds-radio > input:is(:disabled, [aria-disabled="true"]):checked ~ .ds-radio__mark {
+      background: GrayText;
+    }
+
+    /* The drawn checkbox and radio in system colours (the box, the mark
+       and the dot are fills); the halo is a tint: none. */
+    :is(.ds-check input, .ds-radio input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input),
+    :is(.ds-check input, .ds-radio input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input)[aria-invalid="true"]:not(:disabled, [aria-disabled="true"]) {
+      forced-color-adjust: none;
+      border-color: CanvasText;
+      background: Canvas;
+    }
+
+    :is(.ds-check input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input),
+    :is(.ds-check input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input):not(:disabled):hover,
+    .ds-check:hover input:not(:disabled),
+    :is(.ds-check input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input):focus-visible:not(:disabled),
+    :is(.ds-check input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input):not(:disabled):active,
+    .ds-check:active input:not(:disabled) {
+      box-shadow: none;
+    }
+
+    :is(.ds-check input, .ds-radio input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input):focus-visible {
+      outline-color: CanvasText;
+    }
+
+    :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):is(:checked, :indeterminate),
+    :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox)[aria-invalid="true"]:not(:disabled, [aria-disabled="true"]):is(:checked, :indeterminate),
+    :is(.ds-check input[type="radio"], .ds-radio input, .ds-radio-input):checked {
+      border-color: Highlight;
+    }
+
+    :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):is(:checked, :indeterminate),
+    :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox)[aria-invalid="true"]:not(:disabled, [aria-disabled="true"]):is(:checked, :indeterminate) {
+      background: Highlight;
+    }
+
+    :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox)::before,
+    :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox)::after,
+    :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox)[aria-invalid="true"]:not(:disabled, [aria-disabled="true"])::before,
+    :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox)[aria-invalid="true"]:not(:disabled, [aria-disabled="true"])::after {
+      background: HighlightText;
+    }
+
+    :is(.ds-check input[type="radio"], .ds-radio input, .ds-radio-input)::after,
+    :is(.ds-check input[type="radio"], .ds-radio input, .ds-radio-input)[aria-invalid="true"]:not(:disabled, [aria-disabled="true"])::after {
+      background: Highlight;
+    }
+
+    :is(.ds-check input, .ds-radio input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input):is(:disabled, [aria-disabled="true"]) {
+      border-color: GrayText;
+    }
+
+    :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):is(:disabled, [aria-disabled="true"]):is(:checked, :indeterminate) {
+      background: GrayText;
+    }
+
+    :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):is(:disabled, [aria-disabled="true"])::before,
+    :is(.ds-check input[type="checkbox"], .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox):is(:disabled, [aria-disabled="true"])::after {
+      background: Canvas;
+    }
+
+    :is(.ds-check input[type="radio"], .ds-radio input, .ds-radio-input):is(:disabled, [aria-disabled="true"])::after {
+      background: GrayText;
+    }
+
+    .ds-check:has(input:is(:disabled, [aria-disabled="true"])) {
+      color: GrayText;
+    }
+  }
+
+  /* Print: a check list shows every row, and the actions stay in the flow.
+     The drawn checkbox and radio (and a radio tile's check circle) are
+     backgrounds, which printing drops by default: they keep their colours,
+     so a checked box prints checked. */
+  @media print {
+    .ds-check-list {
+      max-height: none;
+      overflow: visible;
+    }
+
+    .ds-form-actions--sticky {
+      position: static;
+    }
+
+    :is(.ds-check input, .ds-radio input, .ds-table input[type="checkbox"]:where(:not(.ds-switch *, .ds-chip *)), .ds-checkbox, .ds-radio-input),
+    .ds-radio > :is(.ds-radio__icon, .ds-radio__mark) {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+}

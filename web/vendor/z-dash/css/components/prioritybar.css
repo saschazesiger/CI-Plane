@@ -1,0 +1,87 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Priority action bar: a row of actions that folds the least important ones
+ * into a "More" menu when it is too narrow for all of them (DS.prioritybar).
+ *
+ *   <div class="ds-priority-bar" role="toolbar" aria-label="Ticket actions" data-ds-prioritybar>
+ *     <button class="ds-btn ds-btn--quiet" type="button" data-ds-priority="2">(pencil 16) Edit</button>
+ *     <button class="ds-btn ds-btn--quiet" type="button">(userPlus 16) Assign</button>
+ *     <button class="ds-btn ds-btn--quiet" type="button">(archive 16) Archive</button>
+ *     [the module adds the More button and its menu]
+ *   </div>
+ *
+ *   .ds-priority-bar         the row: one line, no wrap; it takes the width
+ *                            its parent gives (a block, or a flex item that
+ *                            grows), never the width of its actions
+ *                            (contain: inline-size), so folding never
+ *                            changes its size; as high as an icon button,
+ *                            so the More button never changes its height
+ *   .ds-priority-bar--end    the actions sit at the end (a page or card head)
+ *   .ds-priority-bar__more   the More button (a quiet icon button the module
+ *                            adds, or the bar's own); always the last item,
+ *                            shown only while something is folded
+ *   .ds-priority-bar__menu   its menu (a .ds-menu): the folded actions, at
+ *                            least --ds-priority-bar-menu-width wide
+ *   [data-ds-folded]         on a folded action (and on More while nothing
+ *                            is folded), written by the system: not
+ *                            displayed
+ *
+ * Actions: the bar's .ds-btn children in any look (quiet in a toolbar is
+ * usual); data-ds-priority="<number>" keeps an action longer (the lower
+ * folds first; among equals the last one). Any other child (a divider)
+ * never folds and keeps its room.
+ *
+ * Options (docs/options.md), on the bar or any ancestor:
+ *   size      the actions' (button.css) and the bar's height
+ *   density   the actions' height and the gap: 1px less per step (4px at
+ *             the comfortable density, 1px at tight)
+ *   shape     the actions' radius
+ *   touch     every action, More too, at least --ds-target-min
+ *
+ * Hooks: --ds-priority-bar-gap (between the actions, comfortable),
+ * --ds-priority-bar-menu-width (the menu's least width).
+ *
+ * Motion: none of its own; an action folds and unfolds at once (a width
+ * change is no moment to animate), the menu is DS.menu's.
+ *
+ * Forced colours: the buttons' and the menu's.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.prioritybar {
+  .ds-priority-bar {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: max(0px, calc(var(--ds-priority-bar-gap, var(--ds-space-1)) + var(--ds-density, 0) * 1px));
+    min-inline-size: 0;
+    min-block-size: max(var(--ds-target-min, 0px), calc(var(--ds-btn-icon-size, 40px) + var(--ds-size-step, 0) * 8px));
+    /* Its width never follows its actions: folding cannot resize it. */
+    contain: inline-size;
+  }
+
+  .ds-priority-bar--end {
+    justify-content: flex-end;
+  }
+
+  .ds-priority-bar > * {
+    flex-shrink: 0;
+  }
+
+  /* More is always the last item of the row, whatever follows it in the
+     markup. */
+  .ds-priority-bar__more {
+    order: 1;
+  }
+
+  .ds-priority-bar > [data-ds-folded] {
+    display: none;
+  }
+
+  .ds-priority-bar__menu {
+    min-inline-size: var(--ds-priority-bar-menu-width, 200px);
+  }
+}

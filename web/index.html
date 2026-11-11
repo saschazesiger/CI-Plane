@@ -8,10 +8,10 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <!-- Fonts, the design system, the CI-Plane theme (tokens only), the shipped dark theme when the device asks for it,
      then the layout glue. No inline scripts: the Content-Security-Policy forbids them. -->
-<link rel="stylesheet" href="vendor/dashboard-style/fonts/fonts.css">
-<link rel="stylesheet" href="vendor/dashboard-style/ds.css">
+<link rel="stylesheet" href="vendor/z-dash/fonts/fonts.css">
+<link rel="stylesheet" href="vendor/z-dash/ds.min.css">
 <link rel="stylesheet" href="theme.css">
-<link rel="stylesheet" href="vendor/dashboard-style/themes/dark.css" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="vendor/z-dash/themes/dark.css" media="(prefers-color-scheme: dark)">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -31,9 +31,9 @@
         <small class="ds-field__hint" id="login-hint">Forgot it? Start CI-Plane with the environment variable CI_PLANE_ADMIN_PASSWORD set to a new password.</small>
       </div>
       <div class="ds-form-actions">
-        <button class="ds-btn ds-btn--primary" type="submit"><span class="ds-btn__faces">
+        <button class="ds-btn ds-btn--filled" type="submit"><span class="ds-btn__faces">
           <span class="ds-btn__face">Sign in</span>
-          <span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--sm"></span>Signing in</span>
+          <span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--ink ds-sm"></span>Signing in</span>
           <span class="ds-btn__face ds-btn__face--done" aria-hidden="true" data-icon-done>Signed in</span>
         </span></button>
       </div>
@@ -87,9 +87,9 @@
           <p class="ds-savebar__text" id="savebar-text">1 unsaved change</p>
           <div class="ds-savebar__actions">
             <button class="ds-btn ds-btn--text" type="button" id="savebar-discard">Discard</button>
-            <button class="ds-btn ds-btn--primary" type="submit" form="settings-form" id="savebar-save"><span class="ds-btn__faces">
+            <button class="ds-btn ds-btn--filled" type="submit" form="settings-form" id="savebar-save"><span class="ds-btn__faces">
               <span class="ds-btn__face">Save settings</span>
-              <span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--sm"></span>Saving</span>
+              <span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--ink ds-sm"></span>Saving</span>
               <span class="ds-btn__face ds-btn__face--done" aria-hidden="true" data-icon-done>Saved</span>
             </span></button>
           </div>
@@ -104,14 +104,14 @@
 
 <!-- One side sheet for the record opened from a list (a job, a worker). -->
 <dialog class="ds-sheet" id="sheet" aria-labelledby="sheet-title">
-  <div class="ds-sheet__backdrop" data-close></div>
+  <div class="ds-sheet__backdrop" data-ds-close></div>
   <section class="ds-sheet__panel">
     <div class="ds-sheet__head">
       <div class="ds-sheet__heading">
         <h2 class="ds-sheet__title" id="sheet-title">Details</h2>
         <p class="ds-sheet__subtitle" id="sheet-subtitle"></p>
       </div>
-      <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Close" data-tip="Close" data-close data-icon="close" data-icon-place="start"></button>
+      <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Close" data-tip="Close" data-ds-close data-icon="close" data-icon-place="start"></button>
     </div>
     <div class="ds-sheet__body" tabindex="0" id="sheet-body"></div>
   </section>
@@ -119,7 +119,7 @@
 
 <!-- Edit a worker: its name, tier and CPU priority. -->
 <dialog class="ds-dialog" id="worker-dialog" aria-labelledby="worker-dialog-title">
-  <div class="ds-dialog__backdrop" data-close></div>
+  <div class="ds-dialog__backdrop" data-ds-close></div>
   <form class="ds-dialog__box ds-form" id="worker-form" novalidate>
     <h2 class="ds-dialog__title" id="worker-dialog-title">Edit worker</h2>
     <div class="ds-field">
@@ -138,10 +138,10 @@
       <small class="ds-field__hint" id="worker-priority-hint"></small>
     </div>
     <div class="ds-dialog__actions">
-      <button class="ds-btn ds-btn--text" type="button" data-close>Cancel</button>
-      <button class="ds-btn ds-btn--primary" type="submit"><span class="ds-btn__faces">
+      <button class="ds-btn ds-btn--text" type="button" data-ds-close>Cancel</button>
+      <button class="ds-btn ds-btn--filled" type="submit"><span class="ds-btn__faces">
         <span class="ds-btn__face">Save</span>
-        <span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--sm"></span>Saving</span>
+        <span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--ink ds-sm"></span>Saving</span>
         <span class="ds-btn__face ds-btn__face--done" aria-hidden="true" data-icon-done>Saved</span>
       </span></button>
     </div>
@@ -149,8 +149,8 @@
 </dialog>
 
 <!-- After a worker was removed: the command that removes CI-Plane from the server. -->
-<dialog class="ds-dialog ds-dialog--wide" id="removed-dialog" aria-labelledby="removed-title">
-  <div class="ds-dialog__backdrop" data-close></div>
+<dialog class="ds-dialog ds-dialog--lg" id="removed-dialog" aria-labelledby="removed-title">
+  <div class="ds-dialog__backdrop" data-ds-close></div>
   <div class="ds-dialog__box">
     <h2 class="ds-dialog__title" id="removed-title">Worker removed</h2>
     <div class="ds-dialog__body">
@@ -162,12 +162,12 @@
       <p class="ds-meta">It deletes the user ci-plane, the registry mirror and every container, volume and network labelled ci-plane. Docker itself stays.</p>
     </div>
     <div class="ds-dialog__actions">
-      <button class="ds-btn ds-btn--primary" type="button" data-close>Done</button>
+      <button class="ds-btn ds-btn--filled" type="button" data-ds-close>Done</button>
     </div>
   </div>
 </dialog>
 
-<script src="vendor/dashboard-style/ds.js"></script>
+<script src="vendor/z-dash/ds.min.js"></script>
 <script type="module" src="app/main.js"></script>
 </body>
 </html>

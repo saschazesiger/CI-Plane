@@ -1,0 +1,218 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Category bar: the parts of a whole on one bar, with a legend that names
+ * each part and its figure (tickets by status, storage by kind, a budget
+ * spent per team). A segmented meter of unequal parts.
+ *
+ *   <figure class="ds-category-bar">
+ *     <figcaption class="ds-category-bar__head">
+ *       <span class="ds-category-bar__label">Tickets by status</span>
+ *       <span class="ds-category-bar__total">240</span>
+ *     </figcaption>
+ *     <div class="ds-category-bar__track" role="img"
+ *          aria-label="Open 120 (50%), in progress 72 (30%), closed 48 (20%)">
+ *       <span class="ds-category-bar__part" style="--ds-share: .5"></span>
+ *       <span class="ds-category-bar__part ds-category-bar__part--s2" style="--ds-share: .3"></span>
+ *       <span class="ds-category-bar__part ds-category-bar__part--s3" style="--ds-share: .2"></span>
+ *       <span class="ds-category-bar__marker" style="--ds-share: .8"></span>
+ *     </div>
+ *     <ul class="ds-legend" aria-hidden="true">
+ *       <li><span class="ds-legend__key"></span>Open <span class="ds-category-bar__value">120</span></li>
+ *       ...
+ *     </ul>
+ *   </figure>
+ *
+ *   .ds-category-bar__part      a part as wide as its --ds-share of the
+ *                               whole (flex-grow: the shares need not add
+ *                               up to 1; what is left over stays track);
+ *                               --s2 ... --s4 the series colours of the
+ *                               legend's keys, a .ds-tone-* on the part its
+ *                               chart role
+ *   .ds-category-bar__marker    a mark across the bar at its own share (a
+ *                               target, a limit)
+ *   .ds-category-bar__value     a figure inside a legend entry, tabular
+ *   .ds-category-bar--rest      the track shows what the parts leave over
+ *                               (their shares add up to less than 1:
+ *                               a budget not spent yet). Leave a part of
+ *                               no share out: it would still take a gap
+ *
+ * The parts are --ds-space-1 / 2 apart (a gap of the surface), so they
+ * stay apart where two colours are close.
+ *
+ * Options (src/core/options.css, docs/options.md), on the bar or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: the track 2px per step (8px at md)
+ *   density   .ds-density-*: the gap between its rows 1px per step
+ *   shape     .ds-shape-*: the track's ends and the parts' inner corners
+ *             times --ds-shape
+ *   tone      on a part itself (an inherited tone would recolour every
+ *             part): neutral, warning and error the chart roles, the
+ *             others the tone; always named in the legend
+ *   touch     not read: nothing here is a target
+ *
+ * The shares glide on --ds-ease-value over --ds-dur-glide (registered;
+ * the width follows); the first render fills from zero with
+ * .ds-enter--fill on the parts.
+ *
+ * Accessibility: the track is role="img" with a label that names every
+ * part with its figure; the legend repeats it for the eye and is
+ * aria-hidden (or the track is aria-hidden and the legend is read: one of
+ * the two). Forced colours: the parts are CanvasText, series 2 to 4
+ * hatched like the legend keys, with a Canvas gap; the marker CanvasText.
+ *
+ * Hooks: --ds-category-bar-height (8px), --ds-category-bar-gap (2px).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.category-bar {
+  .ds-category-bar {
+    display: grid;
+    gap: calc(var(--ds-space-2) + var(--ds-density, 0) * 1px);
+    min-width: 0;
+    margin: 0;
+  }
+
+  .ds-category-bar__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--ds-space-3);
+    min-width: 0;
+    color: var(--ds-text);
+    font: var(--ds-font-label);
+  }
+
+  .ds-category-bar__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-category-bar__total,
+  .ds-category-bar__value {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .ds-category-bar__value {
+    color: var(--ds-text);
+  }
+
+  .ds-category-bar__track {
+    --_h: max(calc(var(--ds-category-bar-height, 8px) + var(--ds-size-step, 0) * 2px), 2px);
+    --_radius: min(calc(min(var(--ds-radius-action), calc(var(--_h) / 2)) * var(--ds-shape, 1)), calc(var(--_h) / 2));
+    position: relative;
+    display: flex;
+    gap: var(--ds-category-bar-gap, 2px);
+    height: var(--_h);
+    border-radius: var(--_radius);
+  }
+
+  /* Shares that add up to less than 1 leave that much of the flex room
+     free: the track shows it. */
+  .ds-category-bar--rest .ds-category-bar__track {
+    background: var(--ds-chart-track);
+  }
+
+  .ds-category-bar__part {
+    --_fill: var(--ds-chart-1);
+    flex: var(--ds-share, 0) 1 0;
+    min-width: 0;
+    background: var(--_fill);
+    transition: --ds-share var(--ds-dur-glide) var(--ds-ease-value);
+  }
+
+  /* The ends of the bar are the first and the last part's; the track does
+     not clip, so a marker may reach past it. */
+  .ds-category-bar__part:first-child {
+    border-start-start-radius: var(--_radius);
+    border-end-start-radius: var(--_radius);
+  }
+
+  .ds-category-bar__part:nth-last-child(1 of .ds-category-bar__part) {
+    border-start-end-radius: var(--_radius);
+    border-end-end-radius: var(--_radius);
+  }
+
+  .ds-category-bar__part--s2 {
+    --_fill: var(--ds-chart-2);
+  }
+
+  .ds-category-bar__part--s3 {
+    --_fill: var(--ds-chart-3);
+  }
+
+  .ds-category-bar__part--s4 {
+    --_fill: var(--ds-chart-4);
+  }
+
+  .ds-category-bar__part:is(.ds-tone-primary, .ds-tone-info, .ds-tone-success) {
+    --_fill: var(--ds-tone);
+  }
+
+  .ds-category-bar__part.ds-tone-neutral {
+    --_fill: var(--ds-chart-neutral);
+  }
+
+  .ds-category-bar__part.ds-tone-warning {
+    --_fill: var(--ds-chart-warning);
+  }
+
+  .ds-category-bar__part.ds-tone-error {
+    --_fill: var(--ds-chart-error);
+  }
+
+  /* A mark across the bar at its own share, 3px past it on both sides; it
+     never moves with the parts. */
+  .ds-category-bar__marker {
+    position: absolute;
+    inset-block: -3px;
+    inset-inline-start: calc(var(--ds-share) * 100% - 1px);
+    width: 2px;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-text);
+    box-shadow: 0 0 0 1px var(--ds-surface);
+    transition: none;
+  }
+
+  @media (forced-colors: active) {
+    .ds-category-bar__track {
+      forced-color-adjust: none;
+      outline: 1px solid CanvasText;
+      background: Canvas;
+    }
+
+    .ds-category-bar__part {
+      background: CanvasText;
+    }
+
+    .ds-category-bar__part--s2 {
+      background: repeating-linear-gradient(45deg, CanvasText 0 2px, Canvas 2px 4px);
+    }
+
+    .ds-category-bar__part--s3 {
+      background: repeating-linear-gradient(135deg, CanvasText 0 2px, Canvas 2px 4px);
+    }
+
+    .ds-category-bar__part--s4 {
+      background: repeating-linear-gradient(90deg, CanvasText 0 2px, Canvas 2px 4px);
+    }
+
+    .ds-category-bar__marker {
+      forced-color-adjust: none;
+      background: CanvasText;
+      box-shadow: 0 0 0 1px Canvas;
+    }
+  }
+
+  @media print {
+    .ds-category-bar__part,
+    .ds-category-bar--rest .ds-category-bar__track {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+}

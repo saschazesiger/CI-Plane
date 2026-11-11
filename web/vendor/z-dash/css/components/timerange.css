@@ -1,0 +1,217 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Time range with refresh: the range control of a monitoring view. A
+ * button names the range and opens a picker popover with quick relative
+ * ranges, an absolute from and to, and the ranges used recently; beside it
+ * a refresh button and the auto-refresh interval. DS.timerange
+ * (timerange.js) renders everything inside the root:
+ *
+ *   <div class="ds-timerange" data-ds-timerange data-ds-timerange-from="now-1h" data-ds-timerange-to="now"
+ *        [data-ds-timerange-refresh="30s"] aria-label="Time range"></div>
+ *
+ *   (rendered:)
+ *   <div class="ds-timerange" role="group" aria-label="Time range">
+ *     <div class="ds-picker ds-timerange__range">
+ *       <button class="ds-btn ds-timerange__trigger" type="button" aria-haspopup="dialog" aria-expanded="false">
+ *         (clock) <span class="ds-btn__label ds-timerange__label">Last 1 hour</span> (chevronDown, .ds-timerange__chevron)</button>
+ *       <div class="ds-picker__popover" role="dialog" aria-modal="true" aria-label="Time range" hidden>
+ *         <div class="ds-picker__panes">
+ *           <div class="ds-picker__presets ds-timerange__quick" role="group">(heading, .ds-picker__preset ...)</div>
+ *           <div class="ds-picker__pane ds-timerange__absolute">
+ *             <p class="ds-picker__heading">Absolute time range</p>
+ *             <span class="ds-timerange__field-label">From</span> <div class="ds-datefield ds-datefield--block">...</div>
+ *             <span class="ds-timerange__field-label">To</span> <div class="ds-datefield ds-datefield--block">...</div>
+ *             <p class="ds-timerange__error" role="alert"></p>
+ *             <button class="ds-btn ds-btn--filled ds-timerange__apply" type="button">Apply</button>
+ *             <p class="ds-picker__heading">Recently used</p>
+ *             <div class="ds-picker__presets" role="group">...</div>
+ *     </div>
+ *     <button class="ds-btn ds-btn--icon" type="button" aria-label="Refresh">(refresh)</button>
+ *     <span class="ds-timerange__interval" [data-on]>
+ *       <select class="ds-timerange__select" aria-label="Auto refresh"><option value="">Off</option> ...</select> (chevronDown)
+ *     </span>
+ *   </div>
+ *
+ * The interval is a native select drawn as an outlined pill, its chevron
+ * over it; while an interval runs (data-on) it takes the tint, and its text
+ * says the interval, so it is not told by colour alone. The error under
+ * the fields has an icon of its own and the words.
+ *
+ * Options (src/core/options.css, docs/options.md), on the time range or any
+ * ancestor: the trigger and the refresh button are buttons (their size,
+ * density, shape and touch); the interval pill computes the same height
+ * (--ds-btn-height, 8px per size step, 4px per density step, at least
+ * --ds-target-min) and radius (the pill times --ds-shape). Tone: none.
+ *
+ * Motion: the popover's; the interval pill's tint over --ds-dur-fast; the
+ * chevron of the trigger turns with the popover (aria-expanded), on the
+ * spring.
+ *
+ * Forced colours: the interval pill keeps its border (ButtonBorder) and
+ * the system's select colours; while on it is Highlight / HighlightText.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.timerange {
+  .ds-timerange {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2);
+    max-inline-size: 100%;
+  }
+
+  .ds-timerange__range {
+    min-inline-size: 0;
+  }
+
+  .ds-timerange__trigger {
+    max-inline-size: 100%;
+  }
+
+  .ds-timerange__label {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The chevron turns over while the popover is open (a disclosure
+     rotation), on the spring. */
+  .ds-timerange__chevron {
+    flex: none;
+    transition: rotate var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  .ds-timerange__trigger[aria-expanded="true"] .ds-timerange__chevron {
+    rotate: 180deg;
+  }
+
+  .ds-timerange__absolute {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ds-space-1);
+    inline-size: 280px;
+    max-inline-size: 100%;
+  }
+
+  .ds-timerange__absolute > .ds-picker__heading:first-child {
+    margin-block-start: 0;
+    padding-inline: 0;
+  }
+
+  .ds-timerange__field-label {
+    margin-block-start: var(--ds-space-2);
+    color: var(--ds-text-2);
+    font: var(--ds-font-label);
+  }
+
+  .ds-timerange__error {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-1);
+    margin: 0;
+    color: var(--ds-on-error-container);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-timerange__error:empty {
+    display: none;
+  }
+
+  .ds-timerange__apply {
+    align-self: flex-start;
+    margin-block-start: var(--ds-space-2);
+  }
+
+  .ds-timerange__quick {
+    position: relative;
+    max-block-size: 360px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* The interval: a native select drawn as an outlined pill. */
+  .ds-timerange__interval {
+    --_h: calc(var(--ds-btn-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    --_half: calc(var(--_box) / 2);
+    --_radius: min(calc(min(var(--ds-radius-action), var(--_half)) * var(--ds-shape, 1)), var(--_half));
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    /* Never under its line and border, as a button: they line up at every size. */
+    block-size: max(var(--_box), calc(1lh + 2px));
+    border: 1px solid var(--ds-line-2);
+    border-radius: var(--_radius);
+    color: var(--ds-action-ink);
+    font: var(--ds-size-font, var(--ds-font-label));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-timerange__interval[data-on] {
+    border-color: transparent;
+    background: var(--ds-accent);
+    color: var(--ds-on-accent);
+  }
+
+  .ds-timerange__interval > .ds-timerange__chevron {
+    position: absolute;
+    inset-inline-end: var(--ds-space-3);
+    pointer-events: none;
+  }
+
+  .ds-timerange__select {
+    block-size: 100%;
+    margin: 0;
+    padding-block: 0;
+    padding-inline: var(--ds-space-4) calc(var(--ds-space-4) + var(--ds-space-4));
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    color: inherit;
+    font: var(--ds-size-font, var(--ds-font-label));
+    appearance: none;
+    cursor: pointer;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-timerange__select:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  @media (hover: hover) {
+    .ds-timerange__interval:hover {
+      border-color: var(--ds-text-2);
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-timerange__interval {
+      border-color: ButtonBorder;
+    }
+
+    .ds-timerange__interval[data-on] {
+      forced-color-adjust: none;
+      border-color: Highlight;
+      background: Highlight;
+      color: HighlightText;
+    }
+
+    .ds-timerange__select {
+      appearance: auto;
+      padding-inline-end: var(--ds-space-4);
+    }
+
+    .ds-timerange__interval > .ds-timerange__chevron {
+      display: none;
+    }
+  }
+}

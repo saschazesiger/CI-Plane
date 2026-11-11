@@ -1,0 +1,118 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Inline edit: a value shown as text with an edit button, which turns into
+ * a field with Save and Cancel in place. The view and the form are one
+ * height (a field's at every option), so nothing below moves when it
+ * switches.
+ *
+ *   <div class="ds-inlineedit" data-ds-inlineedit>   (data-state="view" | "edit", aria-busy: written by DS.inlineedit)
+ *     <div class="ds-inlineedit__view">
+ *       <span class="ds-inlineedit__value">LAPTOP-0042</span>
+ *       <button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm ds-inlineedit__edit" type="button" aria-label="Edit device name">(pencil 18)</button>
+ *     </div>
+ *     <div class="ds-inlineedit__form">
+ *       <input class="ds-input ds-inlineedit__input" aria-label="Device name">
+ *       <span class="ds-inlineedit__actions">
+ *         <button class="ds-btn ds-btn--tonal ds-sm ds-inlineedit__save" type="button">(faces: Save, busy)</button>
+ *         <button class="ds-btn ds-btn--text ds-sm ds-inlineedit__cancel" type="button">Cancel</button>
+ *       </span>
+ *     </div>
+ *     <small class="ds-field__hint ds-field__hint--error ds-inlineedit__error" hidden></small>
+ *   </div>
+ *
+ * Before the script runs (no data-state) only the view shows. The edit
+ * button always shows (a button that appears on hover is out of reach on a
+ * touch screen); a click on the value opens the field too. The actions wrap
+ * under the field in a narrow container.
+ *
+ * Options (src/core/options.css, docs/options.md), on the component or any
+ * ancestor:
+ *   size      .ds-xs ... .ds-xl: the view's height follows the field's (8px
+ *             per step); the field and the buttons are form.css's and
+ *             button.css's, computed there
+ *   density   .ds-density-*: 4px per step, as the field
+ *   shape     .ds-shape-*: the field and the buttons
+ *   touch     .ds-touch: the view, the field and every button at least
+ *             --ds-touch-target
+ * No tone: an error shows through aria-invalid and its message in words.
+ *
+ * Hooks: the field's (--ds-input-height; form.css) and
+ * --ds-inlineedit-field-min (12rem: the narrowest the field gets before
+ * the actions wrap under it).
+ *
+ * Forced colours: the field and the buttons are form.css's and button.css's;
+ * the error is words with an icon.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.inlineedit {
+  .ds-inlineedit {
+    display: grid;
+    gap: var(--ds-space-1);
+    min-width: 0;
+  }
+
+  /* The view as high as the field it turns into. */
+  .ds-inlineedit__view {
+    --_h: calc(var(--ds-input-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px);
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+    min-width: 0;
+    min-height: max(var(--ds-target-min, 0px), var(--_h));
+  }
+
+  .ds-inlineedit__value {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--ds-text);
+    cursor: text;
+  }
+
+  .ds-inlineedit__value:empty::before {
+    content: "\2014";
+    color: var(--ds-text-2);
+  }
+
+  .ds-inlineedit__edit {
+    flex: none;
+  }
+
+  .ds-inlineedit__form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-inlineedit__input {
+    flex: 1 1 var(--ds-inlineedit-field-min, 12rem);
+    width: auto;
+    min-width: 0;
+  }
+
+  .ds-inlineedit__actions {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--ds-space-1);
+  }
+
+  .ds-inlineedit__save,
+  .ds-inlineedit__cancel {
+    flex: none;
+  }
+
+  /* Which part shows: the view until the script says edit. */
+  .ds-inlineedit:not([data-state="edit"]) > .ds-inlineedit__form,
+  .ds-inlineedit[data-state="edit"] > .ds-inlineedit__view {
+    display: none;
+  }
+
+  .ds-inlineedit__error[hidden] {
+    display: none;
+  }
+}

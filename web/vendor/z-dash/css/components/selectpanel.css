@@ -1,0 +1,239 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Select panel: a button that opens a popover with a filter, a list of
+ * options to check (DS.listbox's .ds-listbox--plain) and an apply foot:
+ * labels, assignees, filters. Nothing changes until Apply; Escape, a press
+ * outside or Tab away discard. DS.selectpanel (selectpanel.js) opens and
+ * closes it through DS.overlay, places it (DS.position) and keeps the
+ * button's summary.
+ *
+ *   <div class="ds-selectpanel" data-ds-selectpanel>
+ *     <button class="ds-btn ds-btn--outlined ds-selectpanel__trigger" type="button" aria-haspopup="dialog" aria-expanded="false">
+ *       (tag 20) Labels <span class="ds-selectpanel__summary"></span> (chevronDown 20)
+ *     </button>
+ *     <div class="ds-selectpanel__panel" role="dialog" aria-label="Labels" hidden>
+ *       <div class="ds-selectpanel__head">
+ *         <input class="ds-input ds-selectpanel__search" type="search" aria-label="Filter labels" placeholder="Filter labels">
+ *       </div>
+ *       <div class="ds-listbox ds-listbox--plain ds-selectpanel__list" role="listbox" aria-multiselectable="true" aria-label="Labels">
+ *         <div class="ds-listbox__option" role="option" aria-selected="false" data-value="bug">
+ *           <span class="ds-listbox__check" aria-hidden="true">(check 16)</span><span class="ds-listbox__name">Bug</span></div> ...
+ *       </div>
+ *       <p class="ds-selectpanel__status" role="status"></p>
+ *       <div class="ds-selectpanel__foot">
+ *         <button class="ds-btn ds-btn--text" type="button" data-ds-selectpanel-clear>Clear</button>
+ *         <button class="ds-btn ds-btn--filled" type="button" data-ds-selectpanel-apply>Apply</button>
+ *       </div>
+ *     </div>
+ *   </div>
+ *
+ * The panel is a popup of DS.overlay: data-state (open, closed) drives its
+ * motion; where the top layer and anchor positioning exist it opens as
+ * popover="manual" (data-anchored) below the button or above it
+ * (data-placement="top"), never taller than the room on that side;
+ * elsewhere it stands under the button, absolute, its height capped by the
+ * script. The list scrolls inside the panel; head, status and foot stay.
+ * Without an Apply button every change applies at once.
+ *
+ * Options (src/core/options.css, docs/options.md), on the select panel or
+ * any ancestor (the panel inherits them through the DOM, also in the top
+ * layer):
+ *   size, density, touch  the trigger is a .ds-btn and the options are
+ *             listbox options: both compute them; the panel's padding takes
+ *             2px per density step
+ *   shape     .ds-shape-*: multiplies the panel's radius
+ *   tone      none
+ *
+ * Motion: the panel grows from the button (DS.motion.originFrom: its clip
+ * opens and it scales on --ds-ease-spatial over --ds-dur-medium while it
+ * fades in over --ds-dur-fast) and leaves with a fade in --ds-dur-instant; a
+ * close mid-way turns back from where it is.
+ *
+ * Forced colours: the panel keeps a transparent outline that becomes its
+ * edge; the options are the listbox's.
+ *
+ * Hooks: --ds-selectpanel-width (320px), --ds-selectpanel-list-max-height
+ * (320px), --ds-selectpanel-radius (--ds-radius-xs).
+ *
+ * Progressive:
+ * - scrollbar-color and scrollbar-width (a thin, quiet scrollbar in the
+ *   list): without them the platform scrollbar shows.
+ * - CSS anchor positioning (position-anchor, position-area and
+ *   position-try-fallbacks on the panel, behind @supports; DS.selectpanel
+ *   then opens it in the top layer with data-anchored, so no scrolling box
+ *   clips it): without it the panel is absolute under the button, and the
+ *   script flips it up and caps its height.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.selectpanel {
+  .ds-selectpanel {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    vertical-align: middle;
+  }
+
+  /* The button never outgrows the select panel's box: a long summary
+     truncates instead of pushing the row. */
+  .ds-selectpanel__trigger {
+    max-width: 100%;
+  }
+
+  /* The summary of the choice, quieter than the name. */
+  .ds-selectpanel__summary {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ds-text-2);
+    font-weight: var(--ds-weight-regular);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-selectpanel__summary:empty {
+    display: none;
+  }
+
+  /* Disabled is one model: the summary takes the button's disabled ink with
+     its name (in forced colours too, where that ink is GrayText). */
+  .ds-selectpanel__trigger:is(:disabled, [aria-disabled="true"]) .ds-selectpanel__summary {
+    color: inherit;
+  }
+
+  .ds-selectpanel__panel {
+    position: absolute;
+    top: calc(100% + var(--ds-space-1));
+    inset-inline-start: 0;
+    z-index: var(--ds-z-popover);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    width: min(var(--ds-selectpanel-width, 320px), calc(100vw - 2 * var(--ds-space-2)));
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: calc(var(--ds-selectpanel-radius, var(--ds-radius-xs)) * var(--ds-shape, 1));
+    background: var(--ds-surface-popover);
+    color: var(--ds-text);
+    box-shadow: var(--ds-elev-popover);
+    /* Invisible; forced colours paint it, so the panel keeps an edge. */
+    outline: 1px solid transparent;
+    /* Grows at its button (originFrom() writes the origin); its clip rests
+       --ds-space-6 beyond the box, room for the shadow. */
+    transform-origin: var(--ds-motion-origin, 0% 0%);
+    clip-path: inset(calc(-1 * var(--ds-space-6)));
+  }
+
+  .ds-selectpanel__panel[data-placement="top"] {
+    top: auto;
+    bottom: calc(100% + var(--ds-space-1));
+    transform-origin: var(--ds-motion-origin, 0% 100%);
+  }
+
+  /* Shown by hand (no data-state): the reveal plays once. */
+  .ds-selectpanel__panel:not([data-state]) {
+    animation:
+      ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) backwards,
+      ds-clip-in var(--ds-dur-medium) var(--ds-ease-spatial) backwards;
+  }
+
+  /* Driven by DS.overlay: transitions keyed on data-state, so a panel
+     closed mid-way continues from where it is. */
+  .ds-selectpanel__panel[data-state] {
+    animation: none;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-medium) var(--ds-ease-spatial),
+      clip-path var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  /* The exit only fades, in --ds-dur-instant; scale and clip go back to
+     their start once the panel is invisible. */
+  .ds-selectpanel__panel[data-state="closed"] {
+    opacity: 0;
+    scale: var(--ds-motion-scale, var(--ds-scale-popup));
+    clip-path: var(--ds-clip-from, inset(0 0 100% 0));
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in-out),
+      scale 0ms var(--ds-ease-in-out) var(--ds-dur-instant),
+      clip-path 0ms var(--ds-ease-in-out) var(--ds-dur-instant);
+  }
+
+  .ds-selectpanel__panel[hidden] {
+    display: none;
+  }
+
+  /* Anchor positioning: in the top layer (popover="manual"), below the
+     button from its start edge or above it (data-placement="top"); never
+     taller than the room on its side. The UA box of a popover goes. */
+  @supports (position-area: block-end) {
+    .ds-selectpanel__panel[data-anchored] {
+      position: fixed;
+      inset: auto;
+      height: auto;
+      max-height: calc(100% - 2 * var(--ds-space-1));
+      margin: var(--ds-space-1) 0;
+      position-area: block-end span-inline-end;
+      position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    }
+
+    .ds-selectpanel__panel[data-anchored][data-placement="top"] {
+      position-area: block-start span-inline-end;
+    }
+  }
+
+  .ds-selectpanel__head {
+    flex: none;
+    padding: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px) var(--ds-space-3) var(--ds-space-2);
+    border-block-end: 1px solid var(--ds-line);
+  }
+
+  .ds-selectpanel__search {
+    width: 100%;
+  }
+
+  /* The list scrolls inside the panel; head, status and foot stay. */
+  .ds-selectpanel__list {
+    /* Positioned, so scrollIntoView() and absolute content stay inside. */
+    position: relative;
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: var(--ds-selectpanel-list-max-height, 320px);
+    padding-block: var(--ds-space-1);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ds-line-2) transparent;
+  }
+
+  .ds-selectpanel__status {
+    flex: none;
+    margin: 0;
+    padding: var(--ds-space-2) var(--ds-space-4);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  .ds-selectpanel__status:empty {
+    display: none;
+  }
+
+  .ds-selectpanel__foot {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--ds-space-2);
+    padding: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px) var(--ds-space-3);
+    border-block-start: 1px solid var(--ds-line);
+  }
+
+  @media print {
+    .ds-selectpanel__panel {
+      display: none;
+    }
+  }
+}

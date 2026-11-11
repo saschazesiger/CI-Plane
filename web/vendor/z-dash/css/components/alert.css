@@ -1,0 +1,377 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Alerts: notices on tonal containers with an icon, never colour alone.
+ * The neutral alert has no colour of its own: the quiet surface and the
+ * icon in the primary colour.
+ *
+ *   <div class="ds-alert ds-tone-warning" role="status">
+ *     <svg ...>(alert, 20)</svg>
+ *     <span class="ds-alert__text">The certificate expires in 5 days.</span>
+ *     <button class="ds-btn ds-btn--text ds-sm" type="button">Renew</button>
+ *   </div>
+ *
+ *   (none: neutral info)  .ds-tone-success  -warning  -error  -info  -primary  -neutral
+ *   .ds-alert--plain      a finding in a card: no fill, no edge, no inline
+ *                         padding, no radius; hairlines between consecutive
+ *                         plain alerts (a preset of the hooks below)
+ *   .ds-alert--inline     an inline message, under a field or in a row: icon
+ *                         and meta text on the surface, no box
+ *   .ds-alert--section    a section message: a block with a title, room around
+ *                         it and its actions always under the text
+ *
+ * Options (docs/options.md), read here:
+ *   size      .ds-xs ... .ds-xl on the alert or any ancestor: 2px of padding
+ *             per step (its buttons take the same step). Type and icon stay.
+ *   density   any container: 2px of padding per step; type and icon stay.
+ *             So the compact theme (density -2) pads it 8/12px, 2.x's 12/16
+ *             with less room, on purpose.
+ *   shape     the radius times --ds-shape (--plain and --inline have none)
+ *   tone      from the class on the alert itself (an inherited tone never
+ *             recolours it); the icon and the word stay, never colour alone
+ *   target-min: its buttons and the .ds-errors summary read it, the alert
+ *             itself is no target. A button taller than the line and its
+ *             padding makes the alert grow: the box always holds it.
+ *
+ * A title, more paragraphs and actions:
+ *
+ *   <div class="ds-alert ds-tone-warning">
+ *     <svg ...>(alert, 20)</svg>
+ *     <div class="ds-alert__text"><p class="ds-alert__title">Certificate expires soon</p><p>Renew it before 1 May.</p></div>
+ *     <div class="ds-alert__actions"><button class="ds-btn ds-btn--text ds-sm" type="button">Renew</button></div>
+ *   </div>
+ *
+ * With .ds-alert__actions the alert wraps: the text takes at least
+ * --ds-alert-text-basis (256px) and the actions drop under it when the row
+ * is narrow. Static findings carry no live role.
+ *
+ * Hooks: --ds-alert-bg (--ds-surface-low), --ds-alert-color (--ds-text),
+ * --ds-alert-icon (--ds-primary; also the edge colour), --ds-alert-edge
+ * (the width of a leading edge, 0), --ds-alert-radius (--ds-radius-card),
+ * --ds-alert-padding-block (12px) and --ds-alert-padding-inline (16px),
+ * the md bases, and per tone (success, warning, error)
+ * --ds-alert-<kind>-bg, --ds-alert-<kind>-color, --ds-alert-<kind>-icon
+ * with today's values as fallbacks; error buttons take
+ * --ds-alert-error-color; --ds-alert-text-basis. Forced colours: a
+ * transparent outline becomes the edge of a box.
+ *
+ * The summary of .ds-errors is a pressable part: a state layer in its
+ * colour (hover, press in --ds-dur-micro, focus with --ds-state-focus) in
+ * a 4px padding that hangs into the space around it, the ripple
+ * (js/ripple.js), and its own ring for keyboard focus (also without
+ * .ds-base): solid from the first frame, it snaps from offset + width to
+ * the offset (outline-offset, --ds-dur-fast). It is not a pill and does
+ * not morph. Its chevron (.ds-errors__chevron) turns 180deg with the list
+ * on the spring, like .ds-chevron; <details class="ds-errors
+ * ds-collapsible"> opens the list with the collapsible timing.
+ *
+ * Inserting and dismissing (docs/motion.md, "Data motion"): through
+ * DS.motion.flip on the stack, for a user action and live data alike.
+ * Dismiss: flip(stack, () => alert.remove()): the alert fades out in place,
+ * out of flow, and the alerts below glide up on the spring (in any flex or
+ * grid gap, no height animated). Insert: flip(stack, () =>
+ * stack.prepend(alert)): it fades in while the others glide down.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.alert {
+  /* No entrance of their own: an alert re-rendered with fresh data is
+     patched in place and never fades in again. An alert that comes or goes
+     (a user action or live data) does it through DS.motion.flip on its
+     stack (the header above); one that replaces a placeholder takes
+     .ds-reveal, never per update. */
+
+  /* The block padding is at least the hang of its button (--_btn, set below
+     when it has one), so the button stays inside and centred on the line. */
+  .ds-alert {
+    --_pad-block: max(calc(var(--ds-alert-padding-block, var(--ds-space-3)) + var(--ds-size-step, 0) * 2px + var(--ds-density, 0) * 2px), calc((var(--_btn, 0px) - var(--ds-space-5)) / 2));
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-3);
+    padding: var(--_pad-block) calc(var(--ds-alert-padding-inline, var(--ds-space-4)) + var(--ds-size-step, 0) * 2px + var(--ds-density, 0) * 2px);
+    border-inline-start: var(--ds-alert-edge, 0px) solid var(--ds-alert-icon, var(--ds-primary));
+    border-radius: calc(var(--ds-alert-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    background: var(--ds-alert-bg, var(--ds-surface-low));
+    color: var(--ds-alert-color, var(--ds-text));
+    font: var(--ds-font-body);
+  }
+
+  .ds-alert > svg {
+    flex-shrink: 0;
+    color: var(--ds-alert-icon, var(--ds-primary));
+  }
+
+  /* The 20px icon and a 20px line share one baseline. */
+  .ds-alert__text {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* The height of its button, which the alert cannot read: it computes the
+     button's, one size step down when the button carries .ds-sm itself. */
+  .ds-alert:has(> .ds-btn, > .ds-alert__actions) {
+    --_btn: max(var(--ds-target-min, 0px), calc(var(--ds-btn-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+  }
+
+  .ds-alert:has(> .ds-btn.ds-sm, > .ds-alert__actions > .ds-btn.ds-sm) {
+    --_btn: max(var(--ds-target-min, 0px), calc(var(--ds-btn-height, 40px) - 8px + var(--ds-density, 0) * 4px));
+  }
+
+  /* The button hangs out of the 20px text line by the same amount above and
+     below, so its label sits on the text's centre line and the banner keeps
+     its even padding. Never further than the padding: a button of another
+     size stays inside the box too. */
+  .ds-alert .ds-btn {
+    flex-shrink: 0;
+    margin-block: max(calc(-1 * var(--_pad-block)), calc((var(--ds-space-5) - max(var(--ds-target-min, 0px), calc(var(--ds-btn-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px))) / 2));
+    margin-inline: auto calc(-1 * var(--ds-space-2));
+  }
+
+  /* A title and more paragraphs in the text. */
+  .ds-alert__title {
+    display: block;
+    color: inherit;
+    font: var(--ds-font-label);
+  }
+
+  .ds-alert__text > p {
+    margin: 0;
+  }
+
+  .ds-alert__text > p + p {
+    margin-top: var(--ds-space-2);
+  }
+
+  /* Actions in a row after the text: the row hangs out of the text line as
+     a single button would, its buttons sit side by side. */
+  .ds-alert__actions {
+    display: flex;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    gap: var(--ds-space-1);
+    margin-block: max(calc(-1 * var(--_pad-block)), calc((var(--ds-space-5) - var(--_btn)) / 2));
+    margin-inline: auto calc(-1 * var(--ds-space-2));
+  }
+
+  .ds-alert__actions > .ds-btn {
+    margin: 0;
+  }
+
+  .ds-alert:has(> .ds-alert__actions) {
+    flex-wrap: wrap;
+  }
+
+  .ds-alert:has(> .ds-alert__actions) > .ds-alert__text {
+    flex: 1 1 var(--ds-alert-text-basis, 256px);
+  }
+
+  .ds-alert a {
+    color: inherit;
+  }
+
+  /* The tones set the alert's hooks from their own, with today's colours as
+     fallbacks, from the class on the alert itself. Zero weight on the tone,
+     so --plain, --inline and --section below still decide by order. */
+  .ds-alert:where(.ds-tone-success) {
+    --ds-alert-bg: var(--ds-alert-success-bg, var(--ds-success-container));
+    --ds-alert-color: var(--ds-alert-success-color, var(--ds-on-success-container));
+    --ds-alert-icon: var(--ds-alert-success-icon, var(--ds-success));
+  }
+
+  .ds-alert:where(.ds-tone-warning) {
+    --ds-alert-bg: var(--ds-alert-warning-bg, var(--ds-warning-surface));
+    --ds-alert-color: var(--ds-alert-warning-color, var(--ds-text));
+    --ds-alert-icon: var(--ds-alert-warning-icon, var(--ds-warning));
+  }
+
+  .ds-alert:where(.ds-tone-error) {
+    --ds-alert-bg: var(--ds-alert-error-bg, var(--ds-error-container));
+    --ds-alert-color: var(--ds-alert-error-color, var(--ds-on-error-container));
+    --ds-alert-icon: var(--ds-alert-error-icon, var(--ds-error));
+  }
+
+  /* A filled or tonal button keeps the ink of its own fill. */
+  .ds-alert:where(.ds-tone-error):not(.ds-alert--plain, .ds-alert--inline) .ds-btn:not(.ds-btn--filled, .ds-btn--tonal) {
+    --ds-btn-color: var(--ds-alert-error-color, var(--ds-on-error-container));
+  }
+
+  .ds-alert:where(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info) {
+    --ds-alert-bg: var(--ds-tone-container);
+    --ds-alert-color: var(--ds-on-tone-container);
+    --ds-alert-icon: var(--ds-tone);
+  }
+
+  /* Plain: a finding in a card, on the card's own surface. A preset of the
+     hooks (after the kinds: their icon stays), hairlines between
+     consecutive ones. */
+  .ds-alert--plain {
+    --ds-alert-bg: transparent;
+    --ds-alert-color: var(--ds-text);
+    --ds-alert-edge: 0;
+    padding-inline: 0;
+    border-radius: 0;
+  }
+
+  .ds-alert--plain + .ds-alert--plain {
+    border-top: 1px solid var(--ds-line);
+  }
+
+  /* An inline message, under a field or in a row: the icon in the tone and
+     the word on the surface, in the meta type; no box to pad or round, so
+     size, density and shape have nothing to change. */
+  .ds-alert--inline {
+    --_pad-block: 0px;
+    --ds-alert-bg: transparent;
+    --ds-alert-color: var(--ds-text);
+    --ds-alert-edge: 0;
+    display: inline-flex;
+    gap: var(--ds-space-1);
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    font: var(--ds-font-meta);
+  }
+
+  /* With no padding to hang into, its button makes the row and the words
+     centre on it. */
+  .ds-alert--inline:has(> .ds-btn, > .ds-alert__actions) {
+    align-items: center;
+  }
+
+  /* A section message: a block with a title, its actions always under the
+     text in the text's column, so nothing hangs. */
+  .ds-alert--section {
+    --_pad-block: calc(var(--ds-alert-padding-block, var(--ds-space-4)) + var(--ds-size-step, 0) * 2px + var(--ds-density, 0) * 2px);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: var(--_pad-block) calc(var(--ds-alert-padding-inline, var(--ds-space-5)) + var(--ds-size-step, 0) * 2px + var(--ds-density, 0) * 2px);
+  }
+
+  .ds-alert--section .ds-alert__title {
+    margin-bottom: var(--ds-space-1);
+    font: var(--ds-font-subtitle);
+  }
+
+  .ds-alert--section > :is(.ds-alert__actions, .ds-btn) {
+    grid-column: 2;
+    justify-self: start;
+    margin: var(--ds-space-2) 0 0;
+  }
+
+  /* Forced colours drop the fill: a transparent outline becomes the edge. */
+  @media (forced-colors: active) {
+    .ds-alert:not(.ds-alert--plain, .ds-alert--inline) {
+      outline: 1px solid transparent;
+      outline-offset: -1px;
+    }
+  }
+
+  /* Code in a tonal alert is told apart by the typeface alone. */
+  .ds-alert code {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+  }
+
+  /* Collapsible list of messages: icon and text in the summary.
+
+     <details class="ds-errors ds-collapsible"><summary><svg ...>(alertCircle)</svg>2 errors<svg class="ds-errors__chevron" ...>(chevronDown)</svg></summary><ul><li>...</li></ul></details> */
+  .ds-errors {
+    font: var(--ds-font-body);
+  }
+
+  /* Its 4px padding (the room of its state layer) hangs into the space
+     around it, like the table's sort button, so the text keeps its place. */
+  .ds-errors summary {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-height: var(--ds-target-min, 0px);
+    margin: calc(-1 * var(--ds-space-1));
+    padding: var(--ds-space-1);
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    color: var(--ds-on-error-container);
+    font: var(--ds-font-label);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  /* State layer in the content colour. */
+  .ds-errors summary::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-errors summary:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  /* Keyboard focus: the layer appears with the ring and fades out on blur. */
+  .ds-errors summary:focus-visible::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  /* Press-in in --ds-dur-micro (.ds-pressed: js/ripple.js holds it). */
+  .ds-errors summary:active::before,
+  .ds-errors summary.ds-pressed::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-errors summary:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-errors summary svg {
+    flex-shrink: 0;
+    color: var(--ds-error);
+  }
+
+  /* Its own bullets: a layered reset (list-style: none on ul) would leave
+     the indent without its markers. */
+  .ds-errors ul {
+    list-style-type: disc;
+    margin: var(--ds-space-2) 0 0;
+    padding-inline-start: var(--ds-space-5);
+    color: var(--ds-text-2);
+    overflow-wrap: anywhere;
+  }
+
+  .ds-errors li + li {
+    margin-top: var(--ds-space-1);
+  }
+
+  .ds-errors summary::-webkit-details-marker {
+    display: none;
+  }
+
+  /* The disclosure chevron turns 180deg with the expansion (D25), on the
+     timing of .ds-chevron. */
+  .ds-errors .ds-errors__chevron {
+    color: inherit;
+    transition: rotate var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  .ds-errors[open] .ds-errors__chevron {
+    rotate: 180deg;
+  }
+}

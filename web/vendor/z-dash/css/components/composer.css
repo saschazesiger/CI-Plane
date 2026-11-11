@@ -1,0 +1,446 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Composer: the message field of a conversation. One filled shell holds
+ * the textarea, which grows with its text up to --ds-composer-max-height,
+ * and its actions, which stay at the bottom; attachments sit as chips above
+ * the text; a slash-command palette and @-mentions open as a listbox at the
+ * caret. The shell is a form: Enter sends, Shift+Enter breaks the line.
+ *
+ *   <form class="ds-composer" data-ds-composer data-ds-composer-draft="ticket-42">
+ *     <ul class="ds-composer__attachments" aria-label="Attachments"></ul>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Attach files" data-tip="Attach files" data-ds-composer-attach>(paperclip)</button>
+ *     <input class="ds-composer__picker" type="file" multiple hidden>
+ *     <textarea class="ds-composer__input ds-input--grow" rows="1" aria-label="Message" placeholder="Message"></textarea>
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Dictate" aria-pressed="false">(mic)</button>
+ *     <button class="ds-btn ds-btn--filled ds-btn--icon" type="submit" aria-label="Send" data-tip="Send">
+ *       <span class="ds-icon-swap" data-swap="a"><span class="ds-icon-swap__a">(send)</span><span class="ds-icon-swap__b">(square)</span></span></button>
+ *     <div class="ds-composer__palette" role="listbox" aria-label="Commands" data-ds-composer-trigger="/" popover="manual" hidden>
+ *       <div class="ds-composer__option" role="option" data-value="/summarize">(sparkles)
+ *         <span class="ds-composer__option-label">/summarize</span><span class="ds-composer__option-hint">Sum up the ticket</span></div>
+ *       <div class="ds-composer__empty" hidden>No results</div>
+ *     </div>
+ *   </form>
+ *
+ * The simple 2.x markup (a textarea and a send button in .ds-composer)
+ * still works and looks as before: the textarea's own side padding (12px)
+ * and the shell's (4px) add up to the 2.x 16px.
+ *
+ * Parts:
+ *   .ds-composer__input        the textarea (rows="1"); it grows with its
+ *                              text (field-sizing, else DS.dom.autosize(),
+ *                              which the module calls) up to
+ *                              --ds-composer-max-height, then scrolls
+ *   .ds-composer__attachments  a list of chips on a line of its own above
+ *                              the text; empty, it takes no room
+ *   .ds-composer__attachment   one chip: a file glyph, the name (an
+ *                              ellipsis past --ds-composer-chip-max-width),
+ *                              the size (.ds-composer__attachment-size) and
+ *                              a remove button (.ds-btn--icon .ds-xs)
+ *   .ds-composer__picker       the hidden file input the attach button opens
+ *   .ds-composer__palette      the listbox popup at the caret (popover,
+ *                              placed by the script: --ds-composer-palette-x
+ *                              and -y in the viewport's terms); one per
+ *                              trigger character (data-ds-composer-trigger:
+ *                              "/" for commands, "@" for mentions)
+ *   .ds-composer__option       a row: an icon, .ds-composer__option-label
+ *                              and .ds-composer__option-hint; the active one
+ *                              (aria-selected="true", focus stays in the
+ *                              textarea) takes the focus layer and an inset
+ *                              bar, so it shows without colour too
+ *   .ds-composer__empty        the "No results" row, shown by the script
+ *
+ * States, written by the module (DS.composer):
+ *   data-state="busy"          a reply is being generated: the submit
+ *                              button turns into Stop (its icon swap shows
+ *                              b, its name the string stop)
+ *   data-ds-dragover           files are over the composer
+ *                              (DS.dom.dropzone()): a dashed ring and the
+ *                              drop tint
+ *   :has(> .ds-composer__input:disabled)  the disabled model
+ *
+ * Options (src/core/options.css, docs/options.md), on the composer or any
+ * ancestor; each is computed here, in the part's own rule:
+ *   size      .ds-xs ... .ds-xl: the field row 8px per step (the field's
+ *             height, --ds-input-height), the text of the size's role; the
+ *             palette rows 8px per step
+ *   density   .ds-density-*: 4px of the field row and of the palette rows
+ *             per step; the chips 4px per step
+ *   shape     .ds-shape-*: multiplies the shell's, the chips' and the
+ *             palette's radius
+ *   touch     .ds-touch: the field row and the palette rows at least
+ *             --ds-touch-target high; the buttons follow their own rule
+ * There is no tone: the composer means nothing by colour. Field text is
+ * --ds-font-input (16px) on screens up to 600px, where iOS would zoom.
+ *
+ * Hooks: --ds-composer-radius (--ds-radius-2xl), --ds-composer-max-height
+ * (220px), --ds-composer-bg (--ds-surface-high), --ds-composer-chip-max-width
+ * (200px), --ds-composer-chip-height (40px), --ds-composer-palette-width (320px), --ds-composer-option-height
+ * (40px), --ds-composer-palette-radius (--ds-radius-xs). Reads
+ * --ds-input-height and --ds-input-focus-color of the field. The computed
+ * values (--_box, --_row) are private: never set them.
+ *
+ * Motion: the ring follows the field model on the shell (at once while
+ * focus is inside, fading back on blur). The palette fades in on
+ * --ds-dur-fast and grows from --ds-scale-popup at the caret on the spring
+ * (--ds-dur-medium); it leaves in --ds-dur-instant, fading only.
+ * Transitions keyed on data-state (DS.overlay), so a palette closed
+ * mid-way turns back from where it is. A chip that arrives or goes plays
+ * DS.motion.enter / leave ('pop'). The send icon swaps to stop through
+ * .ds-icon-swap.
+ *
+ * Forced colours: the shell and the chips keep a transparent border (their
+ * edge there) and the shell shows a Highlight outline while focused; the
+ * palette keeps a transparent outline as its edge; the active option is
+ * SelectedItem / SelectedItemText; the drop state a dashed Highlight edge.
+ *
+ * Progressive:
+ * - field-sizing (the textarea grows with its text): without it
+ *   DS.dom.autosize() sets its height from the text.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.composer {
+  .ds-composer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--ds-space-1);
+    min-width: 0;
+    padding: var(--ds-space-1);
+    border: 1px solid transparent;
+    border-radius: calc(var(--ds-composer-radius, var(--ds-radius-2xl)) * var(--ds-shape, 1));
+    background: var(--ds-composer-bg, var(--ds-surface-high));
+    color: var(--ds-text);
+    transition:
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* The ring of the field model, at once while focus is inside; a click on
+     an attachment's remove button or the palette keeps it. */
+  .ds-composer:focus-within {
+    border-color: var(--ds-input-focus-color, var(--ds-primary));
+    background: var(--ds-surface);
+    box-shadow: inset 0 0 0 1px var(--ds-input-focus-color, var(--ds-primary));
+    transition-duration: 0s;
+  }
+
+  .ds-composer > .ds-composer__input {
+    --_box: max(var(--ds-target-min, 0px), calc(var(--ds-input-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: var(--_box);
+    max-height: var(--ds-composer-max-height, 220px);
+    margin: 0;
+    padding-block: max(0px, calc((var(--_box) - 1lh) / 2));
+    padding-inline: var(--ds-space-3) var(--ds-space-1);
+    overflow-y: auto;
+    border: 0;
+    background: transparent;
+    color: var(--ds-text);
+    font: var(--ds-input-font, var(--ds-size-font, var(--ds-font-body)));
+    font-weight: var(--ds-input-weight, var(--ds-weight-regular));
+    resize: none;
+  }
+
+  @supports (field-sizing: content) {
+    .ds-composer > .ds-composer__input {
+      field-sizing: content;
+    }
+  }
+
+  /* The shell draws the ring. */
+  .ds-composer__input:focus {
+    outline: none;
+  }
+
+  /* On the tonal fill text-3 falls short of 4.5:1; text-2 keeps it. */
+  .ds-composer__input::placeholder {
+    color: var(--ds-text-2);
+    opacity: 1;
+  }
+
+  .ds-composer > .ds-btn {
+    flex: none;
+  }
+
+  /* Blocked: the field and its actions take the disabled model. */
+  .ds-composer:has(> .ds-composer__input:disabled) {
+    background: var(--ds-disabled-fill, var(--ds-surface-high));
+    color: var(--ds-disabled-ink, var(--ds-text));
+  }
+
+  .ds-composer > .ds-composer__input:disabled {
+    color: var(--ds-disabled-ink, var(--ds-text));
+    opacity: var(--ds-disabled-opacity, var(--ds-state-disabled));
+    cursor: not-allowed;
+  }
+
+  /* Files over the composer: a dashed ring and the drop tint, at once. */
+  .ds-composer[data-ds-dragover] {
+    border-style: dashed;
+    border-color: var(--ds-input-focus-color, var(--ds-primary));
+    background: color-mix(in srgb, var(--ds-input-focus-color, var(--ds-primary)) calc(var(--ds-state-hover) * 100%), var(--ds-surface));
+    transition-duration: 0s;
+  }
+
+  .ds-composer__picker {
+    display: none;
+  }
+
+  /* ── Attachments ───────────────────────────────── */
+
+  .ds-composer__attachments {
+    display: flex;
+    flex-wrap: wrap;
+    flex-basis: 100%;
+    order: -1;
+    gap: var(--ds-space-2);
+    min-width: 0;
+    margin: 0;
+    padding: var(--ds-space-2) var(--ds-space-2) var(--ds-space-1);
+    list-style: none;
+  }
+
+  .ds-composer__attachments:empty {
+    display: none;
+  }
+
+  .ds-composer__attachment {
+    --_h: max(var(--ds-target-min, 0px), calc(var(--ds-composer-chip-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-width: 0;
+    max-width: 100%;
+    min-height: var(--_h);
+    padding-block: 0;
+    padding-inline: var(--ds-space-3) var(--ds-space-1);
+    border: 1px solid var(--ds-line-2);
+    border-radius: calc(var(--ds-radius-chip) * var(--ds-shape, 1));
+    background: var(--ds-surface);
+    color: var(--ds-text);
+    font: var(--ds-size-font, var(--ds-font-label));
+  }
+
+  .ds-composer__attachment > svg {
+    flex: none;
+    color: var(--ds-text-2);
+  }
+
+  .ds-composer__attachment-name {
+    min-width: 0;
+    max-width: var(--ds-composer-chip-max-width, 200px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-composer__attachment-size {
+    flex: none;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-composer__attachment > .ds-btn {
+    flex: none;
+  }
+
+  /* ── The palette ───────────────────────────────── */
+
+  /* Fixed, so no scrolling box cuts it off (in the top layer as a popover).
+     inset, margin and border double as the reset of the UA box of a
+     popover. Physical on purpose: --ds-composer-palette-x is a script
+     coordinate from the left. */
+  .ds-composer__palette {
+    position: fixed;
+    inset: var(--ds-composer-palette-y, 0px) auto auto var(--ds-composer-palette-x, 0px);
+    z-index: var(--ds-z-popover);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    width: min(var(--ds-composer-palette-width, 320px), calc(100vw - 2 * var(--ds-space-2)));
+    max-height: min(320px, calc(100vh - 2 * var(--ds-space-2)));
+    margin: 0;
+    padding: calc(var(--ds-space-2) + var(--ds-density, 0) * 2px) 0;
+    overflow-y: auto;
+    border: 0;
+    border-radius: calc(var(--ds-composer-palette-radius, var(--ds-radius-xs)) * var(--ds-shape, 1));
+    background: var(--ds-surface-popover);
+    color: var(--ds-text);
+    box-shadow: var(--ds-elev-popover);
+    /* Invisible; forced colors paint it, so the palette keeps an edge. */
+    outline: 1px solid transparent;
+    transform-origin: var(--ds-motion-origin, 0% 100%);
+    /* At rest closed: the open state is DS.overlay's data-state="open".
+       The exit only fades, in --ds-dur-instant; the scale goes back to its
+       start once the palette is invisible. Closed, it takes no pointer. */
+    opacity: 0;
+    scale: var(--ds-motion-scale, var(--ds-scale-popup));
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in-out),
+      scale 0ms var(--ds-ease-in-out) var(--ds-dur-instant);
+  }
+
+  .ds-composer__palette[data-state="open"] {
+    opacity: 1;
+    scale: 1;
+    pointer-events: auto;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  .ds-composer__palette[hidden] {
+    display: none;
+  }
+
+  .ds-composer__option {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--ds-space-3);
+    min-height: max(var(--ds-target-min, 0px), calc(var(--ds-composer-option-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    padding: 0 var(--ds-space-3);
+    color: var(--ds-text);
+    font: var(--ds-size-font, var(--ds-font-body));
+    cursor: pointer;
+  }
+
+  .ds-composer__option[hidden] {
+    display: none;
+  }
+
+  .ds-composer__option > svg {
+    flex: none;
+    color: var(--ds-text-2);
+  }
+
+  .ds-composer__option-label {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .ds-composer__option-hint {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The state layer in the content colour: hover, and the active option at
+     the focus strength with a bar on its start edge (never colour alone). */
+  .ds-composer__option::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-composer__option:hover::before {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-composer__option[aria-selected="true"]::before {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  .ds-composer__option::after {
+    content: '';
+    position: absolute;
+    inset-block: var(--ds-space-1);
+    inset-inline-start: 0;
+    inline-size: var(--ds-focus-width);
+    border-radius: var(--ds-focus-width);
+    background: var(--ds-primary);
+    opacity: 0;
+    transition: opacity var(--ds-dur-instant) var(--ds-ease-in-out);
+  }
+
+  .ds-composer__option[aria-selected="true"]::after {
+    opacity: 1;
+    transition-duration: 0s;
+  }
+
+  .ds-composer__option:active::before {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-composer__option[aria-disabled="true"] {
+    color: var(--ds-disabled-ink, var(--ds-text));
+    opacity: var(--ds-disabled-opacity, var(--ds-state-disabled));
+    cursor: default;
+  }
+
+  .ds-composer__empty {
+    padding: var(--ds-space-2) var(--ds-space-3);
+    color: var(--ds-text-2);
+    font: var(--ds-font-body);
+  }
+
+  .ds-composer__empty[hidden] {
+    display: none;
+  }
+
+  @media (max-width: 600px) {
+    /* 2px more than the box asks for, around the taller line: 44px at md. */
+    .ds-composer > .ds-composer__input {
+      padding-block: max(0px, calc((var(--_box) - 1lh) / 2 + 2px));
+      font: var(--ds-input-font, var(--ds-font-input));
+      font-weight: var(--ds-input-weight, var(--ds-weight-regular));
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-composer:focus-within {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+
+    .ds-composer[data-ds-dragover] {
+      border-color: Highlight;
+    }
+
+    .ds-composer__attachment {
+      border-color: CanvasText;
+    }
+
+    .ds-composer__option[aria-selected="true"] {
+      forced-color-adjust: none;
+      background: SelectedItem;
+      color: SelectedItemText;
+    }
+
+    .ds-composer__option[aria-selected="true"] > svg,
+    .ds-composer__option[aria-selected="true"] .ds-composer__option-hint {
+      color: SelectedItemText;
+    }
+
+    .ds-composer__option[aria-disabled="true"] {
+      color: GrayText;
+    }
+  }
+
+  @media print {
+    .ds-composer__palette {
+      display: none;
+    }
+  }
+}

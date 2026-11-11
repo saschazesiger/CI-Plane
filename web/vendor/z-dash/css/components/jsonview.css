@@ -1,0 +1,240 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * JSON viewer (3.0): a JSON document as a tree that opens and closes, on
+ * the tree view (.ds-tree, DS.tree), with a search bar. DS.jsonview
+ * (jsonview.js) writes everything inside the element from the JSON.
+ *
+ *   <div class="ds-jsonview" role="region" data-ds-jsonview aria-label="Response of GET /devices/42">
+ *     <script type="application/json">{ "id": 42, "name": "LAPTOP-0042" }</script>
+ *   </div>
+ *
+ * What the module writes:
+ *   <div class="ds-jsonview__bar">
+ *     <span class="ds-jsonview__search"><input class="ds-input ds-jsonview__find" type="search" aria-label="Search keys and values">
+ *       <span class="ds-jsonview__count">2 of 5</span> [previous] [next]</span> [expand all] [collapse all]
+ *   </div>
+ *   <p class="ds-jsonview__error" role="alert" hidden>[icon alertCircle] Not valid JSON: line 3, column 7.</p>
+ *   <ul class="ds-tree ds-jsonview__tree" role="tree">
+ *     <li class="ds-tree__item" role="treeitem" aria-expanded="false" data-ds-key="..."><div class="ds-tree__row">
+ *       <span class="ds-tree__toggle">[icon chevronRight]</span>
+ *       <span class="ds-tree__label"><span class="ds-jsonview__key">owner</span><span class="ds-jsonview__punct">: </span><span class="ds-jsonview__value ds-jsonview__value--object">{…}</span></span>
+ *       <span class="ds-tree__meta">3 keys</span>
+ *       <span class="ds-tree__actions ds-jsonview__actions">[copy value] [copy path]</span></div></li>
+ *   </ul>
+ *
+ * Parts: an outlined block (--ds-jsonview-radius) with the bar on top and
+ * the rows below, which scroll inside it past --ds-jsonview-max-height.
+ * A row is a tree row in the code font: the key, ": ", the value; a value
+ * says its type in its text as JSON writes it (quotes around a string,
+ * the words true, false and null, braces and brackets around a container)
+ * and in its colour (.ds-jsonview__value--string, --number, --boolean,
+ * --null, --object, --array; hooks per type). A long value wraps. A
+ * container's row ends in its size (3 keys, 120 items); one of more than
+ * 100 entries opens into ranges (.ds-jsonview__range, "[0 … 99]"). A
+ * search hit is a <mark class="ds-jsonview__mark">; the current match is
+ * the tree's chosen row. The copy buttons (.ds-jsonview__actions) show on
+ * the row the pointer is over, the focused row and the chosen row, and
+ * always under a coarse pointer without hover.
+ *
+ * Options (src/core/options.css, docs/options.md): those of the tree view
+ * (size, density, shape, touch) on its rows, from a 32px row
+ * (--ds-jsonview-row-height) and a 16px indent; the text stays the code
+ * font at every size. The bar's field and buttons follow their own
+ * components. Tone: none; .ds-jsonview__error says what failed in words.
+ *
+ * Hooks: --ds-jsonview-row-height (32px), --ds-jsonview-indent (16px),
+ * --ds-jsonview-max-height (none), --ds-jsonview-radius
+ * (--ds-radius-card), --ds-jsonview-key (--ds-text),
+ * --ds-jsonview-string (--ds-on-success-container), --ds-jsonview-number
+ * (--ds-on-info-container), --ds-jsonview-boolean
+ * (--ds-on-warning-container), --ds-jsonview-null (--ds-text-2),
+ * --ds-jsonview-mark-bg (--ds-warning-container).
+ *
+ * Forced colours: the type colours give way to CanvasText (the syntax
+ * still tells the types apart), a mark is Highlight / HighlightText, the
+ * block keeps its border.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.jsonview {
+  .ds-jsonview {
+    --ds-tree-row-height: var(--ds-jsonview-row-height, 32px);
+    --ds-tree-indent: var(--ds-jsonview-indent, 16px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ds-space-2);
+    box-sizing: border-box;
+    min-width: 0;
+    max-block-size: var(--ds-jsonview-max-height, none);
+    padding: var(--ds-space-2);
+    border: 1px solid var(--ds-line);
+    border-radius: calc(var(--ds-jsonview-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    background: var(--ds-surface);
+    color: var(--ds-text);
+  }
+
+  /* One line down to a phone: the field gives way, the buttons stay. */
+  .ds-jsonview__bar {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+  }
+
+  .ds-jsonview__bar[hidden] {
+    display: none;
+  }
+
+  .ds-jsonview__search {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    gap: var(--ds-space-1);
+    min-width: 0;
+  }
+
+  .ds-jsonview__find {
+    flex: 1 1 auto;
+    min-width: 6rem;
+  }
+
+  .ds-jsonview__bar > .ds-btn {
+    flex: none;
+  }
+
+  .ds-jsonview__count {
+    flex: none;
+    min-width: 4em;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .ds-jsonview__count:empty {
+    display: none;
+  }
+
+  .ds-jsonview__error {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    margin: 0;
+    padding: var(--ds-space-2) var(--ds-space-3);
+    border-radius: calc(var(--ds-radius-sm) * var(--ds-shape, 1));
+    background: var(--ds-error-container);
+    color: var(--ds-on-error-container);
+    font: var(--ds-font-body);
+  }
+
+  .ds-jsonview__error[hidden] {
+    display: none;
+  }
+
+  .ds-jsonview__error > svg {
+    flex: none;
+  }
+
+  .ds-jsonview__tree {
+    position: relative;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* The code font at every size; a long value wraps instead of hiding. */
+  .ds-jsonview .ds-tree__label {
+    font: var(--ds-font-code);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .ds-jsonview__key {
+    color: var(--ds-jsonview-key, var(--ds-text));
+    font-weight: var(--ds-weight-label);
+  }
+
+  .ds-jsonview__punct,
+  .ds-jsonview__range {
+    color: var(--ds-text-2);
+  }
+
+  .ds-jsonview__value--string {
+    color: var(--ds-jsonview-string, var(--ds-on-success-container));
+  }
+
+  .ds-jsonview__value--number {
+    color: var(--ds-jsonview-number, var(--ds-on-info-container));
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ds-jsonview__value--boolean {
+    color: var(--ds-jsonview-boolean, var(--ds-on-warning-container));
+  }
+
+  .ds-jsonview__value--null {
+    color: var(--ds-jsonview-null, var(--ds-text-2));
+    font-style: italic;
+  }
+
+  .ds-jsonview__value--object,
+  .ds-jsonview__value--array {
+    color: var(--ds-text-2);
+  }
+
+  .ds-jsonview__mark {
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-jsonview-mark-bg, var(--ds-warning-container));
+    color: var(--ds-on-warning-container);
+  }
+
+  /* The copy buttons: on the row in use, so a long document stays calm. */
+  .ds-jsonview__actions {
+    opacity: 0;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-tree__item:is(:focus-visible, [aria-selected="true"]) > .ds-tree__row > .ds-jsonview__actions,
+  .ds-jsonview__actions:focus-within {
+    opacity: 1;
+  }
+
+  @media (hover: hover) {
+    .ds-tree__row:hover > .ds-jsonview__actions {
+      opacity: 1;
+    }
+  }
+
+  @media (hover: none) {
+    .ds-jsonview__actions {
+      opacity: 1;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-jsonview__value,
+    .ds-jsonview__key,
+    .ds-jsonview__punct,
+    .ds-jsonview__range {
+      color: CanvasText;
+    }
+
+    .ds-tree__item[aria-selected="true"] > .ds-tree__row .ds-jsonview__value,
+    .ds-tree__item[aria-selected="true"] > .ds-tree__row .ds-jsonview__key,
+    .ds-tree__item[aria-selected="true"] > .ds-tree__row .ds-jsonview__punct {
+      color: inherit;
+    }
+
+    .ds-jsonview__mark {
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+    }
+
+    .ds-jsonview__error {
+      border: 1px solid CanvasText;
+    }
+  }
+}

@@ -1,0 +1,194 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Badge: a count on a button, chip, tab or drawer item ("3 new"). Counts
+ * only: a label of words is a tag (.ds-tag, status.css), a state is a
+ * status chip (.ds-status).
+ *
+ *   <button class="ds-btn" type="button">(mail 16)Inbox <span class="ds-badge">3</span></button>
+ *   <span class="ds-badge ds-tone-error">2</span>
+ *   <span class="ds-badge" data-ds-badge="128" data-ds-badge-max="99"></span>   "99+" (badge.js)
+ *   <span class="ds-badge ds-badge--dot ds-tone-error"><span class="ds-sr">New messages</span></span>
+ *
+ *   (none: the tint)
+ *   .ds-tone-neutral  -primary  -info  -success  -warning  -error
+ *   --dot                      a dot instead of a figure (--ds-badge-dot-size,
+ *                              8px at md), in --ds-primary or the tone's full
+ *                              colour, which hold 3:1 on a surface; needs a
+ *                              word, in .ds-sr or beside it
+ *
+ * Options (docs/options.md), computed here into --_h:
+ *   size      .ds-xs ... .ds-xl on the badge or any ancestor (a small button
+ *             takes a small badge): 2px per step (16 ... 24px), a dot 2px per
+ *             step. The caption type stays.
+ *   shape     the radius times --ds-shape, never above half the height (a
+ *             dot is a dot at any shape)
+ *   tone      from the class on the badge itself: an inherited tone never
+ *             recolours it (a badge in an error alert stays what it was)
+ *   density, target-min: not read. It sits in a line or on a control, and
+ *             neither makes it a target or gives it room to lose.
+ *
+ * A pill of at least --ds-badge-size (20px at md) in the caption type with
+ * tabular figures, on --ds-badge-bg / --ds-badge-color (the tint,
+ * --ds-accent / --ds-on-accent); the tones take their container and
+ * on-container pair, and a toned badge needs its word in the row (colour
+ * is never the only signal: "2 failed"). An empty badge (:empty) takes no
+ * room, an empty dot does. On a tinted host (a pressed toggle, a tonal button, an open
+ * disclosure button, a checked chip, an input chip, a selected table row)
+ * the default badge turns to --ds-primary / --ds-on-primary and the
+ * neutral one to --ds-surface / --ds-text-2, so it never melts into the
+ * tint. In a blocked host (a disabled or aria-disabled button, chip, tab
+ * or drawer item) it takes the disabled model: --ds-disabled-fill and
+ * --ds-disabled-ink over any tone (GrayText in forced colours).
+ *
+ * Motion: colours glide on --ds-dur-fast. A count that appears pops in
+ * (DS.motion.enter(badge, 'pop')), one that goes pops out
+ * (DS.motion.leave(badge, 'pop', { then: 'hide' })); the number itself
+ * changes at once, and nothing plays on load.
+ *
+ * Forced colours: Canvas / CanvasText with a CanvasText outline (GrayText
+ * in a blocked host).
+ *
+ * Hooks: --ds-badge-size (20px, the md base), --ds-badge-dot-size (8px),
+ * --ds-badge-radius (--ds-radius-action, never above half the size),
+ * --ds-badge-bg (a dot: --ds-primary), --ds-badge-color.
+ *
+ * On an icon button's corner (.ds-badge--corner, a direct child of a
+ * positioned host such as .ds-btn--icon or an avatar):
+ *
+ *   <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Notifications, 3 new">
+ *     (bell 20)<span class="ds-badge ds-badge--corner ds-tone-error" aria-hidden="true">3</span></button>
+ *
+ * It hangs a quarter of its height over the top end corner (a dot sits
+ * inside the corner, on the edge of a round host); a press on it is the
+ * host's, which it belongs to. A ripple host clips while a ripple is inside, which
+ * would cut it: a host that holds one keeps no clip and its ripple clips
+ * itself instead (ripple.css). The host's name says the count: the badge is
+ * aria-hidden.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.badge {
+  .ds-badge {
+    --_h: calc(var(--ds-badge-size, 20px) + var(--ds-size-step, 0) * 2px);
+    --_fill: var(--ds-accent);
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--_h);
+    height: var(--_h);
+    padding-inline: var(--ds-space-1);
+    border-radius: min(calc(min(var(--ds-badge-radius, var(--ds-radius-action)), calc(var(--_h) / 2)) * var(--ds-shape, 1)), calc(var(--_h) / 2));
+    background: var(--ds-badge-bg, var(--_fill));
+    color: var(--ds-badge-color, var(--ds-on-accent));
+    font: var(--ds-font-caption);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  .ds-badge:empty {
+    display: none;
+  }
+
+  /* A dot: no figure, always round; its word sits in .ds-sr or beside it.
+     Nothing to read in it, so the fill itself has to hold 3:1 on a surface:
+     the primary colour, not the tint. */
+  .ds-badge--dot {
+    --_h: calc(var(--ds-badge-dot-size, 8px) + var(--ds-size-step, 0) * 2px);
+    --_fill: var(--ds-primary);
+    padding-inline: 0;
+    border-radius: 50%;
+  }
+
+  .ds-badge--dot:empty {
+    display: inline-flex;
+  }
+
+  /* A tone from the class on the badge itself (.ds-tone-* sets the pair). */
+  .ds-badge:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --ds-badge-bg: var(--ds-tone-container);
+    --ds-badge-color: var(--ds-on-tone-container);
+  }
+
+  /* A figure on a tone's container; a dot has no figure, so it takes the
+     tone's full colour, which holds 3:1 on a surface. */
+  .ds-badge--dot:is(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --ds-badge-bg: var(--ds-tone);
+  }
+
+  .ds-badge.ds-tone-neutral:not(.ds-badge--dot) {
+    --ds-badge-bg: var(--ds-surface-high);
+    --ds-badge-color: var(--ds-text-2);
+  }
+
+  /* On a tinted host the tint badge would vanish: the strong pair instead.
+     The hosts of later components (a selected table row, a blocked tab or
+     drawer item) repeat these rules in their own stylesheets. */
+  :is(.ds-btn[aria-pressed="true"], .ds-btn--tonal, .ds-btn--disclosure[aria-expanded="true"], .ds-btn[aria-haspopup="dialog"][aria-expanded="true"], .ds-chip__input:checked + .ds-chip__body, .ds-chip--input) .ds-badge:not(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --ds-badge-bg: var(--ds-primary);
+    --ds-badge-color: var(--ds-on-primary);
+  }
+
+  :is(.ds-btn[aria-pressed="true"], .ds-btn--tonal, .ds-btn--disclosure[aria-expanded="true"], .ds-btn[aria-haspopup="dialog"][aria-expanded="true"], .ds-chip__input:checked + .ds-chip__body, .ds-chip--input) .ds-badge.ds-tone-neutral:not(.ds-badge--dot) {
+    --ds-badge-bg: var(--ds-surface);
+    --ds-badge-color: var(--ds-text-2);
+  }
+
+  /* On the primary fill a primary dot would vanish: the fill's ink instead. */
+  .ds-btn--filled .ds-badge--dot:not(.ds-tone-neutral, .ds-tone-primary, .ds-tone-info, .ds-tone-success, .ds-tone-warning, .ds-tone-error) {
+    --_fill: var(--ds-on-primary);
+  }
+
+  /* In a blocked host (disabled, aria-disabled) the disabled model, over
+     any tone: the 12% container and the 38% ink. A theme that dims instead
+     (--ds-disabled-fill and -ink set to initial) keeps the badge's colours
+     and the host's opacity fades it. */
+  :is(.ds-btn:disabled, .ds-btn[aria-disabled="true"]:not([aria-busy="true"]), .ds-chip__input:is(:disabled, [aria-disabled="true"]) + .ds-chip__body, :is(button, a).ds-chip:is(:disabled, [aria-disabled="true"])) .ds-badge {
+    background: var(--ds-disabled-fill, var(--ds-badge-bg, var(--_fill)));
+    color: var(--ds-disabled-ink, var(--ds-badge-color, var(--ds-on-accent)));
+  }
+
+  /* On the corner of its host (an icon button, an avatar, any positioned
+     element that holds it as a direct child): out of the flow, over the top
+     end corner, a quarter of its height outside. A dot sits inside the
+     corner, on the edge of a round host. A press on it is the host's (it
+     is the host's child, also where it hangs over). The host never clips while it
+     ripples (ripple.css), so the badge stays whole. */
+  .ds-badge--corner {
+    position: absolute;
+    inset-block-start: calc(var(--_h) / -4);
+    inset-inline-end: calc(var(--_h) / -4);
+  }
+
+  .ds-badge--corner.ds-badge--dot {
+    inset-block-start: calc(var(--_h) / 4);
+    inset-inline-end: calc(var(--_h) / 4);
+  }
+
+  @media (forced-colors: active) {
+    .ds-badge {
+      forced-color-adjust: none;
+      outline: 1px solid CanvasText;
+      outline-offset: -1px;
+      background: Canvas;
+      color: CanvasText;
+    }
+
+    :is(.ds-btn:disabled, .ds-btn[aria-disabled="true"]:not([aria-busy="true"]), .ds-chip__input:is(:disabled, [aria-disabled="true"]) + .ds-chip__body, :is(button, a).ds-chip:is(:disabled, [aria-disabled="true"])) .ds-badge {
+      outline-color: GrayText;
+      color: GrayText;
+    }
+  }
+
+  /* In a card's head row (card.css, an earlier sublayer) a badge sits on the
+     title's line. */
+  .ds-card__row > .ds-badge {
+    margin-block: 0;
+  }
+}

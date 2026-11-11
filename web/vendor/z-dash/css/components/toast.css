@@ -1,0 +1,389 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Snackbar (Material 3): the inverse surface on the overlay elevation, at
+ * the bottom left of the content panel. Icon and text, never colour alone.
+ * Place the region right after .ds-app: next to a persistent drawer (or
+ * its rail) it then starts at the panel's edge by itself.
+ * Enters with a fade and a short rise on the spatial spring, leaves with a
+ * quick fade in place while the messages around it close the gap.
+ *
+ *   <div class="ds-toasts"></div>
+ *   DS.overlay.toast(region, 'Saved.');                      // or { kind: 'error' }, { persistent: true }
+ *   DS.overlay.toast(region, '3 devices deleted.', { action: { label: 'Undo', onClick } });
+ *
+ *   <div class="ds-toast [ds-toast--error | ds-toast--info]">  what toast() builds from a string
+ *     <svg ...>(checkCircle | alertCircle, 20)</svg>
+ *     <span class="ds-toast__text">Saved.</span>
+ *     <button class="ds-btn ds-btn--text ds-sm ds-toast__action" type="button">Undo</button>   with `action`
+ *     <button class="ds-btn ds-btn--quiet ds-btn--icon ds-toast__close" type="button" aria-label="Close" data-tip="Close">(close)</button>
+ *
+ *   .ds-toast--shown  runtime: toast() marks a message whose entrance has
+ *                     played, so moving its region never replays it
+ *
+ * Waiting and progress (3.0, DS.toast.promise() and progress() build them):
+ *
+ *   <div class="ds-toast" aria-busy="true">
+ *     <span class="ds-spinner ds-toast__spinner" aria-hidden="true"></span>
+ *     <span class="ds-toast__text">Exporting 240 devices</span> (close button)
+ *   <div class="ds-toast ds-toast--progress">
+ *     <div class="ds-toast__body"><span class="ds-toast__text" id="t">Uploading 3 files</span>
+ *       <div class="ds-progress ds-progress--flat"><div class="ds-progress__track" role="progressbar" aria-labelledby="t" ...>
+ *         <div class="ds-progress__bar"></div></div></div></div>
+ *     <span class="ds-toast__value" aria-hidden="true">40%</span> (close button)
+ *
+ * The spinner turns in the icon's place and colour; the bar runs in the
+ * inverse primary on a track of the inverse ink. Either turns into the
+ * outcome's icon and text in place.
+ *
+ * A stack (3.0): <div class="ds-toasts ds-toasts--stack"> keeps its
+ * messages one behind the other, the newest in front, the others showing
+ * an edge above it (--ds-space-2 apart and narrower, at the front's height:
+ * --ds-toast-front, written by toast.js) with their content hidden. Focus
+ * inside or a click on a message expands it (data-expanded, written by
+ * toast.js), never hover; the messages glide between the two (FLIP). The
+ * stack is --ds-toast-stack-width wide (400px), across the width on phones.
+ * data-ds-toast-limit="1...5" on any region: how many show at once.
+ *
+ * Options: shape multiplies the radius. Size and density change nothing: a
+ * snackbar floats above the region it reports on and keeps one size, and its
+ * action keeps 32px at any density. The tones of a message built by hand are
+ * .ds-tone-error and .ds-tone-info, the same as --error and --info (toast()
+ * reads all four for its kind); the word always says it.
+ *
+ * Any text button in a message (.ds-toast__action, or one of a message
+ * built by hand) takes the inverse primary ink (--ds-toast-action-color)
+ * and sits at the end, before the close button.
+ *
+ * DS.overlay.toast() (js/toast.js) stacks at most three with FLIP, evicts
+ * the oldest message that would close by itself or queues one behind three
+ * that stay, restarts the same message instead of stacking it, replaces a
+ * message by its key, pauses the timers on hover, focus and a hidden tab,
+ * announces the text through two .ds-sr live regions next to the region
+ * (the region and the messages are not live, so their buttons stay
+ * reachable; toast() takes role and aria-live off an old region), keeps
+ * focus off <body> when a focused message leaves, and moves the region
+ * into an open dialog (in place) or side sheet (with the panel's edge and
+ * above its foot, data-follow), so messages stay above its scrim and
+ * usable.
+ *
+ * Hooks: --ds-toast-action-color (the text button's ink, default
+ * --ds-inverse-primary), --ds-toast-close-size (the close button, 36px),
+ * --ds-toast-radius (--ds-radius-sm), --ds-toast-stack-width (400px).
+ *
+ * Forced colours: the transparent outline of a message becomes its edge;
+ * the spinner and the bar take their own system colours.
+ *
+ * Runtime properties: --ds-toast-left (the region's left edge; a page sets
+ * it when the panel starts elsewhere, DS.overlay in a side sheet),
+ * --ds-toast-bottom (its distance from the bottom edge, page-set),
+ * --ds-toast-lift (written by DS.overlay only: the room above a sheet's
+ * foot, the modal drawer's foot on phones, a shown save bar),
+ * --ds-keyboard-inset (the on-screen keyboard, DS.dom.followViewport() on
+ * <html>), --ds-toast-shift and --ds-toast-shift-y (written by DS.overlay
+ * only: the glide from where the region stood), and --ds-toast-reserve with
+ * data-toast-reserve (the room kept for messages that stay: toast() sets
+ * them on .ds-view, a hosting .ds-sheet__body or .ds-dialog, whose own
+ * stylesheets read them; the page only
+ * with `reserve: false`). data-ds-toast-room="off" (page-set, 2.1) on one
+ * of those layers: it keeps no room, the others still do.
+ *
+ * Progressive:
+ * - View Transitions (while DS.motion.transition() runs, data-ds-vt on
+ *   <html>, a region with messages is named ds-toasts, so motion.css keeps
+ *   it live and still above the page's groups; in the root snapshot the
+ *   panel's opaque image would cover it until the end. One region with
+ *   messages per page: transition() lifts the name of any further one):
+ *   without them nothing is named.
+ *
+ * Print: the region is not printed (a message is about the screen, now).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.toast {
+  /* Physical on purpose (D9): --ds-toast-left is a script coordinate (the
+     left edge of the content panel), and DS.overlay reads the computed
+     left back. */
+  .ds-toasts {
+    position: fixed;
+    left: var(--ds-toast-left, var(--ds-space-6));
+    bottom: calc(var(--ds-toast-bottom, var(--ds-space-6)) + var(--ds-toast-lift, 0px) + var(--ds-keyboard-inset, 0px));
+    /* Above the home indicator (viewport-fit=cover); a margin, so `bottom`
+       stays the offset a script may mirror. */
+    margin-bottom: env(safe-area-inset-bottom);
+    z-index: var(--ds-z-toast);
+    display: grid;
+    justify-items: start;
+    /* The stack keeps to the bottom edge: while a leaving message holds the
+       region's height (DS.motion.flip()), the others stay where they are. */
+    align-content: end;
+    gap: var(--ds-space-2);
+    max-width: min(560px, calc(100vw - var(--ds-toast-left, var(--ds-space-6)) - var(--ds-space-6)));
+    pointer-events: none;
+    /* Moving into or out of a side sheet, above a foot or a save bar, the
+       messages on screen start where they stood and glide to the new place
+       on both axes (DS.overlay sets the shift for one style flush). */
+    translate: var(--ds-toast-shift, 0px) var(--ds-toast-shift-y, 0px);
+    transition: translate var(--ds-dur-medium) var(--ds-ease-in-out);
+  }
+
+  /* Following a side sheet (DS.overlay.open / close) or a save bar: the
+     messages arrive with the panel's edge, on the sheet's own timing. */
+  .ds-toasts[data-follow="enter"] {
+    transition-duration: var(--ds-dur-long);
+    transition-timing-function: var(--ds-ease-spatial);
+  }
+
+  .ds-toasts[data-follow="exit"] {
+    transition-duration: var(--ds-dur-base);
+    transition-timing-function: var(--ds-ease-exit);
+  }
+
+  /* Beside the persistent drawer (above 900px, shell.css): the panel's
+     left edge plus the usual 24px. */
+  @media (min-width: 901px) {
+    .ds-app--drawer:not([data-drawer-hidden]) ~ .ds-toasts {
+      --ds-toast-left: calc(var(--ds-drawer-width) + env(safe-area-inset-left) + var(--ds-space-6));
+    }
+
+    /* Beside the rail (data-drawer-collapsed): its narrower column. */
+    .ds-app--drawer[data-drawer-collapsed]:not([data-drawer-hidden]) ~ .ds-toasts {
+      --ds-toast-left: calc(var(--ds-drawer-rail-width) + env(safe-area-inset-left) + var(--ds-space-6));
+    }
+  }
+
+  /* Beside the open modal drawer (601px to 900px): next to it, never under
+     it. On phones the region spans the width; DS.overlay lifts it above
+     the drawer's foot instead. */
+  @media (min-width: 601px) and (max-width: 900px) {
+    .ds-app[data-drawer-open] ~ .ds-toasts {
+      --ds-toast-left: calc(var(--ds-drawer-width) + env(safe-area-inset-left) + var(--ds-space-6));
+    }
+  }
+
+  .ds-toast {
+    display: flex;
+    align-items: center;
+    gap: var(--ds-space-3);
+    min-height: 48px;
+    max-width: 100%;
+    padding: var(--ds-space-3) var(--ds-space-4);
+    border-radius: calc(var(--ds-toast-radius, var(--ds-radius-sm)) * var(--ds-shape, 1));
+    background: var(--ds-inverse);
+    color: var(--ds-on-inverse);
+    font: var(--ds-font-body);
+    box-shadow: var(--ds-elev-overlay);
+    /* Invisible; forced colors paint it, so the message keeps an edge. */
+    outline: 1px solid transparent;
+    pointer-events: auto;
+    --ds-motion-distance: var(--ds-distance-md);
+    --ds-leave-duration: var(--ds-dur-fast);
+    animation:
+      ds-fade-in var(--ds-dur-medium) var(--ds-ease-in-out) backwards,
+      ds-lift-in var(--ds-dur-medium) var(--ds-ease-spatial) backwards;
+  }
+
+  /* Played once (mark it .ds-toast--shown; toast() does after the
+     entrance): moving the region into or out of a side sheet re-inserts
+     the message where moveBefore() is missing, which would restart it, so
+     a message already on screen would blink out and rise again. enter() and
+     .ds-leave still play: the motion utilities sit in the ds.utilities
+     layer, which beats this rule whatever its specificity. */
+  .ds-toast--shown:not(.ds-leave) {
+    animation: none;
+  }
+
+  .ds-toast > svg {
+    flex-shrink: 0;
+    color: var(--ds-inverse-primary);
+  }
+
+  .ds-toast__text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Waiting: the spinner in the icon's place, size and colour, one size
+     whatever the region's size class, as the rest of a message. */
+  .ds-toast__spinner {
+    /* One step up from the spinner's 16px: the icon's 20px. */
+    --ds-size-step: 1;
+    --ds-spinner-color: var(--ds-inverse-primary);
+    flex-shrink: 0;
+  }
+
+  /* Progress: the text over the bar, the share at the end of the row. */
+  .ds-toast--progress {
+    min-width: min(320px, 100%);
+  }
+
+  .ds-toast__body {
+    display: grid;
+    flex: 1;
+    gap: var(--ds-space-2);
+    min-width: 0;
+  }
+
+  .ds-toast--progress .ds-progress {
+    --ds-size-step: 0;
+    --ds-progress-bar: var(--ds-inverse-primary);
+    --ds-progress-track: color-mix(in srgb, var(--ds-on-inverse) 24%, transparent);
+    --ds-progress-stop: color-mix(in srgb, var(--ds-on-inverse) 24%, transparent);
+  }
+
+  .ds-toast__value {
+    flex-shrink: 0;
+    min-width: 4ch;
+    font: var(--ds-font-label);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  /* On the inverse surface a tone shows through its icon and its word, never
+     a colour of its own, so these two take the plain ink. */
+  .ds-toast--error > svg,
+  .ds-toast--info > svg,
+  .ds-toast.ds-tone-error > svg,
+  .ds-toast.ds-tone-info > svg {
+    color: var(--ds-on-inverse);
+  }
+
+  /* A text button in a message (the action of toast(), or Undo in a message
+     built by hand): the inverse primary ink, readable on the inverse
+     surface, at the end of the line; its pill overhangs the padding, so the
+     message keeps its height. */
+  .ds-toast > .ds-btn--text {
+    --ds-btn-color: var(--ds-toast-action-color, var(--ds-inverse-primary));
+    --ds-btn-hover-color: var(--ds-toast-action-color, var(--ds-inverse-primary));
+    flex-shrink: 0;
+    margin-block: calc(-1 * var(--ds-space-2));
+    margin-inline-start: auto;
+  }
+
+  /* The action is 32px with 12px of side padding at any density: a snackbar
+     floats above the region it reports on and keeps one size. */
+  .ds-toast__action.ds-sm {
+    --ds-density: 0;
+    --ds-btn-padding-x: var(--ds-space-4);
+  }
+
+  .ds-toast > .ds-btn--text:focus-visible {
+    outline-color: var(--ds-on-inverse);
+  }
+
+  /* The shared quiet icon button (state layers for hover and press), in the
+     inverse text colour; toast.css loads after button.css, so these win. */
+  .ds-toast__close {
+    /* One size whatever the region's size class, as the action; only .ds-touch changes it. */
+    --ds-size-step: 0;
+    --ds-btn-icon-size: var(--ds-toast-close-size, 36px);
+    --ds-btn-quiet-color: var(--ds-on-inverse);
+    --ds-btn-hover-color: var(--ds-on-inverse);
+    flex-shrink: 0;
+    margin-block: calc(-1 * var(--ds-space-2));
+    margin-inline: auto calc(-1 * var(--ds-space-2));
+  }
+
+  /* After an action the close button keeps close to it. */
+  .ds-toast > .ds-btn--text + .ds-toast__close {
+    margin-inline-start: calc(-1 * var(--ds-space-1));
+  }
+
+  .ds-toast__close:focus-visible {
+    outline-color: var(--ds-on-inverse);
+  }
+
+  /* While a message that stays shows (toast() measures and sets both, or the
+     page with `reserve: false`), the content panel keeps room for it at its
+     end: the last form actions can scroll clear of it. The panel's own
+     padding is the safe area (shell.css). A side sheet's body does the
+     same while the message shows in it (sheet.css). */
+  .ds-view[data-toast-reserve] {
+    padding-bottom: calc(env(safe-area-inset-bottom) + var(--ds-toast-reserve, 0px));
+    scroll-padding-bottom: var(--ds-toast-reserve, 0px);
+  }
+
+  /* The stack (3.0): one width, so the messages behind the front line up
+     with it; collapsed, every message sits in the one cell, the newest
+     (the last, painted on top) in front. */
+  .ds-toasts--stack {
+    justify-items: stretch;
+    width: min(var(--ds-toast-stack-width, 400px), calc(100vw - var(--ds-toast-left, var(--ds-space-6)) - var(--ds-space-6)));
+  }
+
+  .ds-toasts--stack:not([data-expanded]) > .ds-toast {
+    grid-area: 1 / 1;
+    align-self: end;
+  }
+
+  /* Behind the front: its height, an edge above it, the content hidden
+     (still in the tab order: focus on it expands the stack first). */
+  .ds-toasts--stack:not([data-expanded]) > .ds-toast:nth-last-child(n + 2 of .ds-toast:not([data-ds-leaving])) {
+    height: var(--ds-toast-front, auto);
+    min-height: 0;
+    margin-inline: var(--ds-space-3);
+    margin-bottom: var(--ds-space-2);
+    overflow: hidden;
+  }
+
+  /* Each layer further back is narrower, so the edges read as a stack and
+     not as one taller message. */
+  .ds-toasts--stack:not([data-expanded]) > .ds-toast:nth-last-child(n + 3 of .ds-toast:not([data-ds-leaving])) {
+    margin-inline: var(--ds-space-6);
+    margin-bottom: var(--ds-space-4);
+  }
+
+  .ds-toasts--stack:not([data-expanded]) > .ds-toast:nth-last-child(n + 2 of .ds-toast:not([data-ds-leaving])) > * {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* The content behind the front fades. Not the buttons: toast is a later
+     sublayer than button, so a transition here would replace their whole
+     list (press morph, focus snap, colours); their own list already fades
+     opacity on the same duration and curve. */
+  .ds-toasts--stack > .ds-toast > :not(.ds-btn) {
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* A region with messages, only while a transition runs (see the header). */
+  .ds-theme[data-ds-vt] .ds-toasts:has(> .ds-toast) {
+    view-transition-name: ds-toasts;
+  }
+
+  /* Phones: across the width, above the bottom edge. */
+  @media (max-width: 600px) {
+    .ds-toasts {
+      inset-inline: var(--ds-space-4);
+      bottom: calc(var(--ds-toast-bottom, var(--ds-space-4)) + var(--ds-toast-lift, 0px) + var(--ds-keyboard-inset, 0px));
+      max-width: none;
+      justify-items: stretch;
+    }
+
+    .ds-toasts--stack {
+      width: auto;
+    }
+  }
+
+  /* Forced colours: the spinner's and the bar's own system colours (these
+     rules above would otherwise win over theirs by layer). */
+  @media (forced-colors: active) {
+    .ds-toast__spinner {
+      --ds-spinner-color: Highlight;
+    }
+
+    .ds-toast--progress .ds-progress {
+      --ds-progress-bar: Highlight;
+      --ds-progress-stop: Highlight;
+      --ds-progress-track: GrayText;
+    }
+  }
+
+  /* Print: messages stay on the screen. */
+  @media print {
+    .ds-toasts {
+      display: none;
+    }
+  }
+}

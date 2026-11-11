@@ -1,0 +1,152 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Link: a link that navigates, in four looks. Links are told apart from text
+ * by the underline, not by colour alone (a link in running text always
+ * keeps it); a standalone link sits apart from text and says what it is by
+ * its place, its weight and its icon.
+ *
+ *   <a class="ds-link" href="/devices/42">LAPTOP-0042</a>
+ *   <a class="ds-link ds-link--standalone" href="/devices">All devices (arrowRight 16, .ds-link__icon)</a>
+ *   <a class="ds-link ds-link--external" href="https://example.com/manual" target="_blank" rel="noopener noreferrer">
+ *     Product manual (external 16, .ds-link__icon)<span class="ds-sr"> (opens in a new tab)</span></a>
+ *
+ * Variants:
+ *   .ds-link                 inline: the link colour (--ds-link) and the
+ *                            shared underline geometry (the look of a link
+ *                            in .ds-base, for pages and regions without it)
+ *   .ds-link--standalone     a link on its own line or at the end of a card
+ *                            ("All devices"): the label role, no underline
+ *                            at rest, the underline on hover and keyboard
+ *                            focus (forced colours: always), at least the
+ *                            touch minimum high under .ds-touch; an
+ *                            optional trailing icon (.ds-link__icon)
+ *   .ds-link--external       leaves the product: a trailing external icon
+ *                            (.ds-link__icon, DS.icons.external) and, with
+ *                            target="_blank", rel="noopener noreferrer" and
+ *                            a .ds-sr "(opens in a new tab)" in the markup;
+ *                            combines with --standalone
+ *   quiet                    a secondary link next to the main one:
+ *                            .ds-link--quiet, which button.css styles
+ *                            (with its twin .ds-link-btn--quiet)
+ *   .ds-link__icon           an icon after the words (in a standalone link
+ *                            also before them), 1em, on the text's centre
+ *                            line; never moves
+ *
+ * Options (docs/options.md):
+ *   size      a standalone link reads the size's type role
+ *             (--ds-size-font, else the label role); an inline link takes
+ *             the type of its text, so size changes nothing there
+ *   touch     .ds-touch: a standalone link is at least --ds-target-min
+ *             high (inline links in text are exempt, WCAG 2.5.8)
+ *   shape     the focus ring's small radius (--ds-radius-xs) times
+ *             --ds-shape
+ *   density   nothing: a link has no box of its own to make denser
+ *
+ * Hooks: --ds-link-font (the type of a standalone link). The colours are the
+ * link roles (--ds-link, --ds-link-underline, --ds-link-underline-hover,
+ * --ds-link-underline-thickness, --ds-link-underline-offset).
+ *
+ * Motion: the underline colour and the ink fade on --ds-dur-fast; the focus
+ * ring is solid from the first frame and snaps from offset + width to the
+ * offset (outline-offset, --ds-dur-fast). A link is inline text: no state
+ * layer, no ripple and no press morph (it would reach outside the line).
+ * Hover never moves the icon. A press on touch screens darkens the
+ * underline, as hover does.
+ *
+ * Forced colours: the system's LinkText; a standalone link keeps its
+ * underline at rest, since colour no longer tells it apart.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.link {
+  .ds-link {
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    color: var(--ds-link);
+    text-decoration-line: underline;
+    text-decoration-thickness: var(--ds-link-underline-thickness);
+    text-decoration-color: var(--ds-link-underline);
+    text-underline-offset: var(--ds-link-underline-offset);
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      color var(--ds-dur-fast) var(--ds-ease-in-out),
+      text-decoration-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  @media (hover: hover) {
+    .ds-link:hover {
+      text-decoration-color: var(--ds-link-underline-hover);
+    }
+  }
+
+  /* The press on touch screens, which show no hover. */
+  .ds-link:active {
+    text-decoration-color: var(--ds-link-underline-hover);
+  }
+
+  .ds-link:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  /* The icon after the words of a link: the size of the text, on its
+     centre line, with a small gap; it never moves. (Before the words only
+     in a standalone link, whose gap places it.) */
+  .ds-link__icon {
+    display: inline-block;
+    flex-shrink: 0;
+    inline-size: 1em;
+    block-size: 1em;
+    margin-inline-start: var(--ds-space-1);
+    vertical-align: -0.125em;
+  }
+
+  /* The external icon is a mark after the words, not a second subject: a
+     little smaller than the text, so a link in a sentence keeps its line
+     height. */
+  .ds-link--external > .ds-link__icon {
+    inline-size: 0.875em;
+    block-size: 0.875em;
+    vertical-align: -0.0625em;
+  }
+
+  /* Standalone: apart from text, so no underline at rest; the label role
+     (or the size's), the underline on hover and focus. A target of its own:
+     at least the touch minimum high under .ds-touch. */
+  .ds-link--standalone {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+    min-block-size: var(--ds-target-min, 0px);
+    font: var(--ds-link-font, var(--ds-size-font, var(--ds-font-label)));
+    text-decoration-color: transparent;
+  }
+
+  /* In the flex box the gap places the icon, before or after the words. */
+  .ds-link--standalone > .ds-link__icon {
+    margin-inline-start: 0;
+  }
+
+  @media (hover: hover) {
+    .ds-link--standalone:hover {
+      text-decoration-color: var(--ds-link-underline-hover);
+    }
+  }
+
+  .ds-link--standalone:active,
+  .ds-link--standalone:focus-visible {
+    text-decoration-color: var(--ds-link-underline-hover);
+  }
+
+  /* Forced colours: LinkText is a colour like any other there, so a
+     standalone link keeps its underline. */
+  @media (forced-colors: active) {
+    .ds-link--standalone {
+      text-decoration-color: LinkText;
+    }
+  }
+}

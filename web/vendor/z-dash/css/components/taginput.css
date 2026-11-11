@@ -1,0 +1,189 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Tag input: free values typed into one field box, each an input chip
+ * before the typing field (labels, recipients, keywords). DS.taginput
+ * (taginput.js) turns Enter, a comma and a pasted list into tags, checks
+ * them (unique, `validate`, a pattern, a maximum) and removes them by
+ * Backspace, Delete or a press on the chip.
+ *
+ *   <div class="ds-field">
+ *     <label class="ds-field__label" for="labels">Labels</label>
+ *     <div class="ds-taginput" data-ds-taginput data-ds-taginput-max="8" data-ds-value='["printer","floor-2"]'>
+ *       <input class="ds-input ds-taginput__input" id="labels" aria-describedby="labels-hint">
+ *     </div>
+ *     <p class="ds-field__hint" id="labels-hint">Enter or a comma adds a label.</p>
+ *   </div>
+ *
+ * The module writes the chips (button.ds-chip.ds-chip--input with
+ * data-ds-taginput-tag, "Remove" and the name for a screen reader) before
+ * the field and a .ds-taginput__message (role="status") after the box,
+ * which says why a tag was refused (an icon and the words, never colour
+ * alone; the field takes aria-invalid until the text changes).
+ *
+ * The box is the field (form.css's look and hooks: --ds-input-border,
+ * --ds-input-bg, --ds-input-radius, --ds-input-focus-color): hover, focus,
+ * error, disabled and read-only show on the box; the typing field inside is
+ * only text. .ds-taginput--full (written by the module at the maximum)
+ * keeps the field but quiets its cursor.
+ *
+ * Options (src/core/options.css, docs/options.md), on the box or any
+ * ancestor; each is computed here, in the rule that uses it:
+ *   size      .ds-xs ... .ds-xl: the box 8px per step (40px at md, at
+ *             least --ds-space-6), as a field; the chips follow their own size
+ *   density   .ds-density-*: the box 4px per step; side padding stays
+ *   shape     .ds-shape-*: multiplies the box's radius
+ *   touch     .ds-touch: the box at least --ds-touch-target (48px)
+ *   tone      none on the box: an error is aria-invalid with its message
+ *
+ * Motion: a tag that comes fades in, and one that goes leaves while the
+ * others glide into its place (DS.motion.flip); the message fades in over
+ * --ds-dur-fast.
+ *
+ * Forced colours: the box keeps its border and takes the 2px Highlight
+ * outline of a focused field; disabled is GrayText; input chips keep their
+ * edge (chip.css).
+ *
+ * Hooks: --ds-input-height (40px), --ds-input-border, --ds-input-bg,
+ * --ds-input-radius, --ds-input-focus-color (form.css's). The private
+ * --_h, --_box are computed here: never set them.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.taginput {
+  .ds-taginput {
+    /* The field's formula (form.css), never less than a line of the field. */
+    --_h: max(var(--ds-space-6), calc(var(--ds-input-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px));
+    --_box: max(var(--ds-target-min, 0px), var(--_h));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-1);
+    min-height: var(--_box);
+    padding-inline: var(--ds-space-1);
+    border: 1px solid var(--ds-input-border, var(--ds-outline));
+    border-radius: calc(var(--ds-input-radius, var(--ds-radius-field)) * var(--ds-shape, 1));
+    background: var(--ds-input-bg, var(--ds-surface));
+    cursor: text;
+    transition:
+      border-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      box-shadow var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  /* Room around the chips only: empty, the box is the field's height. */
+  .ds-taginput:has(> .ds-chip) {
+    padding-block: calc(var(--ds-space-1) - 1px);
+  }
+
+  /* The typing field is only text in the box. No border at all: forced
+     colours would paint a transparent one as a second box. */
+  .ds-taginput > .ds-taginput__input,
+  .ds-taginput > .ds-taginput__input:focus,
+  .ds-taginput > .ds-taginput__input:disabled,
+  .ds-taginput > .ds-taginput__input[readonly],
+  .ds-taginput > .ds-taginput__input[aria-invalid="true"] {
+    flex: 1 1 8ch;
+    width: auto;
+    min-width: 8ch;
+    min-height: calc(var(--_box) - 2 * var(--ds-space-1));
+    padding-block: 0;
+    padding-inline: var(--ds-space-2);
+    border: 0;
+    outline: none;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  @media (hover: hover) {
+    .ds-taginput:hover:not(:has(> .ds-taginput__input:is(:focus, :disabled, [readonly], [aria-invalid="true"]))) {
+      border-color: var(--ds-text);
+    }
+
+    .ds-taginput:hover:has(> .ds-taginput__input[aria-invalid="true"]:not(:focus, :disabled, [readonly])) {
+      border-color: var(--ds-on-error-container);
+    }
+  }
+
+  .ds-taginput:has(> .ds-taginput__input:focus) {
+    border-color: var(--ds-input-focus-color, var(--ds-primary));
+    box-shadow: inset 0 0 0 1px var(--ds-input-focus-color, var(--ds-primary));
+    transition-duration: 0s;
+  }
+
+  .ds-taginput:has(> .ds-taginput__input[aria-invalid="true"]) {
+    border-color: var(--ds-error);
+  }
+
+  .ds-taginput:has(> .ds-taginput__input[aria-invalid="true"]:focus) {
+    border-color: var(--ds-error);
+    box-shadow: inset 0 0 0 1px var(--ds-error);
+  }
+
+  .ds-taginput:has(> .ds-taginput__input:is(:disabled, [readonly])) {
+    border-color: var(--ds-line);
+    background: var(--ds-surface-low);
+    cursor: default;
+  }
+
+  .ds-taginput:has(> .ds-taginput__input:disabled) {
+    cursor: not-allowed;
+  }
+
+  /* The chips of a disabled box take no pointer (the module disables their buttons too). */
+  .ds-taginput:has(> .ds-taginput__input:disabled) > .ds-chip {
+    pointer-events: none;
+  }
+
+  /* A read-only box only shows its tags. */
+  .ds-taginput:has(> .ds-taginput__input[readonly]) > .ds-chip {
+    pointer-events: none;
+  }
+
+  /* At the maximum the field stays (Backspace still removes), quieter. */
+  .ds-taginput--full > .ds-taginput__input::placeholder {
+    color: transparent;
+  }
+
+  .ds-form--rows .ds-field > .ds-taginput {
+    max-width: var(--ds-form-rows-control-max, 480px);
+  }
+
+  /* Why a tag was refused: an icon and the words, under the box. */
+  .ds-taginput__message {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ds-space-1);
+    margin: var(--ds-space-1) 0 0;
+    color: var(--ds-error);
+    font: var(--ds-font-meta);
+    animation: ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) both;
+  }
+
+  .ds-taginput__message:empty {
+    display: none;
+  }
+
+  .ds-taginput__message > svg {
+    flex: none;
+    margin-block-start: 2px;
+  }
+
+  @media (forced-colors: active) {
+    .ds-taginput:has(> .ds-taginput__input:focus) {
+      border-color: Highlight;
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+
+    .ds-taginput:has(> .ds-taginput__input:disabled) {
+      border-color: GrayText;
+      color: GrayText;
+    }
+
+    .ds-taginput__message {
+      color: CanvasText;
+    }
+  }
+}

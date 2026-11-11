@@ -1,0 +1,208 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Plain tooltip (Material 3): the inverse surface, the meta role, below its
+ * control (above it when there is no room). It fades in and grows from
+ * --ds-scale-tooltip at the side of its anchor (no rise: it is anchored to
+ * the control), and leaves with a quick fade only. The pointer may move
+ * onto it (WCAG 1.4.13: a magnifier user can read it there); it stays open
+ * meanwhile.
+ *
+ * DS.overlay.tooltips(root) (js/tooltip.js) does everything for
+ * [data-tip] triggers: it creates the one tooltip of the theme, shows it
+ * after --ds-delay-tooltip on hover (mouse and pen) and at once on keyboard
+ * focus, on touch after a tap on an image or a blocked control and a long
+ * press on the other triggers (no timeout), warms up along a toolbar
+ * (--ds-delay-tooltip-skip), hides after the --ds-delay-tooltip-hide
+ * grace, on Escape, on any pointerdown and when its trigger leaves the
+ * document, shows a tip that repeats the visible text only while that text
+ * is cut off (a name in a narrow column), and places it:
+ *
+ *   <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Copy link" data-tip="Copy link">(link)</button>
+ *   <td><a href="#device-42" data-tip="LAPTOP-0042-FINANCE-BACKUP">LAPTOP-0042-FINANCE-BACKUP</a></td>   only while cut off
+ *   <button class="ds-btn" type="button" data-tip="Search" data-tip-shortcut="Ctrl K">Search</button>     the shortcut slot
+ *   <button ... data-tip="Zoom in" data-tip-placement="end" data-tip-delay="short">    beside it, sooner
+ *   DS.overlay.tooltips(document);
+ *
+ *   <div class="ds-tooltip" role="tooltip" id="..." hidden data-state="open | closed" [data-warm]
+ *        [data-side="top | start | end"] [data-placement="top | start | end"] [data-anchored]>Copy link</div>
+ *
+ * Options: shape multiplies the radius. Size and density change nothing: one
+ * tooltip serves the whole theme, whatever its trigger's size. The shortcut
+ * slot, .ds-tooltip__shortcut, holds what data-tip-shortcut says, after the
+ * text. On the trigger, data-tip-placement (bottom, the default; top, start,
+ * end) picks the side, written on the tooltip as data-side, and
+ * data-tip-delay (none, short, long) the wait before a hover shows it.
+ *
+ * Forced colours: the transparent outline becomes its edge.
+ *
+ * Hook: --ds-tooltip-radius (--ds-radius-xs).
+ *
+ * Placement API: --ds-tooltip-x and --ds-tooltip-y (left and top, px) on
+ * the tooltip. Inline top / left and a transform of the page still work:
+ * the motion animates the separate scale property, so it composes. With a
+ * transform, set transform-origin with it, or the scale shrinks the offset
+ * too and the tooltip drifts in.
+ *
+ * Motion: tooltips() drives data-state ("closed", flushed, then "open";
+ * "closed" again to hide), so a show taken back mid-way continues from
+ * where it is (transitions retarget). The origin is --ds-motion-origin,
+ * which DS.motion.originFrom() puts at the anchor side; data-warm (a show
+ * during the warm-up) keeps the scale at rest, so the next tooltip only
+ * fades in. Without data-state (a page that drives it by hand: remove
+ * hidden, leave with DS.motion.leave(tip, '', { then: 'hide' })) the
+ * keyframe entrance and .ds-leave still play.
+ *
+ * Progressive:
+ * - anchor positioning (the tooltip sits in the top layer, over a modal
+ *   dialog; anchor-name on the trigger,
+ *   position-anchor, position-area and position-try-fallbacks on the
+ *   tooltip, behind @supports (position-area: block-end); data-anchored
+ *   marks that path): without it the script writes --ds-tooltip-x/-y and
+ *   flips the tooltip to the other side (data-placement says the side).
+ *
+ * Print: a tooltip is not printed.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.tooltip {
+  /* Physical on purpose (D9): --ds-tooltip-x is a script coordinate from
+     the left, and the anchored placement (below) clears it. */
+  .ds-tooltip {
+    position: fixed;
+    left: var(--ds-tooltip-x, 0px);
+    top: var(--ds-tooltip-y, 0px);
+    z-index: var(--ds-z-toast);
+    /* Its own width wherever it was last placed (measure it before moving
+       it), wrapping only past the maximum. */
+    width: max-content;
+    max-width: min(320px, calc(100vw - 2 * var(--ds-space-2)));
+    padding: var(--ds-space-1) var(--ds-space-2);
+    border-radius: calc(var(--ds-tooltip-radius, var(--ds-radius-xs)) * var(--ds-shape, 1));
+    background: var(--ds-inverse);
+    color: var(--ds-on-inverse);
+    font: var(--ds-font-meta);
+    /* Line breaks in the text are kept (a name and an email on two lines). */
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    /* Invisible; forced colors paint it, so the tooltip keeps an edge. */
+    outline: 1px solid transparent;
+    /* Grows at the side of its anchor: originFrom() writes the origin;
+       below the trigger that is its top edge. */
+    --ds-motion-scale: var(--ds-scale-tooltip);
+    transform-origin: var(--ds-motion-origin, 50% 0%);
+  }
+
+  /* Above the trigger: it grows from its bottom edge; beside it, from the
+     edge that faces it (originFrom() writes the exact point, in either
+     direction; the fallbacks are the left-to-right ones). */
+  .ds-tooltip[data-placement="top"] {
+    transform-origin: var(--ds-motion-origin, 50% 100%);
+  }
+
+  .ds-tooltip[data-placement="start"] {
+    transform-origin: var(--ds-motion-origin, 100% 50%);
+  }
+
+  .ds-tooltip[data-placement="end"] {
+    transform-origin: var(--ds-motion-origin, 0% 50%);
+  }
+
+  /* Driven by hand (no data-state): the one-shot entrance; leave with
+     .ds-leave, a quick fade. */
+  .ds-tooltip:not([data-state]) {
+    --ds-motion-distance: 0px;
+    --ds-leave-duration: var(--ds-dur-instant);
+    animation:
+      ds-fade-in var(--ds-dur-fast) var(--ds-ease-in-out) backwards,
+      ds-grow-in var(--ds-dur-fast) var(--ds-ease-out) backwards;
+  }
+
+  /* Driven by DS.overlay.tooltips(): transitions keyed on data-state, so a
+     hide taken back continues from the current opacity. The entrance fades
+     in over --ds-dur-fast and springs to full size over --ds-dur-medium. */
+  .ds-tooltip[data-state] {
+    animation: none;
+    transition:
+      opacity var(--ds-dur-fast) var(--ds-ease-in-out),
+      scale var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  /* The exit only fades, in --ds-dur-instant; the scale goes back to its
+     start once the tooltip is invisible, ready for the next entrance. It
+     takes no pointer while it fades or rests hidden. */
+  .ds-tooltip[data-state="closed"] {
+    opacity: 0;
+    scale: var(--ds-motion-scale, var(--ds-scale-tooltip));
+    pointer-events: none;
+    transition:
+      opacity var(--ds-dur-instant) var(--ds-ease-in-out),
+      scale 0ms var(--ds-ease-in-out) var(--ds-dur-instant);
+  }
+
+  /* Warm-up: the next tooltip of a toolbar only fades in. */
+  .ds-tooltip[data-state][data-warm] {
+    scale: none;
+  }
+
+  .ds-tooltip[hidden] {
+    display: none;
+  }
+
+  /* The shortcut slot: after the text, the same ink, in the code face. */
+  .ds-tooltip__shortcut {
+    margin-inline-start: var(--ds-space-2);
+    font: var(--ds-font-code);
+    white-space: nowrap;
+  }
+
+  /* The UA box of a popover (centred by auto margins over the whole
+     window, a border, its own scrolling) goes: it is the same tooltip. */
+  .ds-tooltip[popover] {
+    inset: var(--ds-tooltip-y, 0px) auto auto var(--ds-tooltip-x, 0px);
+    width: max-content;
+    height: auto;
+    margin: 0;
+    border: 0;
+    overflow: visible;
+  }
+
+  /* Anchor positioning: below the trigger, centred on it, above it when
+     there is no room (the margin flips with it); the side margins keep it
+     8px from the viewport edges, like the script's placement. data-side (the
+     side data-tip-placement asks for) puts it above or beside the trigger,
+     flipped to the other side without room. */
+  @supports (position-area: block-end) {
+    .ds-tooltip[data-anchored] {
+      position-area: block-end;
+      position-try-fallbacks: flip-block;
+      margin: var(--ds-space-2) var(--ds-space-2) 0;
+      left: auto;
+      top: auto;
+    }
+
+    .ds-tooltip[data-anchored][data-side="top"] {
+      position-area: block-start;
+      margin: 0 var(--ds-space-2) var(--ds-space-2);
+    }
+
+    .ds-tooltip[data-anchored][data-side="start"] {
+      position-area: inline-start;
+      position-try-fallbacks: flip-inline;
+      margin: var(--ds-space-2);
+    }
+
+    .ds-tooltip[data-anchored][data-side="end"] {
+      position-area: inline-end;
+      position-try-fallbacks: flip-inline;
+      margin: var(--ds-space-2);
+    }
+  }
+
+  @media print {
+    .ds-tooltip {
+      display: none;
+    }
+  }
+}

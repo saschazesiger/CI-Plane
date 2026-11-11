@@ -40,7 +40,7 @@ function numberField([key, label, unit, scale, hint], s) {
   const shown = Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '');
   return `<div class="ds-field"><label class="ds-field__label" for="set-${key}">${label}${CHANGED}</label>` +
     `<div class="ds-input-group"><input class="ds-input" id="set-${key}" name="${key}" type="number" inputmode="decimal" step="any" min="0" data-field="${key}" data-scale="${scale}" value="${shown}" aria-describedby="set-${key}-hint">` +
-    `<span class="ds-input-group__affix" aria-hidden="true">${unit}</span></div>` +
+    `<span class="ds-input-group__suffix" aria-hidden="true">${unit}</span></div>` +
     `<small class="ds-field__hint" id="set-${key}-hint">${hint}</small></div>`;
 }
 

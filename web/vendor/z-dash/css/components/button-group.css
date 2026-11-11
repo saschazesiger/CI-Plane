@@ -1,0 +1,157 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Button group: connected buttons in one pill outline. The outer corners of
+ * the first and the last button make the pill (at most half the height,
+ * times --ds-shape, D11), the inner corners are square, and neighbours
+ * share one border line; a filled or tonal group has a hairline divider in
+ * its label colour between the buttons.
+ *
+ *   <div class="ds-btn-group" role="group" aria-label="Zoom">
+ *     <button class="ds-btn" type="button">(minus 16) Out</button>
+ *     <button class="ds-btn" type="button">Fit</button>
+ *     <button class="ds-btn" type="button">(plus 16) In</button>
+ *   </div>
+ *
+ * One look per group: outlined (the default), --filled or --tonal on every
+ * button; icon buttons (--icon) or labelled ones. Toggles inside (a
+ * .ds-toggle-group, aria-pressed) take the tint inside the group's outline
+ * (an outlined toggle that is on keeps the line colour) and raise their
+ * border over their neighbours'. A split button is a group of two (.ds-split-btn).
+ *
+ *   .ds-btn-group--block     fills its line; the buttons share it equally
+ *                            and a label in .ds-btn__label ends in an
+ *                            ellipsis when it is too narrow (a phone)
+ *
+ * Options (docs/options.md), on the group or any ancestor, computed in the
+ * buttons' own rule here with the button's formula:
+ *   size      the buttons' height and padding (button.css); the pill of the
+ *             outer corners follows the height
+ *   density   the buttons' height
+ *   shape     the outer corners (and their press) times --ds-shape: a
+ *             square theme has a square group
+ *   touch     every button at least --ds-target-min high
+ *
+ * Hooks: --ds-btn-group-radius (the outer corners, default
+ * --ds-radius-action), --ds-btn-group-divider (the line between two buttons;
+ * default: their border colour, in a filled or tonal group the label colour
+ * mixed into the fill). The buttons read the button hooks. The computed
+ * values (--_g-box, --_g-half, --_g-rest, --_g-radius, --_g-divider) are
+ * private.
+ *
+ * Press: the outer corners of the pressed button morph to the pressed
+ * radius and spring back, like every pill; the inner corners stay square.
+ * Focus: the ring of the focused button lies over its neighbours
+ * (--ds-z-pinned); a hovered, pressed or on button raises its border
+ * (--ds-z-raised).
+ *
+ * Forced colours: the buttons' system colours; the shared borders stay
+ * ButtonBorder, a toggle that is on Highlight (button.css).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.button-group {
+  .ds-btn-group {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 0;
+    max-inline-size: 100%;
+    vertical-align: middle;
+  }
+
+  .ds-btn-group > .ds-btn {
+    /* The button's own box (button.css), for the pill of the outer corners. */
+    --_g-box: max(var(--ds-target-min, 0px), var(--ds-btn-height-exact, calc(var(--ds-btn-height, 40px) + var(--ds-size-step, 0) * 8px + var(--ds-density, 0) * 4px)));
+    --_g-half: calc(var(--_g-box) / 2);
+    --_g-rest: min(calc(min(var(--ds-btn-group-radius, var(--ds-radius-action)), var(--_g-half)) * var(--ds-shape, 1)), var(--_g-half));
+    --_g-radius: var(--_g-rest);
+    --_g-divider: var(--ds-btn-border, var(--ds-line-2));
+    border-radius: 0;
+  }
+
+  .ds-btn-group > .ds-btn--icon {
+    --_g-box: max(var(--ds-target-min, 0px), calc(var(--ds-btn-icon-size, 40px) + var(--ds-size-step, 0) * 8px));
+  }
+
+  /* The ends of the pill: the first and the last button of the group
+     (another element in it, such as a menu, does not count). */
+  .ds-btn-group > .ds-btn:not(.ds-btn ~ .ds-btn) {
+    border-start-start-radius: var(--_g-radius);
+    border-end-start-radius: var(--_g-radius);
+  }
+
+  .ds-btn-group > .ds-btn:not(:has(~ .ds-btn)) {
+    border-start-end-radius: var(--_g-radius);
+    border-end-end-radius: var(--_g-radius);
+  }
+
+  /* Neighbours share one line: each later button lies over the end border
+     of the one before, in the divider colour. */
+  .ds-btn-group > .ds-btn ~ .ds-btn {
+    margin-inline-start: -1px;
+    border-inline-start-color: var(--ds-btn-group-divider, var(--_g-divider));
+  }
+
+  /* An outlined toggle that is on keeps the group's outline (the segmented
+     look): the tint fills it, the pill stays one line all round. */
+  .ds-btn-group > .ds-btn[aria-pressed="true"]:not(.ds-btn--filled, .ds-btn--tonal, .ds-btn--quiet, .ds-btn--text, .ds-btn--ghost) {
+    border-color: var(--ds-btn-group-divider, var(--ds-line-2));
+  }
+
+  /* In a filled or tonal group the line is the label colour in the fill,
+     so the two targets read apart: as strong as dimmed content
+     (--ds-state-disabled), so it reads as a seam, not as a label. */
+  .ds-btn-group > :is(.ds-btn--filled, .ds-btn--tonal):not([aria-pressed="false"]) {
+    --_g-divider: color-mix(in srgb, var(--ds-btn-color, var(--ds-on-primary)) calc(var(--ds-state-disabled) * 100%), var(--ds-btn-bg, var(--ds-primary)));
+  }
+
+  /* The press: the outer corners turn the pressed radius (times the shape,
+     never rounder than at rest) and spring back on release, on the
+     button's own transitions. Blocked buttons do not morph. */
+  .ds-btn-group > .ds-btn:active:not(:disabled, [aria-disabled="true"], [aria-busy="true"], .ds-btn--done),
+  .ds-btn-group > .ds-btn.ds-pressed:not(:disabled, [aria-disabled="true"], [aria-busy="true"], .ds-btn--done) {
+    --_g-radius: min(calc(var(--ds-btn-radius-pressed, var(--ds-radius-action-pressed)) * var(--ds-shape, 1)), var(--_g-rest));
+  }
+
+  /* A hovered, pressed or on button shows its whole border; a focused one
+     its whole ring. */
+  @media (hover: hover) {
+    .ds-btn-group > .ds-btn:hover {
+      z-index: var(--ds-z-raised);
+    }
+  }
+
+  .ds-btn-group > .ds-btn:is(:active, .ds-pressed, [aria-pressed="true"]) {
+    z-index: var(--ds-z-raised);
+  }
+
+  .ds-btn-group > .ds-btn:focus-visible {
+    z-index: var(--ds-z-pinned);
+  }
+
+  /* Full width: the buttons share the line; a label that does not fit ends
+     in an ellipsis instead of pushing the group out. */
+  .ds-btn-group--block {
+    display: flex;
+    inline-size: 100%;
+    /* In a grid or flex parent too: never wider than its line because of
+       its labels (they end in an ellipsis instead). */
+    min-inline-size: 0;
+  }
+
+  .ds-btn-group--block > .ds-btn {
+    flex: 1 1 0;
+    min-inline-size: 0;
+  }
+
+  .ds-btn-group--block > .ds-btn > .ds-btn__label {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ds-btn-group--block > .ds-btn--icon {
+    flex: 0 0 auto;
+  }
+}

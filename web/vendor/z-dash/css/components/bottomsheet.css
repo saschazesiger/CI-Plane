@@ -1,0 +1,210 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Bottom sheet: a panel that rises from the bottom edge (a phone's filters,
+ * the details of a pin on a map, a short choice), with a drag handle,
+ * detents (the heights it rests at) and drag to dismiss. It is a modal side
+ * sheet (DS.overlay opens and closes it: the trap, the inert page, the
+ * scroll lock, Escape, focus return) laid out at the bottom at every width:
+ * the whole width on a phone, at most --ds-bottomsheet-width (640px) and
+ * centred on a wider screen.
+ *
+ *   <dialog class="ds-sheet ds-bottomsheet" aria-labelledby="bs-title" data-ds-bottomsheet data-ds-bottomsheet-detents="0.5 1">
+ *     <div class="ds-sheet__backdrop" data-ds-close></div>
+ *     <section class="ds-sheet__panel ds-bottomsheet__panel">
+ *       <button class="ds-bottomsheet__handle" type="button" aria-label="Resize the sheet"></button>
+ *       <div class="ds-sheet__head">
+ *         <h2 class="ds-sheet__title" id="bs-title">Filters</h2>
+ *         <button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Close" data-ds-close>(close)</button>
+ *       </div>
+ *       <div class="ds-sheet__body" tabindex="0"> ... </div>
+ *       <div class="ds-sheet__foot"> ... </div>                       (optional)
+ *     </section>
+ *   </dialog>
+ *
+ * Detents (data-ds-bottomsheet-detents, fractions of the panel's full
+ * height, which is the window less --ds-bottomsheet-gap): the panel is
+ * that tall and DS.bottomsheet moves it down by the runtime property
+ * --ds-bottomsheet-offset, so a detent shows its share; the runtime
+ * property --ds-bottomsheet-rest (the offset of the detent it rests at)
+ * pads the panel's end, so the foot and the end of the body stay in the
+ * window at every detent. Without detents the
+ * panel is as tall as its content (at most the full height) and rests fully
+ * up.
+ *
+ * The handle: a 32 x 4px pill in a target at least the touch target tall,
+ * a button (Enter and Space go to the next detent, ArrowUp and ArrowDown
+ * the larger and the smaller one). The head and the handle drag: the panel
+ * follows the finger (data-dragging holds its transition: the named motion
+ * exception of the bottom sheet, conventions section 8), and on release it
+ * springs to the nearest detent the throw reaches, or leaves when it is
+ * thrown below half of the smallest one.
+ *
+ * Options: density and shape as for the side sheet (padding, the head's
+ * height; the radius of the top corners times --ds-shape); size and touch
+ * reach the controls inside. No tone.
+ *
+ * Motion (state-driven on data-state): the panel rises its full height on
+ * the spatial spring over --ds-dur-long while the scrim fades; a detent
+ * change springs there over --ds-dur-long; it drops back down in
+ * --ds-dur-base, accelerating. The bleed (a strip of the panel's own
+ * background below its bottom edge) covers the spring's overshoot. By hand
+ * (no data-state): ds-lift-in, and ds-drop-out its full height.
+ *
+ * Forced colours: the panel keeps the side sheet's transparent outline as
+ * its edge; the handle's pill is CanvasText (Highlight while it has focus
+ * or drags).
+ *
+ * Hooks: --ds-bottomsheet-width (640px), --ds-bottomsheet-gap
+ * (--ds-space-12: the room above the panel at its full height),
+ * --ds-bottomsheet-radius (--ds-radius-dialog).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.bottomsheet {
+  /* At the bottom edge, centred: the panel's room is the window. */
+  .ds-bottomsheet {
+    justify-content: center;
+    align-items: flex-end;
+  }
+
+  .ds-bottomsheet__panel {
+    --_radius: calc(var(--ds-bottomsheet-radius, var(--ds-radius-dialog)) * var(--ds-shape, 1));
+    --_full: calc(100dvh - var(--ds-bottomsheet-gap, var(--ds-space-12)) - var(--ds-keyboard-inset, 0px));
+    width: min(100%, var(--ds-bottomsheet-width, 640px));
+    height: auto;
+    max-height: var(--_full);
+    padding-top: 0;
+    border-radius: var(--_radius) var(--_radius) 0 0;
+  }
+
+  /* With detents the panel is as tall as its largest one may show; the
+     part below the window at the resting detent is padding, so the foot
+     sits at the window's edge and the body scrolls within what shows (a
+     drag leaves it as it is: --ds-bottomsheet-rest changes only at rest). */
+  .ds-bottomsheet[data-detents] .ds-bottomsheet__panel {
+    height: var(--_full);
+    padding-bottom: var(--ds-bottomsheet-rest, 0px);
+  }
+
+  /* The bleed sits below the panel (the spring carries it up a little). */
+  .ds-bottomsheet__panel::after {
+    inset-block-start: 100%;
+    inset-inline: 0;
+    width: auto;
+    height: var(--ds-space-12);
+  }
+
+  /* State-driven: up from below on the spring, to its detent's offset. */
+  .ds-bottomsheet[data-state] .ds-bottomsheet__panel {
+    translate: 0 var(--ds-bottomsheet-offset, 0px);
+    transition: translate var(--ds-dur-long) var(--ds-ease-spatial);
+  }
+
+  .ds-bottomsheet[data-state="closed"] .ds-bottomsheet__panel {
+    translate: 0 var(--ds-distance-sheet);
+    transition: translate var(--ds-dur-base) var(--ds-ease-exit);
+  }
+
+  /* A drag: the panel follows the finger. */
+  .ds-bottomsheet[data-state] .ds-bottomsheet__panel[data-dragging] {
+    transition: none;
+    user-select: none;
+  }
+
+  /* By hand, without data-state: the keyframes rise and drop the full height. */
+  .ds-bottomsheet:not([data-state]) .ds-bottomsheet__panel {
+    --ds-motion-distance: var(--ds-distance-sheet);
+    animation: ds-lift-in var(--ds-dur-long) var(--ds-ease-spatial) backwards;
+  }
+
+  .ds-bottomsheet.ds-sheet--closing:not([data-state]) .ds-bottomsheet__panel {
+    --ds-motion-distance: var(--ds-distance-sheet);
+    animation:
+      ds-drop-out var(--ds-dur-base) var(--ds-ease-exit) forwards,
+      ds-fade-out var(--ds-dur-base) var(--ds-ease-in-out) forwards;
+  }
+
+  /* The handle: a pill at the top, a target as tall as the touch target. */
+  .ds-bottomsheet__handle {
+    display: grid;
+    place-items: center;
+    flex: none;
+    align-self: center;
+    width: max(var(--ds-target-min, 0px), var(--ds-space-12));
+    height: max(var(--ds-target-min, 0px), var(--ds-space-6));
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--_radius);
+    background: transparent;
+    color: var(--ds-text-2);
+    cursor: grab;
+    touch-action: none;
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-bottomsheet__handle::before {
+    content: '';
+    width: var(--ds-space-8);
+    height: var(--ds-space-1);
+    border-radius: calc(var(--ds-space-1) / 2);
+    background: currentColor;
+    opacity: var(--ds-state-stale);
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-bottomsheet__handle:hover::before {
+      opacity: 1;
+    }
+  }
+
+  .ds-bottomsheet__handle:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-bottomsheet__handle:focus-visible::before,
+  .ds-bottomsheet__panel[data-dragging] .ds-bottomsheet__handle::before {
+    opacity: 1;
+  }
+
+  .ds-bottomsheet__panel[data-dragging] .ds-bottomsheet__handle {
+    cursor: grabbing;
+  }
+
+  /* The head drags too: it says so where a pointer hovers it. */
+  .ds-bottomsheet .ds-bottomsheet__panel > .ds-sheet__head {
+    touch-action: none;
+    cursor: grab;
+  }
+
+  @media (max-width: 600px) {
+    .ds-bottomsheet__panel {
+      border-radius: var(--_radius) var(--_radius) 0 0;
+    }
+
+    .ds-bottomsheet[data-state="open"] .ds-bottomsheet__panel {
+      transition: translate var(--ds-dur-long) var(--ds-ease-spatial);
+    }
+
+    .ds-bottomsheet:not([data-state]) .ds-bottomsheet__panel {
+      animation: ds-lift-in var(--ds-dur-long) var(--ds-ease-spatial) backwards;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .ds-bottomsheet__handle::before {
+      background: CanvasText;
+      opacity: 1;
+    }
+
+    .ds-bottomsheet__handle:focus-visible::before,
+    .ds-bottomsheet__panel[data-dragging] .ds-bottomsheet__handle::before {
+      background: Highlight;
+    }
+  }
+}

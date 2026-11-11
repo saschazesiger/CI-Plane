@@ -1,0 +1,378 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Media card and gallery grid: thumbnails of files, photos, recordings or
+ * devices that open, can be selected and carry their own actions.
+ *
+ *   <ul class="ds-media-grid" aria-label="Photos" data-ds-media>
+ *     <li class="ds-media" data-ds-key="p1">
+ *       <span class="ds-media__thumb"><img src="..." alt=""> [<span class="ds-media__tag">0:42</span>]</span>
+ *       <a class="ds-media__open" href="..."><span class="ds-media__title">pump-room.jpg</span></a>
+ *       <span class="ds-media__meta">2.4 MB · JPEG</span>
+ *       <span class="ds-media__select"><input class="ds-checkbox ds-media__check" type="checkbox" aria-label="Select pump-room.jpg"></span>
+ *       <span class="ds-media__actions"><button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm" type="button"
+ *             aria-label="More for pump-room.jpg" aria-haspopup="menu" ...>(moreVertical)</button></span>
+ *     </li>
+ *   </ul>
+ *
+ * The order of the parts is the tab order inside a card: open, checkbox,
+ * actions.
+ *
+ * A thumbnail without a picture holds an icon (a file type, a device):
+ *   <span class="ds-media__thumb">(fileText 32)</span>
+ *
+ * Parts:
+ *   .ds-media__thumb     the picture at the card's ratio (--ds-media-ratio,
+ *                        4 / 3), an <img> or <video> covering it, else an
+ *                        icon centred on --ds-surface-high
+ *   .ds-media__tag       a short fact over the picture's bottom end corner
+ *                        (a duration, a page count, "RAW"): --ds-inverse
+ *                        with --ds-on-inverse, the caption type
+ *   .ds-media__select    the selection checkbox over the picture's top
+ *                        start corner, on a disc of --ds-surface; it shows
+ *                        with the card's hover or focus, and always once
+ *                        anything in the grid is selected, under a coarse
+ *                        pointer and under .ds-touch
+ *   .ds-media__open      the main action (a link or a button) around the
+ *                        title: its box stretches over the whole card
+ *                        (::after), so the picture opens too, and carries
+ *                        the state layer; the focus ring goes round the card
+ *   .ds-media__title     the name, one line with an ellipsis
+ *   .ds-media__meta      a second line in --ds-font-meta, --ds-text-2
+ *   .ds-media__actions   buttons at the end of the text (a menu button),
+ *                        above the stretched action
+ *
+ * Variants:
+ *   (none)               a picture at 4 / 3 above the text
+ *   --square             1 / 1
+ *   --wide               16 / 9
+ *   --bare               the picture alone: the title and meta stay in the
+ *                        tree (read, not shown), the stretched action
+ *                        still covers the card, the actions sit over the
+ *                        picture
+ *
+ * Selected: the checkbox is the truth (:checked). The card takes
+ * --ds-media-selected-bg (--ds-accent) with --ds-on-accent text and a static inset ring of
+ * --ds-focus-width in --ds-selected-ring (--ds-primary), so the focus ring
+ * stays free; the checked box is the mark that never relies on colour.
+ * Colours on --ds-dur-fast, the ring at once.
+ *
+ * Grid: .ds-media-grid fills columns of at least --ds-media-min (128px at
+ * md) and stretches them to the row; a list (<ul>) or any container of
+ * cards. data-ds-media (media.js) makes it one tab stop with the arrow
+ * keys, Space selection, Shift for a range, Ctrl+A and Escape.
+ *
+ * Options (docs/options.md), computed here:
+ *   size      .ds-xs ... .ds-xl on the grid or any ancestor: the column
+ *             minimum 32px per step (64 to 192px), the title in the
+ *             size's type role
+ *   density   .ds-density-*: the grid gap 4px per step, the text padding
+ *             2px per step
+ *   shape     the card's and the picture's radius times --ds-shape
+ *   touch     .ds-touch: the selection checkboxes always show (their halo
+ *             is the form's, at least --ds-target-min)
+ *   tone      not read: a card shows no status of its own; a status chip
+ *             or badge inside says its word
+ *
+ * Hooks: --ds-media-min (128px, the md column), --ds-media-gap
+ * (--ds-space-4), --ds-media-ratio (4 / 3), --ds-media-radius
+ * (--ds-radius-card), --ds-media-bg (--ds-surface), --ds-media-border
+ * (--ds-line), --ds-media-selected-bg (--ds-accent), --ds-selected-ring
+ * (read, --ds-primary).
+ *
+ * Motion: the state layer fades on --ds-dur-fast (the press in
+ * --ds-dur-micro), the focus ring snaps (outline-offset), the selection
+ * checkbox fades in on --ds-dur-fast and out on --ds-dur-instant, the
+ * selected colours on --ds-dur-fast. Nothing moves or scales.
+ *
+ * Forced colours: every card keeps its border; a selected card is
+ * Highlight with HighlightText; the tag keeps an edge.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.media {
+  .ds-media-grid {
+    --_min: calc(var(--ds-media-min, 128px) + var(--ds-size-step, 0) * 32px);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(var(--_min), 100%), 1fr));
+    gap: calc(var(--ds-media-gap, var(--ds-space-4)) + var(--ds-density, 0) * 4px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-media {
+    --_radius: calc(var(--ds-media-radius, var(--ds-radius-card)) * var(--ds-shape, 1));
+    --_pad: calc(var(--ds-space-3) + var(--ds-density, 0) * 2px);
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto 1fr;
+    align-content: start;
+    min-inline-size: 0;
+    border: 1px solid var(--ds-media-border, var(--ds-line));
+    border-radius: var(--_radius);
+    background: var(--ds-media-bg, var(--ds-surface));
+    color: var(--ds-text);
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition:
+      background-color var(--ds-dur-fast) var(--ds-ease-in-out),
+      outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+  }
+
+  .ds-media__thumb {
+    position: relative;
+    display: grid;
+    grid-column: 1 / -1;
+    place-items: center;
+    overflow: hidden;
+    aspect-ratio: var(--ds-media-ratio, 4 / 3);
+    border-radius: calc(var(--_radius) - 1px) calc(var(--_radius) - 1px) 0 0;
+    background: var(--ds-surface-high);
+    color: var(--ds-text-2);
+  }
+
+  .ds-media--square > .ds-media__thumb {
+    aspect-ratio: 1 / 1;
+  }
+
+  .ds-media--wide > .ds-media__thumb {
+    aspect-ratio: 16 / 9;
+  }
+
+  .ds-media__thumb > :is(img, video) {
+    grid-area: 1 / 1;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  .ds-media__tag {
+    position: absolute;
+    inset-block-end: var(--ds-space-2);
+    inset-inline-end: var(--ds-space-2);
+    padding: 0 var(--ds-space-1);
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    background: var(--ds-inverse);
+    color: var(--ds-on-inverse);
+    font: var(--ds-font-caption);
+  }
+
+  .ds-media__open {
+    grid-column: 1;
+    min-inline-size: 0;
+    padding: var(--_pad) var(--_pad) 0;
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* The card's own outline is the ring: the control draws none. */
+  .ds-media__open:focus-visible {
+    outline: none;
+  }
+
+  /* The whole card opens, and shows the state layer. */
+  .ds-media__open::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: var(--ds-z-raised);
+    border-radius: calc(var(--_radius) - 1px);
+    background: currentColor;
+    opacity: 0;
+    transition: opacity var(--ds-dur-fast) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-media__open:hover::after {
+      opacity: var(--ds-state-hover);
+    }
+  }
+
+  .ds-media__open:focus-visible::after {
+    opacity: var(--ds-state-focus);
+    transition-duration: 0s;
+  }
+
+  .ds-media__open:active::after {
+    opacity: var(--ds-state-pressed);
+    transition-duration: var(--ds-dur-micro);
+  }
+
+  .ds-media:has(.ds-media__open:focus-visible) {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+
+  .ds-media__title,
+  .ds-media__meta {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ds-media__title {
+    font: var(--ds-size-font, var(--ds-font-label));
+  }
+
+  .ds-media__meta {
+    grid-column: 1;
+    min-inline-size: 0;
+    padding: 0 var(--_pad) var(--_pad);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+  }
+
+  /* Without meta the title keeps its bottom room. */
+  .ds-media:not(:has(> .ds-media__meta)) > .ds-media__open {
+    padding-block-end: var(--_pad);
+  }
+
+  .ds-media__actions {
+    position: relative;
+    z-index: var(--ds-z-pinned);
+    display: flex;
+    grid-row: 2 / 4;
+    grid-column: 2;
+    align-items: center;
+    align-self: center;
+    padding-inline-end: var(--ds-space-1);
+  }
+
+  /* Selection: the checkbox on a disc over the picture's corner. */
+  .ds-media__select {
+    position: absolute;
+    inset-block-start: var(--ds-space-2);
+    inset-inline-start: var(--ds-space-2);
+    z-index: var(--ds-z-pinned);
+    display: grid;
+    place-items: center;
+    inline-size: calc(var(--ds-space-8) + var(--ds-size-step, 0) * 4px);
+    block-size: calc(var(--ds-space-8) + var(--ds-size-step, 0) * 4px);
+    border-radius: calc(50% * var(--ds-shape, 1));
+    background: var(--ds-surface);
+    opacity: 0;
+    transition: opacity var(--ds-dur-instant) var(--ds-ease-in-out);
+  }
+
+  @media (hover: hover) {
+    .ds-media:hover > .ds-media__select {
+      opacity: 1;
+      transition-duration: var(--ds-dur-fast);
+    }
+  }
+
+  .ds-media:focus-within > .ds-media__select,
+  .ds-media-grid:has(.ds-media__check:checked) .ds-media__select,
+  .ds-media__select:has(> .ds-media__check:checked) {
+    opacity: 1;
+    transition-duration: var(--ds-dur-fast);
+  }
+
+  @media (hover: none) {
+    .ds-media__select {
+      opacity: 1;
+    }
+  }
+
+  .ds-touch .ds-media__select {
+    opacity: 1;
+  }
+
+  /* Selected: the tint, and a ring inside the edge that leaves the focus
+     ring free; the checked box says it without colour. */
+  .ds-media:has(> .ds-media__select > .ds-media__check:checked) {
+    background: var(--ds-media-selected-bg, var(--ds-accent));
+    color: var(--ds-on-accent);
+  }
+
+  .ds-media:has(> .ds-media__select > .ds-media__check:checked) > .ds-media__meta {
+    color: var(--ds-on-accent);
+  }
+
+  .ds-media:has(> .ds-media__select > .ds-media__check:checked)::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: var(--ds-z-raised);
+    border: var(--ds-focus-width) solid var(--ds-selected-ring, var(--ds-primary));
+    border-radius: var(--_radius);
+    pointer-events: none;
+  }
+
+  /* The picture alone: the text stays in the tree, unseen; the stretched
+     action still covers the card. */
+  .ds-media--bare > .ds-media__thumb {
+    border-radius: calc(var(--_radius) - 1px);
+  }
+
+  .ds-media--bare > .ds-media__open {
+    position: static;
+    padding: 0;
+  }
+
+  .ds-media--bare > .ds-media__open > .ds-media__title,
+  .ds-media--bare > .ds-media__meta {
+    position: absolute;
+    overflow: hidden;
+    inline-size: 1px;
+    block-size: 1px;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ds-media--bare {
+    align-self: start;
+  }
+
+  /* Placed in the card's box, not in a grid area. */
+  .ds-media--bare > .ds-media__actions {
+    position: absolute;
+    grid-area: auto;
+    inset-block-start: var(--ds-space-1);
+    inset-inline-end: var(--ds-space-1);
+    padding: 0;
+    border-radius: calc(var(--ds-radius-action) * var(--ds-shape, 1));
+    background: var(--ds-surface);
+  }
+
+  @media (forced-colors: active) {
+    .ds-media__open::after {
+      display: none;
+    }
+
+    /* Selected: the text part in Highlight, the ring around the card;
+       the picture, the checkbox and the actions keep their forced looks
+       (forced-color-adjust inherits, so they take it back). */
+    .ds-media:has(> .ds-media__select > .ds-media__check:checked) {
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+    }
+
+    .ds-media:has(> .ds-media__select > .ds-media__check:checked) > :is(.ds-media__thumb, .ds-media__select, .ds-media__actions) {
+      forced-color-adjust: auto;
+    }
+
+    .ds-media:has(> .ds-media__select > .ds-media__check:checked) > .ds-media__meta {
+      color: HighlightText;
+    }
+
+    .ds-media:has(> .ds-media__select > .ds-media__check:checked)::before {
+      border-color: Highlight;
+    }
+
+    .ds-media:has(.ds-media__open:focus-visible) {
+      outline-color: CanvasText;
+    }
+
+    .ds-media__tag {
+      outline: 1px solid transparent;
+    }
+  }
+}

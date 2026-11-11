@@ -13,6 +13,9 @@
  *   .cp-tier        a tier heading inside the workers list
  *   .cp-col-*       stable widths for table columns with live values
  *   .cp-limit       the narrow number field of a parallel-jobs limit
+ *
+ * Placement fixes for Z-Dash (marked with its version, to drop once fixed there):
+ *   .ds-list--interactive .ds-switch input
  */
 
 .cp-logo {
@@ -92,6 +95,13 @@
 
 .cp-limit {
   width: 96px;
+}
+
+/* Z-Dash 3.0.1: an interactive list lifts every control of a row with position: relative, from a later cascade layer
+   than the switch, so a switch in a row (the workers list) loses its input from over its track: the row grows by the
+   input's width and the track gets no hover or press. Put the input back over the track; the list's z-index stays. */
+.ds-list--interactive .ds-switch input {
+  position: absolute;
 }
 
 @media (forced-colors: active) {

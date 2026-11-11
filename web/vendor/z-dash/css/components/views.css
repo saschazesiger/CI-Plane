@@ -1,0 +1,107 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Saved views: named sets of filters, a sort and columns, picked from a
+ * menu; the built-in ones of the page, the user's own (remembered), a
+ * default, and a link that carries the current one (js/views.js):
+ *
+ *   <div class="ds-views" data-ds-views data-ds-views-key="devices" data-ds-views-url="sync">
+ *     <button class="ds-btn ds-views__trigger" type="button" aria-haspopup="menu" aria-expanded="false" data-ds-open="#views-menu">
+ *       (layers 20)<span class="ds-sr">View: </span><span class="ds-views__name">All devices</span>
+ *       <span class="ds-views__edited" hidden>Edited</span>(chevronDown 20 .ds-views__chevron)</button>
+ *     <button class="ds-btn ds-btn--text ds-views__save" type="button" hidden>Save view</button>
+ *     <div class="ds-menu" id="views-menu" role="menu" aria-label="Views" hidden>
+ *       <div class="ds-views__list" role="group" aria-label="Views">
+ *         <button class="ds-menu__item" role="menuitemradio" aria-checked="false" type="button" data-ds-view="all" data-ds-view-default>
+ *           (check 20 .ds-menu__check)<span class="ds-menu__label">All devices</span></button>
+ *         <button ... data-ds-view="offline" data-ds-view-state="status=offline&sort=-seen"> ... Offline</button>
+ *         (the user's views: rendered by the system after them)
+ *       </div>
+ *       <div class="ds-menu__divider" role="separator"></div>
+ *       <button class="ds-menu__item" role="menuitem" type="button" data-ds-views-action="save">(save 20)<span class="ds-menu__label">Save changes</span></button>
+ *       ... create, rename, default, share ...
+ *       <button class="ds-menu__item ds-menu__item--danger" role="menuitem" type="button" data-ds-views-action="delete">(trash 20)<span class="ds-menu__label">Delete view</span></button>
+ *     </div>
+ *   </div>
+ *
+ * The trigger names the current view (one line, an ellipsis after
+ * --ds-views-name-max, 240px) and, while the page's state differs from
+ * it, the word "Edited" (.ds-views__edited, written by the system): never
+ * a dot alone. Its chevron turns while the menu is open. .ds-views__save
+ * shows beside it while edited. In the menu the current view carries the
+ * check (menuitemradio), the default view the star and the word
+ * "Default" (.ds-views__default, at the row's end); actions that do not
+ * apply are aria-disabled.
+ *
+ * Options (src/core/options.css, docs/options.md), on .ds-views or any
+ * ancestor: size, density, shape and touch reach the buttons and the menu,
+ * which compute them; the gap steps 4px per size step. There is no tone: a
+ * view shows no meaning of its own; deleting is the menu's danger item and
+ * the confirm dialog's error button (D10).
+ *
+ * Forced colours: the words are text, the buttons and the menu keep their
+ * own models; nothing of its own.
+ *
+ * Hooks: --ds-views-name-max (240px). The computed --_gap is private.
+ *
+ * No progressive feature.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.views {
+  .ds-views {
+    --_gap: max(var(--ds-space-1), calc(var(--ds-space-2) + var(--ds-size-step, 0) * 4px));
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--_gap);
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .ds-views__trigger {
+    min-width: 0;
+    max-width: 100%;
+    white-space: nowrap;
+  }
+
+  .ds-views__name {
+    min-width: 0;
+    max-width: var(--ds-views-name-max, 240px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* A word, quieter than the name: the state differs from the saved view. */
+  .ds-views__edited {
+    flex: none;
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-style: italic;
+  }
+
+  .ds-views__edited[hidden],
+  .ds-views__save[hidden] {
+    display: none;
+  }
+
+  .ds-views__chevron {
+    flex: none;
+    transition: rotate var(--ds-dur-medium) var(--ds-ease-spatial);
+  }
+
+  .ds-views__trigger[aria-expanded="true"] .ds-views__chevron {
+    rotate: 180deg;
+  }
+
+  .ds-views__list {
+    display: grid;
+  }
+
+  .ds-views__default {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+  }
+}

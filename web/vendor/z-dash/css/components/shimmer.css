@@ -1,0 +1,82 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Shimmer: "something is at work" on the text itself (an assistant's
+ * "Thinking", a job's "Running npm test"): a soft glint that travels over
+ * the words, left to right, a pass and a pause, and nothing else on the
+ * line moves (plans/wheel-and-shimmer.md).
+ *
+ *   <span class="ds-shimmer" data-shimmer="Running npm test">Running npm test</span>
+ *   <span class="ds-wheel__line ds-shimmer" data-shimmer="Thinking">Thinking</span>   a wheel line (wheel.css)
+ *
+ * data-shimmer is the text as it reads (the same words and spaces), in one
+ * weight (a bold word in a regular line is wider than its copy). The wave
+ * is a copy of the text on top (::after), in the line's own type, so it
+ * lies on the letters and is cut with the same ellipsis.
+ * The copy's alternative text is empty (content: attr() / ""), so the
+ * accessible name stays the text's own.
+ *
+ * Look: the copy in --ds-shimmer-glint (white in every theme: over dark
+ * text a faint sheen passing, over light text in the dark theme a soft
+ * glint), shown through a horizontal mask only in a soft band: transparent
+ * to 32%, --ds-shimmer-peak at 50% (its alpha is the glint's strength at
+ * the crest: 55% of the text, a sheen in the background, never wiping the
+ * words out), transparent from 68% of a tile --ds-shimmer-length (480px)
+ * long, repeated along the line.
+ *
+ * Motion: the tile travels one --ds-shimmer-length per --ds-loop-shimmer
+ * (4.55s, the shape loader's round; until the token lands it runs on
+ * --ds-loop-loader, the same value), linear, on the progress wave's
+ * keyframe (ds-progress-wave, which moves the mask by
+ * --ds-progress-wave-length, set here to the tile): about 105px/s, so a
+ * short text sees one slow pass and a pause. The mask is the only repaint.
+ * Remove the class (or data-shimmer) when the work ends: the glint goes at
+ * once, the text stays.
+ *
+ * Options: none. It takes the type and colour of its text; size, density,
+ * shape and tone have nothing to act on.
+ *
+ * Hooks: --ds-shimmer-length (480px, one tile: the band and the pause after
+ * it). Roles (tokens.css; a theme sets them): --ds-shimmer-glint (white;
+ * the text colour under themes/contrast.css), --ds-shimmer-peak (the text
+ * at 55%; transparent under themes/contrast.css, so no glint).
+ *
+ * Forced colours: the copy is left out (content: none); the text stays.
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.shimmer {
+  .ds-shimmer {
+    position: relative;
+    display: inline-block;
+    min-width: 0;
+    max-width: 100%;
+    vertical-align: bottom;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .ds-shimmer[data-shimmer]::after {
+    --ds-progress-wave-length: var(--ds-shimmer-length, 480px);
+    content: attr(data-shimmer) / "";
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--ds-shimmer-glint);
+    pointer-events: none;
+    mask-image: linear-gradient(90deg, transparent 0 32%, var(--ds-shimmer-peak) 50%, transparent 68% 100%);
+    mask-size: var(--ds-shimmer-length, 480px) 100%;
+    mask-repeat: repeat-x;
+    animation: ds-progress-wave var(--ds-loop-loader) linear infinite;
+  }
+
+  @media (forced-colors: active) {
+    .ds-shimmer[data-shimmer]::after {
+      content: none;
+    }
+  }
+}

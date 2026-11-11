@@ -1,0 +1,110 @@
+/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*
+ * Load more and infinite scroll: the end of a list that grows by pages. A
+ * status line and a "Load more" button; with data-ds-loadmore-auto the
+ * element is also the sentinel of an infinite scroll (js/loadmore.js, an
+ * IntersectionObserver), and the button stays as the way in for keyboards,
+ * screen readers and a page whose footer must stay reachable:
+ *
+ *   <ul class="ds-list" id="devices" aria-label="Devices"> ... </ul>
+ *   <div class="ds-loadmore" data-ds-loadmore data-ds-loadmore-for="#devices"
+ *        data-ds-loadmore-loaded="50" data-ds-loadmore-total="1234" data-ds-loadmore-auto="3">
+ *     <p class="ds-loadmore__status">(alertCircle 16 .ds-loadmore__icon)<span class="ds-loadmore__text">Showing 50 of 1,234</span></p>
+ *     <button class="ds-btn ds-loadmore__button" type="button"><span class="ds-btn__faces">
+ *       <span class="ds-btn__face">Load more</span>
+ *       <span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--ink ds-sm"></span>Loading</span>
+ *     </span></button>
+ *   </div>
+ *
+ *   .ds-loadmore--inline   the status at the start and the button at the
+ *                          end of one row (the foot of a list in a card)
+ *
+ * State, written by the system: data-state on .ds-loadmore, "loading",
+ * "error" or "done" (none: ready). Loading: the button's busy face (after
+ * --ds-delay-loader, DS.motion.busy()) and aria-busy on the list. Error:
+ * the status says so in words, with the alert icon in the error ink, and
+ * the button tries again. Done: the button goes and the status says that
+ * everything shows; a button that had the focus hands it to the status.
+ *
+ * Options (src/core/options.css, docs/options.md), on .ds-loadmore or any
+ * ancestor:
+ *   size, shape, touch  reach the button, which computes them
+ *   density             2px per step of the block padding (from
+ *                       --ds-loadmore-padding, 16px) and the gap
+ * The status keeps the meta role. There is no tone: the error state is
+ * the error ink with an icon and words, never the colour alone.
+ *
+ * Forced colours: the icon and the status are text in the system colours;
+ * the error still says so in words.
+ *
+ * Hooks: --ds-loadmore-padding (16px). The computed --_pad and --_gap are
+ * private: never set them.
+ *
+ * No progressive feature (IntersectionObserver is at the floor).
+ */
+
+@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;
+@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;
+
+@layer ds.components.loadmore {
+  .ds-loadmore {
+    --_pad: max(0px, calc(var(--ds-loadmore-padding, var(--ds-space-4)) + var(--ds-density, 0) * 2px));
+    --_gap: max(var(--ds-space-1), calc(var(--ds-space-2) + var(--ds-density, 0) * 2px));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--_gap);
+    padding-block: var(--_pad);
+    text-align: center;
+  }
+
+  .ds-loadmore--inline {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    padding-inline: var(--_pad);
+    text-align: start;
+  }
+
+  .ds-loadmore__status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-1);
+    margin: 0;
+    border-radius: calc(var(--ds-radius-xs) * var(--ds-shape, 1));
+    /* The ring rests (invisible) one width further out and snaps in. */
+    outline-offset: calc(var(--ds-focus-offset) + var(--ds-focus-width));
+    transition: outline-offset var(--ds-dur-fast) var(--ds-ease-out);
+    color: var(--ds-text-2);
+    font: var(--ds-font-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* An empty status (the page writes none, nothing loaded yet) takes no room. */
+  .ds-loadmore__status:not(:has(.ds-loadmore__text:not(:empty))) {
+    display: none;
+  }
+
+  .ds-loadmore__icon {
+    display: none;
+    flex: none;
+  }
+
+  .ds-loadmore[data-state="error"] .ds-loadmore__status {
+    color: var(--ds-loadmore-error-color, var(--ds-error));
+  }
+
+  .ds-loadmore[data-state="error"] .ds-loadmore__icon {
+    display: inline-block;
+  }
+
+  .ds-loadmore[data-state="done"] .ds-loadmore__button {
+    display: none;
+  }
+
+  /* The status takes the focus from a button that went: a ring, not a box. */
+  .ds-loadmore__status:focus-visible {
+    outline: var(--ds-focus-outline);
+    outline-offset: var(--ds-focus-offset);
+  }
+}
