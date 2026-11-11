@@ -48,7 +48,8 @@ The same adapter idea through API v3 (`POST /repo/{slug}/requests` with a custom
 🧪 Providers whose machines run GitHub Actions jobs by a `runs-on` label should work today as **Another provider**:
 Depot, Namespace, Ubicloud, WarpBuild, BuildJet. They are **untested**. What to check for each:
 
-- its GitHub App is installed on the relay repository (most need an organisation);
+- its GitHub App is installed on the relay repository (most need an organisation), whose account is connected as an
+  account for runners;
 - the label of a machine for standard and for large jobs;
 - the machine has Docker, `curl` and `jq`, and may run privileged containers (the job's own Docker daemon);
 - the OIDC token of the run is GitHub's, as on GitHub-hosted machines.

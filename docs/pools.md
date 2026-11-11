@@ -9,8 +9,9 @@ small workflow in a private repository of yours, the **relay repository**. The j
 keeps its labels (`ci-plane`, maybe `large`), and GitHub gives it to the runner CI-Plane started, like to any runner
 with those labels.
 
-To the scheduler a pool is one more worker with a tier. Pools are added on the **Workers** page, next to the
-workers. Use one to:
+To the scheduler a pool is one more worker with a tier. Pools and the GitHub accounts whose minutes they use have a
+page of their own, **Pools**; the **Workers** page shows the pools in the order of use, next to the workers. Use one
+to:
 
 - **take the overflow** when your own workers are full, so jobs do not wait for long;
 - **use up free minutes first**, for example the minutes included in your GitHub plan, before your own workers;
@@ -67,12 +68,13 @@ In the interface, such jobs run on the pool as their worker.
 
 ## 🧰 Set up a pool
 
-1. **Create a private repository** for the relay, for example `acme/ci-plane-relay`. Its owner pays the minutes.
-   It must be private: its runs show the names of your runners. For Blacksmith it must belong to an organisation.
-2. **Install CI-Plane's GitHub App on it** (**Repositories → Choose repositories on GitHub**). The app needs
-   *Actions: Read and write*, which apps created by CI-Plane have; an app of an early version may only have *read*
-   ([GitHub](github.md#permissions)).
-3. **Add a pool** on the **Workers** page: choose the provider, the relay repository and the [fields](#-fields).
+1. **Create a private repository** for the relay, for example `acme/ci-plane-relay`, in the account whose minutes
+   the pool should use. Its owner pays the minutes. It must be private: its runs show the names of your runners. For
+   Blacksmith it must belong to an organisation.
+2. **Connect the account** under **Pools → Accounts for runners → Connect a GitHub account**
+   ([below](#-accounts-for-runners)): GitHub shows the app CI-Plane prepared, you create it and install it on the
+   relay repository only.
+3. **Add a pool** on the **Pools** page: choose the provider, the relay repository and the [fields](#-fields).
 4. **Add the workflow**: **Add the workflow on GitHub** opens GitHub's editor with
    `.github/workflows/ci-plane-relay.yml` filled in; commit it to the default branch. The file is
    [`internal/github/relay-workflow.yml`](../internal/github/relay-workflow.yml).
@@ -83,9 +85,31 @@ The workflow needs CI-Plane's public address, which the [Cloudflare tunnel](clou
 is down, no pool takes jobs. Requests to `/webhook` and below pass Cloudflare Access without a login, so nothing has
 to change there.
 
-One pool serves jobs of all your accounts and repositories; only the relay repository has to be in an account
-CI-Plane's app is installed on. Runners are registered where the job is, as always: on its organisation, or on its
-repository for a personal account.
+One pool serves jobs of all your accounts and repositories. Runners are registered where the job is, as always: on
+its organisation, or on its repository for a personal account, through the app of the
+[repository integration](github.md#-the-github-app). The account for runners only starts the relay workflow.
+
+## 👥 Accounts for runners
+
+An **account for runners** is a GitHub account or organisation whose Actions minutes pools use. It is kept apart
+from the [repository integration](github.md#-the-github-app), the accounts whose jobs CI-Plane runs:
+
+| | Repository integration (**Repositories**) | Account for runners (**Pools**) |
+|---|---|---|
+| What for | jobs arrive, runners are registered | runners of pools are started there |
+| Permissions of its app | *Actions*, *Metadata*, self-hosted runners or *Administration* | *Actions: read and write*, *Metadata: read*, nothing else |
+| Webhook | `workflow_job` | none |
+| Its repositories | listed under **Repositories**, their jobs run on CI-Plane | listed under **Pools** only; CI-Plane runs none of their jobs |
+
+So you can connect any number of accounts to use their minutes, also accounts whose repositories never use CI-Plane,
+without giving CI-Plane more than the right to start one workflow there. Each gets its own private app, created with
+the same two clicks as the integration's ([why one app per account](github.md#why-one-app-per-account)). Its
+repositories are read again every 30 minutes, or at once with the refresh button of the account; it has no webhook
+to say so.
+
+Pools of earlier versions start their runs through the app of the repository integration that sees their relay
+repository, and keep doing so; such repositories are offered in the pool's dialog too. An account that a pool uses
+cannot be removed: choose another repository for the pool, or remove the pool, first.
 
 ## 🪜 Tiers
 
@@ -209,7 +233,7 @@ A standard GitHub-hosted machine of a private repository has fewer CPUs than the
 | The job is taken by another runner meanwhile | The runner on the pool is not needed: its registration is removed and its run is stopped. |
 | CI-Plane restarts while runs start | The configurations waiting to be collected are stored encrypted, so the runs still get them. |
 | CI-Plane is down while runners wait on a pool | Each stops by itself after 20 minutes without a job. A job that is running finishes. |
-| Someone starts the relay workflow by hand, or re-runs a run | The run gets nothing: only runs the GitHub App started may collect a runner, and only once. |
+| Someone starts the relay workflow by hand, or re-runs a run | The run gets nothing: only runs the app of the pool's account started may collect a runner, and only once. |
 | Someone changes `ci-plane-relay.yml` | Its runs get nothing unless they still call the relay runner workflow at `relay-v2`, which they cannot change. A token made for another address, to be passed on to CI-Plane, is refused. |
 
 ## 🔒 Security
@@ -220,7 +244,7 @@ A standard GitHub-hosted machine of a private repository has fewer CPUs than the
     good anywhere else;
   - it comes from the relay repository, matched by its id, not only its name;
   - the workflow is `ci-plane-relay.yml` on the default branch, so a pull request cannot change what runs;
-  - the run was started by CI-Plane's GitHub App (`workflow_dispatch`);
+  - the run was started by the app of the pool's account (`workflow_dispatch`), the one that dispatched this runner;
   - the job is CI-Plane's relay runner workflow at the tag `relay-v2` (`job_workflow_ref`), so nobody with access to
     the relay repository can change the steps that run the runner;
   - the run's title names a runner that waits for this repository, and the run is not older than it;

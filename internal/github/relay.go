@@ -337,9 +337,9 @@ func (r *Relay) Start(ctx context.Context, _ model.Worker, spec engine.RunnerSpe
 		r.drop(spec.Name)
 		switch statusOf(err) {
 		case http.StatusNotFound:
-			return fmt.Errorf("the relay workflow .github/workflows/%s is not on the branch %s of %s: add it as the pool shows on the Workers page", model.RelayWorkflow, branch, rr.FullName)
+			return fmt.Errorf("the relay workflow .github/workflows/%s is not on the branch %s of %s: add it as the pool shows on the Pools page", model.RelayWorkflow, branch, rr.FullName)
 		case http.StatusUnprocessableEntity:
-			return fmt.Errorf("GitHub did not start the relay workflow in %s: %w. Replace the workflow with the one the pool shows on the Workers page", rr.FullName, err)
+			return fmt.Errorf("GitHub did not start the relay workflow in %s: %w. Replace the workflow with the one the pool shows on the Pools page", rr.FullName, err)
 		case http.StatusForbidden:
 			if strings.Contains(strings.ToLower(err.Error()), "not accessible by integration") {
 				return fmt.Errorf("the GitHub App of %s may not start workflows: give it \"Actions: Read and write\" at %s and accept the new permission on its installation", rr.account.Owner, appPermissionsURL(rr.account))
@@ -776,9 +776,15 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		_ = r.s.st.View(func(tx *store.Tx) error {
 			all, err := apps(tx)
 			for _, p := range all {
-				if p.ID == repoID && p.account.InstallationID != 0 && strings.EqualFold(claims.Actor, p.account.Slug+"[bot]") {
+				if p.ID != repoID || p.account.InstallationID == 0 {
+					continue
+				}
+				if strings.EqualFold(claims.Actor, p.account.Slug+"[bot]") {
 					rr = p
 					break
+				}
+				if rr.ID == 0 {
+					rr = p // a run started by someone else: refused below, with the reason
 				}
 			}
 			return err

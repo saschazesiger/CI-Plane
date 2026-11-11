@@ -430,7 +430,7 @@ func (t *Tx) DeleteRepo(id int64) error {
 const runnerAccountCols = `id, slug, owner, owner_type, html_url, installation_id, created_at`
 
 func scanRunnerAccount(r interface{ Scan(...any) error }) (model.Account, error) {
-	a := model.Account{Runners: true}
+	a := model.Account{Runners: true, Enabled: true} // a runner account cannot be switched off; its pools can
 	err := r.Scan(&a.ID, &a.Slug, &a.Owner, &a.OwnerType, &a.HTMLURL, &a.InstallationID, &a.CreatedAt)
 	return a, err
 }

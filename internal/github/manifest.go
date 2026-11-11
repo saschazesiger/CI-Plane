@@ -347,7 +347,7 @@ func (s *Service) Remove(_ context.Context, accountID int64) (string, error) {
 			}
 		}
 		if len(used) > 0 {
-			return fmt.Errorf("the pools %s start their runners through the app of %s; choose another account for them on the Pools page or remove them first", strings.Join(used, ", "), a.Owner)
+			return inUse{fmt.Errorf("the pools %s start their runners through the app of %s; choose another account for them on the Pools page or remove them first", strings.Join(used, ", "), a.Owner)}
 		}
 		if err := del(accountID); err != nil {
 			return err
@@ -399,3 +399,9 @@ func (s *Service) SetPublicURL(ctx context.Context, publicURL string) error {
 	}
 	return nil
 }
+
+// inUse is a refusal to remove an account that pools still use.
+type inUse struct{ error }
+
+func (e inUse) Unwrap() error        { return e.error }
+func (e inUse) Is(target error) bool { return target == api.ErrInUse }

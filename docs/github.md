@@ -46,6 +46,13 @@ install it. So each account or organisation gets its own private app: one click 
 only ever serves its owner: jobs and installations of other owners are ignored, even if someone makes the app public
 on GitHub.
 
+### Apps of accounts for runners
+
+The GitHub accounts whose minutes [pools](pools.md#-accounts-for-runners) use get an app of their own, created on
+the **Pools** page. It may read and start workflows (*Actions: read and write*, *Metadata: read*) and nothing else:
+no webhook, no runners, no administration. CI-Plane runs no jobs of these accounts, and their repositories do not show
+under **Repositories**.
+
 ### Choose repositories later
 
 Repositories come and go with the installation. To add or remove some, choose **Choose repositories on GitHub** on

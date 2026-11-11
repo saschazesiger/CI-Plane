@@ -174,7 +174,16 @@ func (s *Server) removeAccount(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	settingsURL, err := s.d.GitHub.Remove(ctx, id)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
+		status := http.StatusBadGateway
+		if errors.Is(err, ErrInUse) {
+			status = http.StatusConflict
+		}
+		msg := err.Error()
+		msg = strings.ToUpper(msg[:1]) + msg[1:]
+		if !strings.HasSuffix(msg, ".") {
+			msg += "."
+		}
+		writeJSON(w, status, apiError{Error: msg})
 		return
 	}
 	s.changedWorkers()

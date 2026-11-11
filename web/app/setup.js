@@ -759,6 +759,7 @@ function returnTarget() {
     from = '';
   }
   if (from === 'setup' || !ctx.session.setupDone) return '#/setup?step=3';
+  if (from === 'pools') return '#/pools';
   return '#/repositories';
 }
 
@@ -773,7 +774,7 @@ export const githubView = {
   async mount(_, params) {
     const status = $('#github-status');
     const fail = (error) => DS.dom.morphHtml(status, alertHtml('error', 'GitHub could not be connected', esc(error.message),
-      `<a class="ds-btn ds-btn--text ds-sm" href="${returnTarget() === '#/repositories' ? '#/repositories/add' : '#/setup?step=3'}">Start again</a>`));
+      `<a class="ds-btn ds-btn--text ds-sm" href="${{ '#/repositories': '#/repositories/add', '#/pools': '#/pools' }[returnTarget()] || '#/setup?step=3'}">Start again</a>`));
     if (params.get('code')) {
       try {
         const r = await api.post('/api/github/complete', { code: params.get('code'), state: params.get('state') || '' });
@@ -788,7 +789,8 @@ export const githubView = {
       try {
         const r = await api.post('/api/github/installed', { installationId: Number(params.get('installation_id')) || 0 });
         const repos = r.accounts.reduce((n, a) => n + a.repos.length, 0);
-        toast(`GitHub is connected: ${plural(repos, 'repository', 'repositories')}.`);
+        if (returnTarget() === '#/pools') toast('The account for runners is connected. Add a pool with its repository.');
+        else toast(`GitHub is connected: ${plural(repos, 'repository', 'repositories')}.`);
         ctx.go(returnTarget(), { replace: true });
       } catch (error) {
         fail(error);

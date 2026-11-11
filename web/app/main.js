@@ -19,6 +19,7 @@ import { $, $$, M, esc, head, alertHtml, copyFrom, toast } from './ui.js';
 import overview from './overview.js';
 import jobs from './jobs.js';
 import workers from './workers.js';
+import pools from './pools.js';
 import repos from './repos.js';
 import settings from './settings.js';
 import { setupView, addWorkerView, addAccountView, githubView } from './setup.js';
@@ -38,6 +39,7 @@ const VIEWS = {
   jobs,
   workers,
   'workers/add': addWorkerView,
+  pools,
   repositories: repos,
   'repositories/add': addAccountView,
   settings,

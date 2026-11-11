@@ -727,3 +727,240 @@ func TestSetPublicURLAndRemove(t *testing.T) {
 		t.Fatalf("removed app: %d", c)
 	}
 }
+
+// --- runner accounts -------------------------------------------------------
+
+// addRunnerApp stores a runner account as Complete would and installs it on
+// the fake.
+func (e *env) addRunnerApp(id int64, owner, slug string, installation int64, repos ...model.Repo) model.Account {
+	e.t.Helper()
+	_, pemKey := key(e.t)
+	acc := model.Account{ID: id, Slug: slug, Owner: owner, OwnerType: "Organization", InstallationID: installation, Runners: true}
+	err := e.st.Tx(func(tx *store.Tx) error {
+		if err := tx.SaveRunnerAccount(acc); err != nil {
+			return err
+		}
+		if err := tx.SetRunnerRepos(id, repos); err != nil {
+			return err
+		}
+		return e.box.Put(tx, keyName(id), []byte(pemKey))
+	})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	e.gh.mu.Lock()
+	e.gh.installations[id] = installation
+	e.gh.instOwner[id] = owner
+	e.gh.mu.Unlock()
+	return acc
+}
+
+func (e *env) runnerRepos(accountID int64) []model.Repo {
+	e.t.Helper()
+	var out []model.Repo
+	if err := e.st.View(func(tx *store.Tx) error {
+		var err error
+		out, err = tx.RunnerRepos(accountID)
+		return err
+	}); err != nil {
+		e.t.Fatal(err)
+	}
+	return out
+}
+
+func TestRunnerManifestAndComplete(t *testing.T) {
+	e := newEnv(t)
+	org := strings.Repeat("acme-corporation-", 2) + "long" // 38 characters
+	form, err := e.s.RunnerManifest(org, "https://ci.example.com/github/return")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, _ := url.Parse(form.Action)
+	if u.Path != "/organizations/"+org+"/settings/apps/new" || u.Query().Get("state") != form.State {
+		t.Fatalf("action = %s", form.Action)
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(form.Manifest), &m); err != nil {
+		t.Fatal(err)
+	}
+	if name, _ := m["name"].(string); len(name) > maxAppName || !strings.HasPrefix(name, "CI-Plane runners") {
+		t.Fatalf("name %q (%d)", name, len(name))
+	}
+	// It may start workflows and nothing else, and hears nothing from GitHub.
+	if perms := m["default_permissions"]; fmt.Sprint(perms) != fmt.Sprint(map[string]any{"actions": "write", "metadata": "read"}) {
+		t.Fatalf("permissions %v", perms)
+	}
+	for _, k := range []string{"hook_attributes", "default_events"} {
+		if v, ok := m[k]; ok {
+			t.Errorf("%s in the manifest: %v", k, v)
+		}
+	}
+	if m["public"] != false || m["redirect_url"] != "https://ci.example.com/github/return" {
+		t.Fatalf("manifest %v", m)
+	}
+	for _, o := range []string{"", "a", strings.Repeat("x", 39)} {
+		if n := runnerAppName(o, "abcdef"); len(n) > maxAppName || !strings.HasPrefix(n, "CI-Plane runners") {
+			t.Errorf("%q is %d long", n, len(n))
+		}
+	}
+	if _, err := e.s.RunnerManifest("not/an/org", "https://ci.example.com/github/return"); err == nil {
+		t.Error("invalid organisation accepted")
+	}
+
+	// GitHub returns no webhook secret for an app without a webhook.
+	_, pemKey := key(t)
+	e.gh.conversions["code-r"] = map[string]any{
+		"id": 5151, "slug": "ci-plane-runners-acme", "html_url": "https://github.example/apps/ci-plane-runners-acme",
+		"owner": map[string]any{"login": org, "type": "Organization"}, "pem": pemKey, "client_secret": "clsec",
+	}
+	acc, err := e.service().Complete(ctx, "code-r", form.State)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc.ID != 5151 || !acc.Runners || acc.Owner != org || !acc.IsOrg() {
+		t.Fatalf("account %+v", acc)
+	}
+	e.st.View(func(tx *store.Tx) error {
+		if a, err := tx.RunnerAccount(5151); err != nil || a.Slug != "ci-plane-runners-acme" || !a.Runners {
+			t.Errorf("runner account %+v %v", a, err)
+		}
+		if accs, err := tx.Accounts(); err != nil || len(accs) != 0 {
+			t.Errorf("stored as an account of the integration: %+v %v", accs, err)
+		}
+		if got, err := e.box.Get(tx, keyName(5151)); err != nil || string(got) != pemKey {
+			t.Errorf("private key: %v", err)
+		}
+		if _, err := e.box.Get(tx, hookName(5151)); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("webhook secret stored: %v", err)
+		}
+		return nil
+	})
+
+	// Should GitHub return a webhook secret anyway, it is not kept, and
+	// nothing signed with it is accepted.
+	form2, err := e.s.RunnerManifest("", "https://ci.example.com/github/return")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.gh.conversions["code-r2"] = map[string]any{
+		"id": 5252, "slug": "ci-plane-runners-solo", "owner": map[string]any{"login": "solo", "type": "User"},
+		"pem": pemKey, "webhook_secret": "whsec",
+	}
+	if _, err := e.s.Complete(ctx, "code-r2", form2.State); err != nil {
+		t.Fatal(err)
+	}
+	e.st.View(func(tx *store.Tx) error {
+		if _, err := e.box.Get(tx, hookName(5252)); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("webhook secret of a runner account stored: %v", err)
+		}
+		return nil
+	})
+	srv := httptest.NewServer(e.s.WebhookHandler(func(engine.JobEvent) error {
+		t.Error("a job of a runner account was passed on")
+		return nil
+	}))
+	defer srv.Close()
+	h := hookClient{t, srv}
+	j := job(31, 9, "queued", "ci-plane")
+	j.CreatedAt = e.clock().UTC().Format(time.RFC3339)
+	for _, id := range []string{"5151", "5252"} {
+		if c := h.post(id, "workflow_job", "r-"+id, "whsec", jobPayload("queued", j)); c != 401 {
+			t.Errorf("webhook of runner app %s: %d", id, c)
+		}
+	}
+}
+
+func TestSyncOfARunnerAccount(t *testing.T) {
+	e := newEnv(t)
+	e.addRunnerApp(5, "acme", "ci-plane-runners-acme", 0)
+	e.gh.installations[5] = 95 // installed on GitHub; a runner account hears of it only by asking
+	e.gh.repos = []ghRepo{{ID: 1, FullName: "acme/relay", Private: true}, {ID: 2, FullName: "acme/site"}}
+	if err := e.s.Sync(ctx, 5); err != nil {
+		t.Fatal(err)
+	}
+	e.st.View(func(tx *store.Tx) error {
+		if a, err := tx.RunnerAccount(5); err != nil || a.InstallationID != 95 {
+			t.Errorf("installation: %+v %v", a, err)
+		}
+		if accs, _ := tx.Accounts(); len(accs) != 0 {
+			t.Errorf("became an account of the integration: %+v", accs)
+		}
+		return nil
+	})
+	got := e.runnerRepos(5)
+	if len(got) != 2 || got[0].FullName != "acme/relay" || !got[0].Private || got[0].AccountID != 5 || got[1].ID != 2 || got[1].Private {
+		t.Fatalf("runner repos %+v", got)
+	}
+	if r := e.repos(0); len(r) != 0 {
+		t.Fatalf("repositories of the integration: %+v", r)
+	}
+
+	e.gh.repos = e.gh.repos[1:]
+	if err := e.s.Sync(ctx, 5); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.runnerRepos(5); len(got) != 1 || got[0].ID != 2 {
+		t.Fatalf("after a repository was taken away: %+v", got)
+	}
+	e.gh.installations[5] = 0
+	if err := e.s.Sync(ctx, 5); err != nil {
+		t.Fatal(err)
+	}
+	e.st.View(func(tx *store.Tx) error {
+		if a, _ := tx.RunnerAccount(5); a.InstallationID != 0 {
+			t.Errorf("uninstall not seen: %+v", a)
+		}
+		return nil
+	})
+	if got := e.runnerRepos(5); len(got) != 0 || len(e.repos(0)) != 0 {
+		t.Fatalf("after uninstall: %+v", got)
+	}
+}
+
+func TestRemoveRunnerAccountInUse(t *testing.T) {
+	e := newEnv(t)
+	e.addRunnerApp(5, "acme", "ci-plane-runners-acme", 95, model.Repo{ID: 1, FullName: "acme/relay", Private: true})
+	var pool model.Pool
+	if err := e.st.Tx(func(tx *store.Tx) error {
+		var err error
+		pool, err = tx.AddPool(model.Pool{Name: "GitHub minutes", Kind: model.PoolGitHub, AccountID: 5, Repo: "acme/relay", Tier: 9, Max: 1, Enabled: true, Standard: "ubuntu-latest"})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.s.Remove(ctx, 5); err == nil || !strings.Contains(err.Error(), "GitHub minutes") {
+		t.Fatalf("removed while a pool uses it: %v", err)
+	}
+	e.st.View(func(tx *store.Tx) error {
+		if _, err := tx.RunnerAccount(5); err != nil {
+			t.Errorf("account gone after the refusal: %v", err)
+		}
+		if _, err := e.box.Get(tx, keyName(5)); err != nil {
+			t.Errorf("key gone after the refusal: %v", err)
+		}
+		return nil
+	})
+
+	if err := e.st.Tx(func(tx *store.Tx) error { return tx.DeletePool(pool.ID) }); err != nil {
+		t.Fatal(err)
+	}
+	u, err := e.s.Remove(ctx, 5)
+	if err != nil || u != "https://github.example/organizations/acme/settings/apps/ci-plane-runners-acme/advanced" {
+		t.Fatalf("%s %v", u, err)
+	}
+	e.st.View(func(tx *store.Tx) error {
+		if _, err := tx.RunnerAccount(5); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("account kept: %v", err)
+		}
+		if _, err := e.box.Get(tx, keyName(5)); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("key kept: %v", err)
+		}
+		return nil
+	})
+	if got := e.runnerRepos(5); len(got) != 0 {
+		t.Fatalf("repos kept: %+v", got)
+	}
+	if _, err := e.s.Remove(ctx, 5); err == nil || !strings.Contains(err.Error(), "already removed") {
+		t.Fatalf("removed twice: %v", err)
+	}
+}

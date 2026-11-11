@@ -189,6 +189,9 @@ mirror, the memory limit and the CPU priority ([Pools](pools.md#-the-same-enviro
 
 - **Registry mirror for Docker Hub only.** Docker's mirror setting does not apply to other registries such as GHCR.
   Docker Hub is where rate limits and repeated pulls hurt; other registries are pulled directly.
+- **Accounts for runners apart from the repositories.** The app that starts the runs of a pool may only start
+  workflows; the accounts whose minutes pools use never become accounts whose jobs CI-Plane runs. See
+  [Pools](pools.md#-accounts-for-runners).
 - **One GitHub App per account or organisation.** A private app can only be installed on the account that owns it,
   and a public app could be installed by strangers. See [GitHub](github.md#-the-github-app).
 - **No CPU limit.** A limit would leave CPUs idle while jobs wait, and would still not protect the other work of a

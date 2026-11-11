@@ -102,7 +102,7 @@ The reason a job waits is shown in the job list and its timeline.
 | *Waiting: … is limited to N parallel jobs* | Raise the limit on **Repositories** (0 means none). |
 | *Waiting to try again after a failed start* | The timeline shows the failed attempt and its cause; it is retried with growing waits. |
 | *The size … no longer exists in the settings* | The job was queued under a size of an earlier version that is gone. Re-run the job. |
-| *…; … pauses until … after … failed starts in a row* | A pool failed to start runners and pauses; the pool on the **Workers** page says why. Fix the cause, then **Try again now** ([Pools](pools.md#-when-a-pool-fails)). |
+| *…; … pauses until … after … failed starts in a row* | A pool failed to start runners and pauses; the pool on the **Pools** page says why. Fix the cause, then **Try again now** ([Pools](pools.md#-when-a-pool-fails)). |
 | *…; … has used its … minutes of this month* | The pool's budget is used up. Raise it, or wait for the next month ([Pools](pools.md#-budget)). |
 | *…; it goes to … once it has waited …* | The pool takes only jobs that have waited that long; the job starts there by itself, or earlier on a worker. |
 

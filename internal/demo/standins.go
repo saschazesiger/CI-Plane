@@ -298,7 +298,7 @@ func (g *GitHub) Remove(ctx context.Context, accountID int64) (string, error) {
 		}
 		for _, p := range pools {
 			if p.AccountID == accountID {
-				return fmt.Errorf("the pool %s starts its runners through the app of %s; choose another account for it on the Pools page or remove it first", p.Name, a.Owner)
+				return inUse{fmt.Errorf("the pool %s starts its runners through the app of %s; choose another account for it on the Pools page or remove it first", p.Name, a.Owner)}
 			}
 		}
 		slug = a.Slug
@@ -469,3 +469,9 @@ func (h poolHosts) Status(id int64) engine.WorkerStatus {
 	}
 	return h.World.Status(id)
 }
+
+// inUse is a refusal to remove an account that a pool still uses.
+type inUse struct{ error }
+
+func (e inUse) Unwrap() error        { return e.error }
+func (e inUse) Is(target error) bool { return target == api.ErrInUse }

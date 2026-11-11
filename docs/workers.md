@@ -77,7 +77,7 @@ Use tiers to keep a machine for overflow: your own servers in tier 1, a rented o
 ### Pools
 
 A [pool](pools.md) is a source of runners CI-Plane does not run itself: GitHub-hosted runners, Blacksmith, or another
-provider of GitHub Actions runners. Pools are added on the **Workers** page and show in their tier next to
+provider of GitHub Actions runners. Pools are added on the **Pools** page and show in their tier next to
 the workers. Inside a tier the workers go first, so:
 
 | Pool in | Is used |

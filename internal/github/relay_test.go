@@ -1,6 +1,7 @@
 package github
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -42,6 +43,8 @@ type relayFake struct {
 	readOnly     bool
 	disabled     bool
 	failDispatch int
+	dispatchAuth []string          // Authorization of each dispatch
+	tokenInst    map[string]string // installation token -> installation id it was issued for
 }
 
 func newRelayFake(t *testing.T, e *env) *relayFake {
@@ -49,9 +52,31 @@ func newRelayFake(t *testing.T, e *env) *relayFake {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &relayFake{t: t, key: k, nextRun: 9000, machines: map[int64]string{}}
+	f := &relayFake{t: t, key: k, nextRun: 9000, machines: map[int64]string{}, tokenInst: map[string]string{}}
 	target, _ := url.Parse(e.gh.srv.URL)
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	// The tokens of the fake GitHub do not say whose they are: note which
+	// installation each was issued for, to tell which app dispatched.
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		inst, ok := strings.CutPrefix(resp.Request.URL.Path, "/app/installations/")
+		if !ok || !strings.HasSuffix(inst, "/access_tokens") || resp.StatusCode != http.StatusCreated {
+			return nil
+		}
+		b, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return err
+		}
+		resp.Body = io.NopCloser(bytes.NewReader(b))
+		var out struct {
+			Token string `json:"token"`
+		}
+		_ = json.Unmarshal(b, &out)
+		f.mu.Lock()
+		f.tokenInst[out.Token] = strings.TrimSuffix(inst, "/access_tokens")
+		f.mu.Unlock()
+		return nil
+	}
 	const repo = "/repos/acme/relay"
 	const wf = repo + "/actions/workflows/ci-plane-relay.yml"
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -96,6 +121,7 @@ func newRelayFake(t *testing.T, e *env) *relayFake {
 			var body map[string]any
 			json.NewDecoder(r.Body).Decode(&body)
 			f.dispatches = append(f.dispatches, body)
+			f.dispatchAuth = append(f.dispatchAuth, r.Header.Get("Authorization"))
 			inputs, _ := body["inputs"].(map[string]any)
 			f.nextRun++
 			f.runs = append(f.runs, &relayRun{ID: f.nextRun, Title: fmt.Sprint(inputs["runner"]), Status: "queued", CreatedAt: e.clock().UTC().Format(time.RFC3339)})
@@ -185,6 +211,16 @@ func (f *relayFake) run(id int64) *relayRun {
 		}
 	}
 	return nil
+}
+
+// dispatchedBy is the installation whose token started dispatch i.
+func (f *relayFake) dispatchedBy(i int) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if i >= len(f.dispatchAuth) {
+		return ""
+	}
+	return f.tokenInst[strings.TrimPrefix(f.dispatchAuth[i], "Bearer ")]
 }
 
 type relayEnv struct {
@@ -550,5 +586,76 @@ func TestRelayListKeepsOtherRepositoriesWhenOneCannotBeAsked(t *testing.T) {
 	}
 	if !got[name] || !got[other] || len(got) != 2 {
 		t.Fatalf("list: %+v", list)
+	}
+}
+
+// A pool on a runner account: its runs are started with the token of the
+// runner app and only that app's runs collect its runners, although the app
+// of the integration sees the same repository.
+func TestRelayOnARunnerAccount(t *testing.T) {
+	re := newRelayEnv(t, true) // the integration app 1, ci-plane-acme, installation 77, sees acme/relay
+	re.addRunnerApp(2, "acme", "ci-plane-runners-acme", 99, model.Repo{ID: 555, FullName: "acme/relay", Private: true})
+	re.relay.Script = func(spec engine.RunnerSpec) string { return "start " + spec.Name }
+
+	mine := "ci-plane-abc123-github-hosted-21"
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Repo: "acme/relay", Machine: "ubuntu-latest", Name: mine, JITConfig: "SECRETJIT-21", RelayAccount: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if got := re.fake.dispatchedBy(0); got != "99" {
+		t.Fatalf("dispatched with the token of installation %q, want the runner app's 99", got)
+	}
+	// A pool on the integration app in the same repository.
+	theirs := "ci-plane-abc123-github-hosted-22"
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Repo: "acme/relay", Machine: "ubuntu-latest", Name: theirs, JITConfig: "SECRETJIT-22", RelayAccount: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if got := re.fake.dispatchedBy(1); got != "77" {
+		t.Fatalf("dispatched with the token of installation %q, want the integration app's 77", got)
+	}
+	// A pool of an earlier version (no account) goes through the integration, as before.
+	legacy := "ci-plane-abc123-github-hosted-23"
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Repo: "acme/relay", Machine: "ubuntu-latest", Name: legacy, JITConfig: "SECRETJIT-23"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := re.fake.dispatchedBy(2); got != "77" {
+		t.Fatalf("legacy pool dispatched with installation %q, want 77", got)
+	}
+
+	asRunnerApp := func(c map[string]any) { c["actor"] = "ci-plane-runners-acme[bot]" }
+	// The integration app sees the repository too, but did not start run
+	// 9001: no runner of its own waits for the run (404). An app CI-Plane
+	// does not know is refused outright (403).
+	if code, out := re.collect(re.fake.token(nil)); code != 404 || out["jitconfig"] != "" {
+		t.Fatalf("collected by the integration app: %d %v", code, out)
+	}
+	if code, out := re.collect(re.fake.token(func(c map[string]any) { c["actor"] = "someone-else[bot]" })); code != 403 {
+		t.Fatalf("collected by an unknown app: %d %v", code, out)
+	}
+	// The runner app's run does, and the refusals did not use it up.
+	if code, out := re.collect(re.fake.token(asRunnerApp)); code != 200 || out["jitconfig"] != "SECRETJIT-21" || out["runner"] != mine {
+		t.Fatalf("collect by the runner app: %d %v", code, out)
+	}
+	// The other way round: the runner app gets nothing of a run the integration started.
+	if code, out := re.collect(re.fake.token(func(c map[string]any) { asRunnerApp(c); c["run_id"] = "9002" })); code != 404 || out["jitconfig"] != "" {
+		t.Fatalf("runner app collected the integration's runner: %d %v", code, out)
+	}
+	if code, out := re.collect(re.fake.token(func(c map[string]any) { c["run_id"] = "9002" })); code != 200 || out["jitconfig"] != "SECRETJIT-22" {
+		t.Fatalf("collect by the integration app: %d %v", code, out)
+	}
+
+	// The runs of both apps show, each listed with its own app.
+	list, err := re.relay.List(ctx, model.Worker{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	running := map[string]bool{}
+	for _, c := range list {
+		running[c.Runner] = c.Running
+	}
+	if !running[mine] || !running[theirs] || !running[legacy] {
+		t.Fatalf("list: %+v", list)
+	}
+	if err := re.relay.Remove(ctx, model.Worker{}, mine); err != nil || re.fake.cancels != 1 {
+		t.Fatalf("remove: %v, %d cancels", err, re.fake.cancels)
 	}
 }

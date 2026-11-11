@@ -53,7 +53,8 @@ So:
   configuration of its runner and the script that starts its containers ([Pools](pools.md#-security)). It accepts
   only an OIDC token of GitHub Actions (RS256 against GitHub's published keys, issuer, CI-Plane's own address as
   audience, expiry) from CI-Plane's relay runner workflow pinned to the tag `relay-v2`, called by the relay workflow
-  on the default branch of the pool's relay repository, matched by repository id and started by the GitHub App, and
+  on the default branch of the pool's relay repository, matched by repository id and started by the app that dispatched
+  the runner, and
   hands each configuration to one run, one attempt, only.
 
 ## 🔑 Login and sessions

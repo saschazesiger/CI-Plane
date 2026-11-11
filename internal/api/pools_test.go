@@ -162,3 +162,68 @@ func TestPools(t *testing.T) {
 	r.expect(r.local_("DELETE", "/api/pools/1", nil), 200)
 	r.expect(r.local_("PATCH", "/api/pools/1", map[string]any{"tier": 2}), 404)
 }
+
+func TestRunnerAccountsAndTheirPools(t *testing.T) {
+	r := newRig(t, false)
+	r.srv.d.Relay = &fakeRelay{}
+	r.signIn()
+	if err := r.st.Tx(func(tx *store.Tx) error {
+		// The integration sees acme/site; the runner app of acme sees acme/relay.
+		if err := tx.SaveAccount(model.Account{ID: 1, Slug: "ci-plane-acme", Owner: "acme", OwnerType: "Organization", InstallationID: 5, Enabled: true}); err != nil {
+			return err
+		}
+		if err := tx.UpsertRepo(model.Repo{ID: 8, AccountID: 1, FullName: "acme/site", Private: true}); err != nil {
+			return err
+		}
+		if err := tx.SaveRunnerAccount(model.Account{ID: 2, Slug: "ci-plane-runners-acme", Owner: "acme", OwnerType: "Organization", InstallationID: 6}); err != nil {
+			return err
+		}
+		return tx.SetRunnerRepos(2, []model.Repo{{ID: 7, FullName: "acme/relay", Private: true}})
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A repository the runner app does not see: the integration does, but
+	// the pool would be started by the runner app.
+	bad := r.expect(r.local_("POST", "/api/pools", map[string]any{"name": "Minutes", "kind": "github", "accountId": 2, "repo": "acme/site", "standard": "ubuntu-latest"}), 400)
+	if got, _ := bad.body["fields"].(map[string]any)["repo"].(string); !strings.Contains(got, "The app of acme does not see this repository") {
+		t.Fatalf("repo the app does not see: %s", bad.raw)
+	}
+	bad = r.expect(r.local_("POST", "/api/pools", map[string]any{"name": "Minutes", "kind": "github", "accountId": 2, "repo": "acme/unknown", "standard": "ubuntu-latest"}), 400)
+	if _, ok := bad.body["fields"].(map[string]any)["repo"]; !ok {
+		t.Fatalf("unknown repository: %s", bad.raw)
+	}
+	added := r.expect(r.local_("POST", "/api/pools", map[string]any{"name": "Minutes", "kind": "github", "accountId": 2, "repo": "acme/relay", "standard": "ubuntu-latest"}), 200)
+	if p := added.body["pool"].(map[string]any); p["accountId"] != float64(2) || p["repo"] != "acme/relay" {
+		t.Fatalf("added: %s", added.raw)
+	}
+
+	// The runner account with its repositories and the pools it starts;
+	// the integration account is not among them.
+	list := r.expect(r.local_("GET", "/api/runner-accounts", nil), 200)
+	accs := list.body["accounts"].([]any)
+	if len(accs) != 1 {
+		t.Fatalf("runner accounts: %s", list.raw)
+	}
+	a := accs[0].(map[string]any)
+	repos, _ := a["repos"].([]any)
+	pools, _ := a["pools"].([]any)
+	if a["id"] != float64(2) || a["runners"] != true || a["installUrl"] != "https://github.com/apps/ci-plane-runners-acme/installations/new" ||
+		len(repos) != 1 || repos[0].(map[string]any)["fullName"] != "acme/relay" || repos[0].(map[string]any)["accountId"] != float64(2) ||
+		len(pools) != 1 || pools[0] != "Minutes" {
+		t.Fatalf("runner account: %s", list.raw)
+	}
+	// The pools page offers the repositories of both, each with its app.
+	pl := r.expect(r.local_("GET", "/api/pools", nil), 200)
+	if rs := pl.body["repos"].([]any); len(rs) != 2 || rs[0].(map[string]any)["runners"] != true || rs[1].(map[string]any)["accountId"] != float64(1) {
+		t.Fatalf("pool repos: %s", pl.raw)
+	}
+
+	// The runner-accounts routes are not a way to remove an account of the integration.
+	r.expect(r.local_("DELETE", "/api/runner-accounts/1", nil), 404)
+	r.expect(r.local_("POST", "/api/runner-accounts/1/sync", nil), 404)
+	if err := r.st.View(func(tx *store.Tx) error { _, err := tx.Account(1); return err }); err != nil {
+		t.Fatalf("integration account after DELETE on runner-accounts: %v", err)
+	}
+	r.expect(r.local_("DELETE", "/api/runner-accounts/99", nil), 404)
+}

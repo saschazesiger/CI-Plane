@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/saschazesiger/CI-Plane/internal/engine"
@@ -55,6 +56,10 @@ type ManifestForm struct {
 	Manifest string `json:"manifest"` // JSON, sent as the form field "manifest"
 	State    string `json:"state"`    // returned by GitHub, checked by Complete
 }
+
+// ErrInUse marks a refusal to remove something that is still in use; the
+// text of the error says what to change first.
+var ErrInUse = errors.New("in use")
 
 // AccountHealth is the live view of a GitHub account.
 type AccountHealth struct {
