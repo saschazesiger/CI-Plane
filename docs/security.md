@@ -49,12 +49,12 @@ So:
   rights.
 - `/webhook` accepts only `POST`s signed (HMAC-SHA256) with the webhook secret of the GitHub App that sent them. A
   delivery is handled once, and events about jobs older than seven days are ignored.
-- `/webhook/relay`, below `/webhook` and so also without Access, hands a run of the relay workflow the configuration
-  of its runner ([Failover to GitHub](failover.md#-security)). It accepts only an OIDC token of GitHub Actions
-  (RS256 against GitHub's published keys, issuer, CI-Plane's own address as audience, expiry) from the pinned relay
-  runner workflow, called by the relay workflow on the default branch of the repository the runner was started for,
-  matched by repository id and started by the GitHub App, and hands each
-  configuration to one run only.
+- `/webhook/relay`, below `/webhook` and so also without Access, hands a run of the relay workflow of a pool the
+  configuration of its runner and the script that starts its containers ([Pools](pools.md#-security)). It accepts
+  only an OIDC token of GitHub Actions (RS256 against GitHub's published keys, issuer, CI-Plane's own address as
+  audience, expiry) from CI-Plane's relay runner workflow pinned to the tag `relay-v2`, called by the relay workflow
+  on the default branch of the pool's relay repository, matched by repository id and started by the GitHub App, and
+  hands each configuration to one run, one attempt, only.
 
 ## 🔑 Login and sessions
 

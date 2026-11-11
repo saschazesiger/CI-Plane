@@ -148,7 +148,26 @@ fi
 //	<n>-work       /home/runner/_work in both: container jobs bind-mount it
 //	<n>-run        /var/run in both: the socket of the inner daemon
 //	externals      /home/runner/externals, read-only in <n>-dind
-func startScript(spec engine.RunnerSpec) string {
+func startScript(spec engine.RunnerSpec) string { return startScriptFor(spec, false) }
+
+// HostedStartScript is startScript for a machine of a pool: one that a
+// provider hands out for this runner alone and takes back afterwards. The
+// containers are the same as on a worker, so a job finds the same
+// environment wherever it runs. What only makes sense on a server that is
+// shared and kept is left out: the registry mirror, the memory limit and
+// the CPU priority.
+func HostedStartScript(spec engine.RunnerSpec) string {
+	spec.MemMB, spec.CPUPriority = 0, ""
+	return startScriptFor(spec, true)
+}
+
+func startScriptFor(spec engine.RunnerSpec, hosted bool) string {
+	connectMirror := `docker network connect "$n-net" ` + mirrorName + ` >/dev/null 2>&1 || echo "The registry mirror is not running; Docker Hub is used directly." >&2
+`
+	useMirror := ` --registry-mirror=http://` + mirrorName + `:5000`
+	if hosted {
+		connectMirror, useMirror = "", ""
+	}
 	lim := limits(spec)
 	prio, setPrio := "", ""
 	if model.CPUShares(spec.CPUPriority) > 0 {
@@ -173,12 +192,11 @@ done
 ` + externalsScript + `
 docker network create --label "$l" "$n-net" >/dev/null
 for v in docker work run; do docker volume create --label "$l" "$n-$v" >/dev/null; done
-docker network connect "$n-net" ` + mirrorName + ` >/dev/null 2>&1 || echo "The registry mirror is not running; Docker Hub is used directly." >&2
-docker run -d --name "$n-dind" --label "$l" --privileged` + lim + ` --network "$n-net" \
+` + connectMirror + `docker run -d --name "$n-dind" --label "$l" --privileged` + lim + ` --network "$n-net" \
   -e DOCKER_TLS_CERTDIR= \
   -v "$n-docker:/var/lib/docker" -v "$n-work:/home/runner/_work" -v "$n-run:/var/run" \
   -v "$ext:/home/runner/externals:ro" \
-  --entrypoint sh "$dind" -c 'chmod 0777 /home/runner/_work && exec dockerd-entrypoint.sh dockerd --host=unix:///var/run/docker.sock --group=` + dockerGID + ` --registry-mirror=http://` + mirrorName + `:5000' >/dev/null
+  --entrypoint sh "$dind" -c 'chmod 0777 /home/runner/_work && exec dockerd-entrypoint.sh dockerd --host=unix:///var/run/docker.sock --group=` + dockerGID + useMirror + `' >/dev/null
 ` + setPrio + `i=0
 until docker exec "$n-dind" docker version >/dev/null 2>&1; do
   i=$((i+1))

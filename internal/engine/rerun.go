@@ -66,8 +66,11 @@ func (e *Engine) failedOnRunner(tx *store.Tx, job *model.Job) {
 }
 
 func (e *Engine) workerName(tx *store.Tx, id int64) string {
-	if id == model.RelayWorkerID {
-		return "the GitHub-hosted machine"
+	if model.IsPool(id) {
+		if p, err := tx.Pool(-id); err == nil {
+			return "the machine of " + p.Name
+		}
+		return "its machine"
 	}
 	if w, err := tx.Worker(id); err == nil {
 		return "the worker " + w.Name

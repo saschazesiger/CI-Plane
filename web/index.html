@@ -148,6 +148,16 @@
   </form>
 </dialog>
 
+<!-- Add or edit a pool: first who runs the machines (only when adding), then the pool itself. -->
+<dialog class="ds-dialog ds-dialog--lg" id="pool-dialog" aria-labelledby="pool-dialog-title">
+  <div class="ds-dialog__backdrop" data-ds-close></div>
+  <form class="ds-dialog__box ds-form" id="pool-form" novalidate>
+    <h2 class="ds-dialog__title" id="pool-dialog-title">Add a pool</h2>
+    <div class="ds-dialog__body ds-stack" id="pool-dialog-body"></div>
+    <div class="ds-dialog__actions" id="pool-dialog-actions"></div>
+  </form>
+</dialog>
+
 <!-- After a worker was removed: the command that removes CI-Plane from the server. -->
 <dialog class="ds-dialog ds-dialog--lg" id="removed-dialog" aria-labelledby="removed-title">
   <div class="ds-dialog__backdrop" data-ds-close></div>

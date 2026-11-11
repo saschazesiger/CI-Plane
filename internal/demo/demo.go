@@ -71,9 +71,8 @@ func New(opts Options) (*Demo, error) {
 	d.fleet = &fleet{World: d.World, d: d, failNext: map[int64]int{}}
 	d.Engine = engine.New(st, d.World, d.fleet)
 	d.Engine.Logf = opts.Logf
-	// GitHub-hosted runners are simulated runners on a worker of their own.
-	d.Engine.Relay = d.World
-	d.World.Connect(model.RelayWorkerID)
+	// The runners of pools are simulated like those of workers.
+	d.Engine.Relay = poolHosts{d.World}
 	d.Relay = &Relay{}
 	d.Workers = &Workers{d: d}
 	d.GitHub = &GitHub{d: d, states: map[string]manifestState{}, installed: map[int64]bool{}, webhooks: map[int64]int64{}}
@@ -285,6 +284,12 @@ func (d *Demo) seed() error {
 				return err
 			}
 		}
+		// A pool for the hours when the workers are full.
+		if _, err := tx.AddPool(model.Pool{Name: "GitHub", Kind: model.PoolGitHub, Repo: "acme-labs/infra", Tier: 9, Enabled: true,
+			AfterSec: 180, Max: 5, Standard: "ubuntu-latest", BudgetMin: 2000, Month: now.UTC().Format("2006-01"), UsedSec: 412 * 60,
+			CreatedAt: nowMs - 12*24*3600*1000}); err != nil {
+			return err
+		}
 		return d.seedHistory(tx, set, workers, now)
 	})
 	if err != nil {
@@ -315,8 +320,11 @@ func (d *Demo) seedHistory(tx *store.Tx, set model.Settings, workers []model.Wor
 		branch := branches[d.intn(len(branches))]
 		for _, name := range repo.jobs {
 			d.jobID++
-			size := []string{"size-s", "size-m", "size-m", "size-l"}[d.intn(4)]
-			labels := []string{"self-hosted", "ci-plane", size}
+			size := []string{model.SizeStandard, model.SizeStandard, model.SizeStandard, model.SizeLarge}[d.intn(4)]
+			labels := []string{"self-hosted", "ci-plane"}
+			if size == model.SizeLarge {
+				labels = append(labels, size)
+			}
 			queued := t + int64(d.intn(4000))
 			j := model.Job{ID: d.jobID, RunID: d.runID, AccountID: acc.id, RepoID: repo.id, Repo: repo.name, Name: name,
 				Workflow: repo.workflow, Branch: branch, Labels: labels, Size: size,

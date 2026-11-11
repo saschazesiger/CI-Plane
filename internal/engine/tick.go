@@ -23,6 +23,7 @@ type snapshot struct {
 	runners  []model.Runner
 	jobs     []model.Job
 	job      map[int64]model.Job
+	pools    []model.Pool // by tier, then position
 }
 
 func (e *Engine) load() (*snapshot, error) {
@@ -53,7 +54,10 @@ func (e *Engine) load() (*snapshot, error) {
 		if s.runners, err = tx.ActiveRunners(); err != nil {
 			return err
 		}
-		s.jobs, err = tx.OpenJobs()
+		if s.jobs, err = tx.OpenJobs(); err != nil {
+			return err
+		}
+		s.pools, err = tx.Pools()
 		return err
 	})
 	if err != nil {
@@ -63,11 +67,13 @@ func (e *Engine) load() (*snapshot, error) {
 		s.worker[w.ID] = w
 		s.status[w.ID] = e.fleet.Status(w.ID)
 	}
-	if e.Relay != nil {
-		// Not in s.workers: the relay is never picked like a worker.
-		rw := relayWorker(s.set)
-		s.worker[rw.ID] = rw
-		s.status[rw.ID] = e.Relay.Status(rw.ID)
+	for _, p := range s.pools {
+		// Not in s.workers: a pool has no load to measure and is picked by
+		// rules of its own (pickPool).
+		s.worker[p.WorkerID()] = poolWorker(p)
+		if e.Relay != nil {
+			s.status[p.WorkerID()] = e.Relay.Status(p.WorkerID())
+		}
 	}
 	for _, j := range s.jobs {
 		s.job[j.ID] = j
@@ -235,11 +241,13 @@ func (e *Engine) superviseRunners(ctx context.Context, s *snapshot) bool {
 
 		case model.RunnerStarting:
 			limit := s.set.StartTimeoutSec
-			if r.WorkerID == model.RelayWorkerID {
-				limit = max(limit, int(relayStartLimit.Seconds()))
+			if model.IsPool(r.WorkerID) {
+				limit = max(limit, int(poolStartLimit.Seconds()))
 			}
 			if s.now-r.StartedAt > sec(limit) {
-				e.giveUpStart(ctx, r, fmt.Sprintf("the runner did not connect to GitHub within %d seconds", limit), limit, true)
+				// A run that cannot reach CI-Plane says nothing about its pool.
+				blame := !model.IsPool(r.WorkerID) || s.status[r.WorkerID].Connected
+				e.giveUpStart(ctx, r, fmt.Sprintf("the runner did not connect to GitHub within %d seconds", limit), limit, blame)
 			} else if r.JobID == 0 && (pressure || s.now-r.SpareAt > sec(s.set.SpareGraceSec)) {
 				e.retire(ctx, r, "no job is waiting for it")
 			} else {
@@ -268,6 +276,13 @@ func (e *Engine) superviseRunners(ctx context.Context, s *snapshot) bool {
 				e.toCleaning(r.ID, fmt.Sprintf("the job ran longer than the limit of %d hours", s.set.JobTimeoutSec/3600),
 					"Job exceeded the time limit; removing the runner")
 				dirty = true
+			case model.IsPool(r.WorkerID) && s.now-r.StartedAt > poolRunLimit.Milliseconds():
+				// Ended here, as a job that ran too long: the run would
+				// end by itself a little later, which would look like a
+				// lost machine and have the job run again.
+				e.toCleaning(r.ID, "the job ran into the limit of a run on a pool, just under 6 hours",
+					"Job exceeded the time a run on a pool may take; removing the runner")
+				dirty = true
 			}
 
 		case model.RunnerCleaning:
@@ -294,6 +309,7 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 	var acc model.Account
 	var w model.Worker
 	var set model.Settings
+	var pool model.Pool
 	err := e.st.View(func(tx *store.Tx) error {
 		var err error
 		if set, err = tx.Settings(); err != nil {
@@ -305,7 +321,10 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 		if w, err = workerOf(tx, r.WorkerID); err != nil {
 			return fmt.Errorf("worker: %w", err)
 		}
-		return nil
+		if model.IsPool(r.WorkerID) {
+			pool, err = tx.Pool(-r.WorkerID)
+		}
+		return err
 	})
 	if errors.Is(err, store.ErrNotFound) {
 		e.failStart(r.ID, "its worker or account was removed", false)
@@ -376,12 +395,17 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 		return 0
 	}
 
-	spec := RunnerSpec{Name: r.Name, JITConfig: reg.JITConfig, Image: set.RunnerImage, DindImage: set.DindImage, MemMB: r.MemMB, CPUPriority: w.CPUPriority,
-		RepoID: r.RepoID, Repo: r.Repo}
+	spec := RunnerSpec{Name: r.Name, JITConfig: reg.JITConfig, Image: set.RunnerImage, DindImage: set.DindImage, MemMB: r.MemMB, CPUPriority: w.CPUPriority}
+	if model.IsPool(w.ID) {
+		// The machine is all the job gets there: nothing to limit or rank.
+		spec.MemMB, spec.CPUPriority = 0, ""
+		spec.Machine, spec.Repo = pool.Machine(sizeName(set, r.Size)), pool.Repo
+		spec.GitHubHosted = pool.Kind == model.PoolGitHub
+	}
 	if err := fleet.Start(ctx, w, spec); err != nil {
 		// A worker that is not reachable did not fail to start anything.
 		what := "the worker could not start the runner: "
-		if w.ID == model.RelayWorkerID {
+		if model.IsPool(w.ID) {
 			what = ""
 		}
 		e.failStart(r.ID, what+err.Error(), fleet.Status(w.ID).Connected && !errors.Is(err, ErrPassing))
@@ -466,8 +490,8 @@ func (e *Engine) watchOnline(ctx context.Context, s *snapshot, starting []model.
 					event(tx, model.LevelInfo, "runner.online", "Runner "+cur.Name+" is online and waits for the job", cur.JobID, cur.ID, cur.WorkerID)
 					return tx.SaveRunner(cur)
 				})
-				if r.WorkerID == model.RelayWorkerID {
-					e.relayWorks(r.RepoID)
+				if model.IsPool(r.WorkerID) {
+					_ = e.st.Tx(func(tx *store.Tx) error { return poolWorks(tx, r.WorkerID) })
 				}
 				e.changed()
 			}
@@ -523,7 +547,7 @@ func (e *Engine) failStart(runnerID, reason string, blame bool) {
 // and waits longer after every attempt, so a runner that cannot work does
 // not start in a tight loop.
 func (e *Engine) fail(runnerID, reason string, blame, idle bool) {
-	var onRelay int64 // the repository whose relay failed
+	var onPool, created int64 // the pool whose start failed
 	err := e.st.Tx(func(tx *store.Tx) error {
 		r, err := tx.Runner(runnerID)
 		if err != nil {
@@ -532,8 +556,8 @@ func (e *Engine) fail(runnerID, reason string, blame, idle bool) {
 		if r.State != model.RunnerProvisioning && r.State != model.RunnerStarting && !(idle && r.State == model.RunnerIdle) {
 			return nil
 		}
-		if blame && r.WorkerID == model.RelayWorkerID {
-			onRelay = r.RepoID
+		if blame && model.IsPool(r.WorkerID) {
+			onPool, created = -r.WorkerID, r.CreatedAt
 		}
 		r.State, r.Failed, r.Error, r.EndedAt = model.RunnerCleaning, true, reason, e.now()
 		if err := tx.SaveRunner(r); err != nil {
@@ -556,7 +580,9 @@ func (e *Engine) fail(runnerID, reason string, blame, idle bool) {
 		job.Attempts++
 		wait := backoff(job.Attempts)
 		job.NextTryAt = e.now() + wait.Milliseconds()
-		if blame {
+		if blame || model.IsPool(r.WorkerID) {
+			// A pool also after a failure that is not its fault (a rate
+			// limit, an outage): a worker that has room goes first then.
 			job.AvoidWorker = r.WorkerID
 		}
 		event(tx, model.LevelError, "runner.failed",
@@ -566,8 +592,8 @@ func (e *Engine) fail(runnerID, reason string, blame, idle bool) {
 	if err != nil {
 		e.logf("engine: fail start of %s: %v", runnerID, err)
 	}
-	if onRelay != 0 {
-		e.relayFailed(onRelay, reason)
+	if onPool != 0 {
+		e.poolFailed(onPool, created, reason)
 	}
 	e.changed()
 }
@@ -649,6 +675,9 @@ func (e *Engine) clean(ctx context.Context, r model.Runner) time.Duration {
 		}
 		if w, err = workerOf(tx, r.WorkerID); err == nil {
 			haveWorker = true
+		} else if model.IsPool(r.WorkerID) {
+			// Its pool was removed: its run is stopped all the same.
+			w, haveWorker = model.Worker{ID: r.WorkerID}, true
 		}
 		return nil
 	})
@@ -714,8 +743,14 @@ func (e *Engine) clean(ctx context.Context, r model.Runner) time.Duration {
 		if err != nil {
 			return err
 		}
+		if cur.State == model.RunnerRemoved {
+			return nil // removed by an earlier step: its time is counted
+		}
 		cur.State, cur.RemovedAt = model.RunnerRemoved, e.now()
 		event(tx, model.LevelInfo, "runner.removed", "Runner "+cur.Name+" and everything it created were removed", cur.JobID, cur.ID, cur.WorkerID)
+		if err := poolUsed(tx, cur, e.now()); err != nil {
+			return err
+		}
 		return tx.SaveRunner(cur)
 	})
 	if err != nil {
@@ -731,7 +766,7 @@ func (e *Engine) clean(ctx context.Context, r model.Runner) time.Duration {
 // watchContainers looks at the containers of each worker: a runner whose
 // container is gone has ended, and a container without a runner is removed.
 func (e *Engine) watchContainers(ctx context.Context, s *snapshot) {
-	e.watchRelay(ctx, s)
+	e.watchPools(ctx, s)
 	for _, w := range s.workers {
 		w := w
 		if !s.status[w.ID].Connected {
@@ -764,7 +799,7 @@ func (e *Engine) compareContainers(ctx context.Context, w model.Worker, list []C
 	}
 	known := map[string]bool{}
 	for _, r := range runners {
-		if r.WorkerID != w.ID {
+		if !sameHost(r, w) {
 			continue
 		}
 		known[r.Name] = true
@@ -791,11 +826,11 @@ func (e *Engine) compareContainers(ctx context.Context, w model.Worker, list []C
 		}
 		what := "its container is gone"
 		switch {
-		case w.ID == model.RelayWorkerID && !ok:
+		case model.IsPool(w.ID) && !ok:
 			what = "its run of the relay workflow is gone"
-		case w.ID == model.RelayWorkerID && c.ExitCode == 0:
+		case model.IsPool(w.ID) && c.ExitCode == 0:
 			what = "its run of the relay workflow ended"
-		case w.ID == model.RelayWorkerID:
+		case model.IsPool(w.ID):
 			what = "its run of the relay workflow failed or was cancelled; its log on GitHub says why"
 		case ok:
 			what = fmt.Sprintf("its container exited with code %d", c.ExitCode)
@@ -835,7 +870,7 @@ func (e *Engine) compareContainers(ctx context.Context, w model.Worker, list []C
 		if known[name] || !strings.HasPrefix(name, e.prefix) {
 			continue
 		}
-		if w.ID == model.RelayWorkerID && !c.Running {
+		if model.IsPool(w.ID) && !c.Running {
 			continue // an ended run of the relay workflow leaves nothing behind
 		}
 		name := name
@@ -843,7 +878,9 @@ func (e *Engine) compareContainers(ctx context.Context, w model.Worker, list []C
 			// Decide again on fresh state: a runner may have been created meanwhile.
 			fresh := false
 			_ = e.st.View(func(tx *store.Tx) error {
-				if r, err := tx.RunnerByName(name); err == nil && r.Active() {
+				// A run that was only just cancelled may still show as
+				// running: its runner is known, and was removed a moment ago.
+				if r, err := tx.RunnerByName(name); err == nil && (r.Active() || e.now()-r.RemovedAt < 2*60_000) {
 					fresh = true
 				}
 				return nil
@@ -855,10 +892,23 @@ func (e *Engine) compareContainers(ctx context.Context, w model.Worker, list []C
 				return time.Minute
 			}
 			_ = e.st.Tx(func(tx *store.Tx) error {
+				if model.IsPool(w.ID) {
+					event(tx, model.LevelWarn, "pool.orphan", "Stopped a run of the relay workflow for "+name+", which no runner belongs to", 0, "", 0)
+					return nil
+				}
 				event(tx, model.LevelWarn, "worker.orphan", "Removed leftover containers of "+name+", which no runner belongs to", 0, "", w.ID)
 				return nil
 			})
 			return 0
 		})
 	}
+}
+
+// sizeName is the name of the size a runner was placed with; runners of
+// earlier versions carry one of its aliases.
+func sizeName(set model.Settings, size string) string {
+	if z, ok := set.SizeByName(size); ok {
+		return z.Name
+	}
+	return size
 }

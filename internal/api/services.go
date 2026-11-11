@@ -139,19 +139,20 @@ type Cloudflare interface {
 	Authenticate(r *http.Request) (email string, err error)
 }
 
-// Relay is the failover to GitHub-hosted runners.
+// Relay runs the runners of the pools on machines of GitHub and of other
+// providers.
 type Relay interface {
 	// ServeHTTP hands runs of the relay workflow their runner
 	// (/webhook/relay on the tunnel).
 	http.Handler
-	// Check says what keeps the failover of a repository from working.
-	Check(ctx context.Context, repoID int64) RelayCheck
-	// Workflow is the relay workflow to add to each repository with the
-	// failover on.
+	// Check says what keeps a pool with that repository (owner/name) from
+	// working.
+	Check(ctx context.Context, repo string) RelayCheck
+	// Workflow is the relay workflow to add to the repository of a pool.
 	Workflow() string
 }
 
-// RelayCheck is what keeps the failover of a repository from working.
+// RelayCheck is what keeps a pool from working.
 type RelayCheck struct {
 	Problems []string `json:"problems"` // one sentence each; none if it is ready
 	// AddURL opens GitHub's editor with the relay workflow filled in, when

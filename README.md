@@ -33,6 +33,7 @@ One container with a web interface. Every job gets a fresh runner and its own Do
 | ⚖️ **Placed by real load** | A job goes to the worker that is least busy right now, and to none that is busy, whether with jobs or with other work. No CPU limits: a job uses every CPU that is free. |
 | 🎚️ **CPU priority per worker** | Add servers that are in use for other things: in the background, jobs only get the CPU nothing else wants. |
 | 🪜 **Tiers** | Fill your own hardware first; use the expensive machine only when tier 1 is full. |
+| 🏊 **Pools of other providers** | GitHub-hosted runners, Blacksmith or another provider as overflow, or to use up free minutes first, with the same containers as on a worker and a monthly budget. |
 | 🛟 **Survives what goes wrong** | Lost webhooks, restarts in the middle of a step, dead servers: every step is stored before it runs and compared with GitHub every minute. |
 | 🧙 **Set up from the browser** | A five-step assistant creates the GitHub App, the Cloudflare tunnel and the login, and connects your first server. |
 | 🔑 **No agent on workers** | A worker needs Docker and an SSH login. CI-Plane runs plain `docker` commands over SSH. |
@@ -69,20 +70,18 @@ before anyone else can reach the port.
 ```yaml
 jobs:
   build:
-    runs-on: [self-hosted, ci-plane, size-m]
+    runs-on: [self-hosted, ci-plane]          # large jobs: [self-hosted, ci-plane, large]
     steps:
       - uses: actions/checkout@v5
       - run: make test
 ```
 
-| Label | Free CPUs to start | Memory | |
+| Size | Label | Free CPUs to start | Memory |
 |---|---|---|---|
-| `size-s` | 2 | 4 GB | |
-| `size-m` | 4 | 8 GB | default when no size is given |
-| `size-l` | 8 | 16 GB | |
-| `size-xl` | 16 | 32 GB | |
+| standard | none needed | 4 | 8 GB |
+| large | `large` | 8 | 16 GB |
 
-Sizes are editable in the settings. Jobs without the label `ci-plane` stay on GitHub's own runners.
+Both are editable in the settings; the labels of earlier versions (`size-s` … `size-xl`) keep working. Jobs without the label `ci-plane` stay on GitHub's own runners.
 The [quick start guide](docs/quick-start.md) walks through every click.
 
 ## 👀 See it
@@ -167,15 +166,16 @@ see [SECURITY.md](SECURITY.md).
 |---|---|
 | ⚡ [Quick start](docs/quick-start.md) | From `docker run` to the first green job, click by click |
 | 🧭 [How it works](docs/how-it-works.md) | Architecture, the life of a job, scheduling, what runs on a worker |
-| 🖥️ [Workers](docs/workers.md) | Requirements, the setup command, tiers, drain, clean up, removal |
+| 🖥️ [Workers](docs/workers.md) | Requirements, the setup command, tiers and pools, drain, clean up, removal |
 | 🐙 [GitHub](docs/github.md) | The app and its permissions, labels and sizes, `ubuntu-latest` differences, your own runner image |
-| 🛫 [Failover to GitHub](docs/failover.md) | GitHub-hosted runners when your workers are full: setup, costs, switching off |
+| 🏊 [Pools](docs/pools.md) | Runners of GitHub, Blacksmith or another provider: setup, tiers, budget, pauses, costs |
 | ☁️ [Cloudflare](docs/cloudflare.md) | The token, what is created, Access, repair and removal |
 | 🛟 [Reliability](docs/reliability.md) | Every failure and what CI-Plane does about it |
 | 🔒 [Security](docs/security.md) | Trust model, the two listeners, secrets, privileged containers |
 | 🔧 [Configuration](docs/configuration.md) | Environment variables, settings, backup, updates |
 | 🩺 [Troubleshooting](docs/troubleshooting.md) | Symptoms, causes and fixes |
 | 🛠️ [Development](docs/development.md) | Layout, build, tests, demo mode, screenshots |
+| 🔭 [Future work](docs/future.md) | Providers and ideas that were considered and not built yet |
 
 ## 🛠️ Develop
 

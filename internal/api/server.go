@@ -28,7 +28,7 @@ type Deps struct {
 	Workers    Workers
 	GitHub     GitHub
 	Cloudflare Cloudflare
-	Relay      Relay       // the failover to GitHub-hosted runners; may be nil
+	Relay      Relay       // runs the runners of the pools; may be nil
 	Box        *secret.Box // reserved for secrets the API itself may store later; may be nil
 	Version    string
 
@@ -217,7 +217,7 @@ func (s *Server) Tunnel(webhook http.Handler) http.Handler {
 		// without a login; the run's OIDC token is its proof.
 		if r.URL.Path == "/webhook/relay" {
 			if s.d.Relay == nil {
-				http.Error(w, "the failover to GitHub-hosted runners is not available", http.StatusServiceUnavailable)
+				http.Error(w, "pools of other providers are not available here", http.StatusServiceUnavailable)
 				return
 			}
 			s.d.Relay.ServeHTTP(w, r)
@@ -260,8 +260,12 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/setup/finish", s.private(s.setupFinish))
 
 	mux.HandleFunc("GET /api/overview", s.private(s.overview))
-	mux.HandleFunc("GET /api/relay", s.private(s.relayState))
-	mux.HandleFunc("POST /api/relay/check", s.private(s.relayCheck))
+	mux.HandleFunc("GET /api/pools", s.private(s.listPools))
+	mux.HandleFunc("POST /api/pools", s.private(s.addPool))
+	mux.HandleFunc("PATCH /api/pools/{id}", s.private(s.editPool))
+	mux.HandleFunc("DELETE /api/pools/{id}", s.private(s.removePool))
+	mux.HandleFunc("POST /api/pools/{id}/check", s.private(s.checkPool))
+	mux.HandleFunc("POST /api/pools/{id}/resume", s.private(s.resumePool))
 	mux.HandleFunc("GET /api/jobs", s.private(s.listJobs))
 	mux.HandleFunc("GET /api/jobs/{id}", s.private(s.getJob))
 

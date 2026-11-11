@@ -1,7 +1,7 @@
 # 🖥️ Workers
 
-This page covers what a worker needs, what the setup command does line by line, tiers, switching off and draining,
-cleaning up and removing a worker.
+This page covers what a worker needs, what the setup command does line by line, tiers and pools, switching off and
+draining, cleaning up and removing a worker.
 
 A worker is a Linux server with Docker that runs the jobs. CI-Plane reaches it over SSH with a key of its own and runs
 plain `docker` commands there. Nothing else is installed.
@@ -19,12 +19,12 @@ plain `docker` commands there. Nothing else is installed.
 | Root | Once, to paste the setup command. CI-Plane itself logs in as the user `ci-plane`. |
 
 Size the machine for the jobs: a worker with 16 CPUs and 64 GB offers 14.4 CPUs and 56.6 GB after the default reserve
-of 10 % and 1 GB. Memory is reserved per job, so it holds seven `size-m` jobs (8 GB each) at most. CPUs are not
+of 10 % and 1 GB. Memory is reserved per job, so it holds seven standard jobs (8 GB each) at most. CPUs are not
 reserved: a job starts when the CPUs of its size are free at that moment, so how many jobs run side by side depends
-on what they, and everything else on the server, really use. It cannot start a `size-xl` job (16 free CPUs): the
-reserve leaves 14.4, and what the server itself uses counts as busy on top. That needs a worker with about 20 CPUs
-and 37 GB of memory, or a smaller reserve. A size larger than any worker can give never starts;
-its jobs wait with *"No worker is large enough for …"*.
+on what they, and everything else on the server, really use. A worker with 8 CPUs offers 7.2 and cannot start a
+`large` job (8 free CPUs) with the default values; that needs about 10 CPUs and 20 GB of memory, or a smaller
+reserve. A size larger than any worker can give never starts there; its jobs wait with *"No worker is large enough
+for …"*, or go to a [pool](pools.md) that has a machine for them.
 
 A worker does not have to be a server of its own. See [CPU priority](#-cpu-priority) for servers that do other work.
 
@@ -73,6 +73,20 @@ free share of CPU and memory, the least busy one, gets the job. A higher tier is
 lower tiers has the CPUs and memory free, or all are switched off, draining or offline.
 
 Use tiers to keep a machine for overflow: your own servers in tier 1, a rented or shared machine in tier 2.
+
+### Pools
+
+A [pool](pools.md) is a source of runners CI-Plane does not run itself: GitHub-hosted runners, Blacksmith, or another
+provider of GitHub Actions runners. Pools are added on the **Workers** page and show in their tier next to
+the workers. Inside a tier the workers go first, so:
+
+| Pool in | Is used |
+|---|---|
+| tier 1 | before the workers of tier 2 and up, for example to use up free minutes first |
+| tier 9 | only when no worker has room: overflow, for example for jobs that have waited 3 minutes |
+
+A pool can also wait until a job has waited a few minutes, run a limited number of runners at the same time, and stop
+at a monthly budget of minutes. Setup and details: [Pools](pools.md).
 
 On the **Workers** page, drag a row by its handle (or focus the handle and use the arrow keys) to change the order or
 move a worker to another tier; **Edit** in a worker's side sheet changes its name and tier.

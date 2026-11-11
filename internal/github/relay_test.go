@@ -37,6 +37,7 @@ type relayFake struct {
 	runs         []*relayRun // newest last
 	dispatches   []map[string]any
 	cancels      int
+	machines     map[int64]string // what a run really runs on, if not what was asked for
 	noWorkflow   bool
 	readOnly     bool
 	disabled     bool
@@ -48,7 +49,7 @@ func newRelayFake(t *testing.T, e *env) *relayFake {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &relayFake{t: t, key: k, nextRun: 9000}
+	f := &relayFake{t: t, key: k, nextRun: 9000, machines: map[int64]string{}}
 	target, _ := url.Parse(e.gh.srv.URL)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	const repo = "/repos/acme/relay"
@@ -109,6 +110,13 @@ func newRelayFake(t *testing.T, e *env) *relayFake {
 				out = append(out, *f.runs[i])
 			}
 			json.NewEncoder(w).Encode(map[string]any{"total_count": len(out), "workflow_runs": out})
+		case strings.HasPrefix(p, repo+"/actions/runs/") && strings.HasSuffix(p, "/jobs"):
+			id, _ := strconv.ParseInt(strings.TrimSuffix(strings.TrimPrefix(p, repo+"/actions/runs/"), "/jobs"), 10, 64)
+			machine := f.machines[id]
+			if machine == "" {
+				machine = "ubuntu-latest"
+			}
+			json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "jobs": []map[string]any{{"labels": []string{machine}}}})
 		case strings.HasPrefix(p, repo+"/actions/runs/"):
 			rest := strings.TrimPrefix(p, repo+"/actions/runs/")
 			id, _ := strconv.ParseInt(strings.TrimSuffix(rest, "/cancel"), 10, 64)
@@ -148,7 +156,7 @@ func (f *relayFake) token(change func(map[string]any)) string {
 		"repository": "acme/relay", "repository_id": "555", "run_id": "9001", "run_attempt": "1",
 		"workflow_ref": "acme/relay/.github/workflows/ci-plane-relay.yml@refs/heads/main", "event_name": "workflow_dispatch",
 		"actor":            "ci-plane-acme[bot]",
-		"job_workflow_ref": relayRunnerRefs[0],
+		"job_workflow_ref": relayRunnerRefs[0], "runner_environment": "github-hosted",
 	}
 	if change != nil {
 		change(claims)
@@ -191,7 +199,7 @@ func newRelayEnv(t *testing.T, private bool) *relayEnv {
 	e.addApp(1, "acme", "Organization", 77, "s")
 	f := newRelayFake(t, e)
 	if err := e.st.Tx(func(tx *store.Tx) error {
-		return tx.UpsertRepo(model.Repo{ID: 555, AccountID: 1, FullName: "acme/relay", Private: private, Enabled: true, Relay: true})
+		return tx.UpsertRepo(model.Repo{ID: 555, AccountID: 1, FullName: "acme/relay", Private: private, Enabled: true})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -219,8 +227,8 @@ func (re *relayEnv) collect(token string) (int, map[string]string) {
 func TestRelayStartCollectAndEnd(t *testing.T) {
 	re := newRelayEnv(t, true)
 	name := "ci-plane-abc123-github-hosted-01"
-	spec := engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: "SECRETJIT-1"}
-	if err := re.relay.Start(ctx, model.Worker{ID: model.RelayWorkerID}, spec); err != nil {
+	spec := engine.RunnerSpec{Repo: "acme/relay", Machine: "ubuntu-latest", Name: name, JITConfig: "SECRETJIT-1", Image: "runner:img", DindImage: "dind:img"}
+	if err := re.relay.Start(ctx, model.Worker{ID: -1}, spec); err != nil {
 		t.Fatal(err)
 	}
 	if n := len(re.fake.dispatches); n != 1 {
@@ -228,7 +236,7 @@ func TestRelayStartCollectAndEnd(t *testing.T) {
 	}
 	d := re.fake.dispatches[0]
 	inputs := d["inputs"].(map[string]any)
-	if d["ref"] != "main" || inputs["runner"] != name || inputs["url"] != "https://ci.example" {
+	if d["ref"] != "main" || inputs["runner"] != name || inputs["url"] != "https://ci.example" || inputs["machine"] != "ubuntu-latest" {
 		t.Fatalf("dispatch: %v", d)
 	}
 	if strings.Contains(fmt.Sprint(d), "SECRETJIT") {
@@ -249,8 +257,12 @@ func TestRelayStartCollectAndEnd(t *testing.T) {
 	}
 
 	// The run collects its runner, once.
+	// The run collects its runner and the script that starts its containers.
+	re.relay.Script = func(spec engine.RunnerSpec) string {
+		return "start " + spec.Name + " " + spec.Image + " " + spec.DindImage + " " + spec.JITConfig
+	}
 	code, out := re.collect(re.fake.token(nil))
-	if code != 200 || out["jitconfig"] != "SECRETJIT-1" || out["runner"] != name {
+	if code != 200 || out["jitconfig"] != "SECRETJIT-1" || out["runner"] != name || out["script"] != "start "+name+" runner:img dind:img " {
 		t.Fatalf("collect: %d %v", code, out)
 	}
 	// The same run may ask again (its answer may have been lost), another may not.
@@ -294,7 +306,7 @@ func TestRelayStartCollectAndEnd(t *testing.T) {
 func TestRelayRemoveCancelsTheRunAndForgetsTheRunner(t *testing.T) {
 	re := newRelayEnv(t, true)
 	name := "ci-plane-abc123-github-hosted-02"
-	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: "SECRETJIT-2"}); err != nil {
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Repo: "acme/relay", Machine: "ubuntu-latest", Name: name, JITConfig: "SECRETJIT-2"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := re.relay.Remove(ctx, model.Worker{}, name); err != nil {
@@ -312,7 +324,7 @@ func TestRelayRemoveCancelsTheRunAndForgetsTheRunner(t *testing.T) {
 	}
 	// A runner whose run is cancelled while it waits shows as ended, not normally.
 	other := "ci-plane-abc123-github-hosted-02b"
-	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: other, JITConfig: "x"}); err != nil {
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Repo: "acme/relay", Machine: "ubuntu-latest", Name: other, JITConfig: "x"}); err != nil {
 		t.Fatal(err)
 	}
 	re.fake.mu.Lock()
@@ -335,7 +347,7 @@ func TestRelayStartAgainStopsTheEarlierRun(t *testing.T) {
 	re := newRelayEnv(t, true)
 	name := "ci-plane-abc123-github-hosted-03"
 	for i := 0; i < 2; i++ {
-		if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: fmt.Sprint("SECRETJIT-", i)}); err != nil {
+		if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Repo: "acme/relay", Machine: "ubuntu-latest", Name: name, JITConfig: fmt.Sprint("SECRETJIT-", i)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -355,7 +367,7 @@ func TestRelayStartAgainStopsTheEarlierRun(t *testing.T) {
 func TestRelayRefusesTokensThatAreNotTheRelayRun(t *testing.T) {
 	re := newRelayEnv(t, true)
 	name := "ci-plane-abc123-github-hosted-04"
-	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: "SECRETJIT-4"}); err != nil {
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Repo: "acme/relay", Machine: "ubuntu-latest", GitHubHosted: true, Name: name, JITConfig: "SECRETJIT-4"}); err != nil {
 		t.Fatal(err)
 	}
 	other, _ := rsa.GenerateKey(rand.Reader, 2048)
@@ -404,6 +416,22 @@ func TestRelayRefusesTokensThatAreNotTheRelayRun(t *testing.T) {
 			t.Errorf("%s: %d %v, want %d", c.name, code, out, c.code)
 		}
 	}
+	// A run on another machine than the runner was dispatched for: the
+	// calling workflow was changed to name a machine of someone's own.
+	re.fake.mu.Lock()
+	re.fake.machines[9001] = "my-own-box"
+	re.fake.mu.Unlock()
+	if code, out := re.collect(re.fake.token(nil)); code != 403 || !strings.Contains(out["error"], "not on the machine") {
+		t.Errorf("another machine: %d %v", code, out)
+	}
+	re.fake.mu.Lock()
+	delete(re.fake.machines, 9001)
+	re.fake.mu.Unlock()
+	// The right label, but a self-hosted machine that carries it, where
+	// the pool is one of GitHub-hosted runners.
+	if code, out := re.collect(re.fake.token(func(c map[string]any) { c["runner_environment"] = "self-hosted" })); code != 403 {
+		t.Errorf("self-hosted machine with the label: %d %v", code, out)
+	}
 	// None of them used it up.
 	if code, out := re.collect(re.fake.token(nil)); code != 200 || out["jitconfig"] != "SECRETJIT-4" {
 		t.Fatalf("the real run: %d %v", code, out)
@@ -412,13 +440,13 @@ func TestRelayRefusesTokensThatAreNotTheRelayRun(t *testing.T) {
 
 func TestRelayErrorsSayWhatToDo(t *testing.T) {
 	re := newRelayEnv(t, true)
-	spec := engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: "ci-plane-abc123-github-hosted-05", JITConfig: "SECRETJIT-5"}
+	spec := engine.RunnerSpec{Repo: "acme/relay", Machine: "ubuntu-latest", Name: "ci-plane-abc123-github-hosted-05", JITConfig: "SECRETJIT-5"}
 
 	re.url = ""
 	if err := re.relay.Start(ctx, model.Worker{}, spec); err == nil || !strings.Contains(err.Error(), "Cloudflare") {
 		t.Errorf("no public address: %v", err)
 	}
-	if st := re.relay.Status(model.RelayWorkerID); st.Connected {
+	if st := re.relay.Status(-1); st.Connected {
 		t.Error("connected without a public address")
 	}
 	re.url = "https://ci.example"
@@ -427,7 +455,7 @@ func TestRelayErrorsSayWhatToDo(t *testing.T) {
 	if err := re.relay.Start(ctx, model.Worker{}, spec); err == nil || !strings.Contains(err.Error(), "ci-plane-relay.yml") {
 		t.Errorf("no workflow: %v", err)
 	}
-	if c := re.relay.Check(ctx, 555); len(c.Problems) != 1 || !strings.Contains(c.Problems[0], "not in acme/relay") ||
+	if c := re.relay.Check(ctx, "acme/relay"); len(c.Problems) != 1 || !strings.Contains(c.Problems[0], "not in acme/relay") ||
 		!strings.Contains(c.AddURL, "/acme/relay/new/main?filename=.github%2Fworkflows%2Fci-plane-relay.yml&value=name%3A+CI-Plane+relay") ||
 		len(c.AddURL) > 7500 {
 		t.Errorf("check without workflow: %d %+v", len(c.AddURL), c)
@@ -450,35 +478,38 @@ func TestRelayErrorsSayWhatToDo(t *testing.T) {
 		!strings.Contains(err.Error(), "github.com/organizations/acme/settings/apps/ci-plane-acme/permissions") {
 		t.Errorf("app without Actions write: %v", err)
 	}
-	if p := re.relay.Check(ctx, 555).Problems; len(p) != 1 || !strings.Contains(p[0], "may not start workflows") {
+	if p := re.relay.Check(ctx, "acme/relay").Problems; len(p) != 1 || !strings.Contains(p[0], "may not start workflows") {
 		t.Errorf("check of an app without Actions write: %v", p)
 	}
 	re.fake.readOnly = false
 
 	re.fake.disabled = true
-	if p := re.relay.Check(ctx, 555).Problems; len(p) != 1 || !strings.Contains(p[0], "disabled") {
+	if p := re.relay.Check(ctx, "acme/relay").Problems; len(p) != 1 || !strings.Contains(p[0], "disabled") {
 		t.Errorf("check of a disabled workflow: %v", p)
 	}
 	re.fake.disabled = false
-	if p := re.relay.Check(ctx, 555).Problems; len(p) != 0 {
+	if p := re.relay.Check(ctx, "acme/relay").Problems; len(p) != 0 {
 		t.Errorf("check when ready: %v", p)
 	}
 
-	// A public repository runs the relay workflow like any other.
 	public := newRelayEnv(t, false)
-	if err := public.relay.Start(ctx, model.Worker{}, spec); err != nil {
+	if err := public.relay.Start(ctx, model.Worker{}, spec); err == nil || !strings.Contains(err.Error(), "public") {
 		t.Errorf("public repository: %v", err)
 	}
-
-	if p := re.relay.Check(ctx, 999).Problems; len(p) != 1 || !strings.Contains(p[0], "does not see") {
+	if p := re.relay.Check(ctx, "acme/unknown").Problems; len(p) != 1 || !strings.Contains(p[0], "install the GitHub App of acme") {
 		t.Errorf("check of an unknown repository: %v", p)
+	}
+	noMachine := spec
+	noMachine.Machine = ""
+	if err := re.relay.Start(ctx, model.Worker{}, noMachine); err == nil || !strings.Contains(err.Error(), "no machine") {
+		t.Errorf("no machine: %v", err)
 	}
 }
 
 func TestRelayListsAJustDispatchedRunUntilGitHubShowsIt(t *testing.T) {
 	re := newRelayEnv(t, true)
 	name := "ci-plane-abc123-github-hosted-06"
-	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: "x"}); err != nil {
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Repo: "acme/relay", Machine: "ubuntu-latest", Name: name, JITConfig: "x"}); err != nil {
 		t.Fatal(err)
 	}
 	// GitHub has not listed the run yet.
@@ -500,7 +531,7 @@ func TestRelayListsAJustDispatchedRunUntilGitHubShowsIt(t *testing.T) {
 func TestRelayListKeepsOtherRepositoriesWhenOneCannotBeAsked(t *testing.T) {
 	re := newRelayEnv(t, true)
 	name := "ci-plane-abc123-github-hosted-07"
-	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: "x"}); err != nil {
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Repo: "acme/relay", Machine: "ubuntu-latest", Name: name, JITConfig: "x"}); err != nil {
 		t.Fatal(err)
 	}
 	// A runner of a repository CI-Plane no longer sees.

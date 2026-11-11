@@ -171,13 +171,13 @@ func (e *Engine) schedule(s *snapshot) bool {
 		}
 	}
 	var spares []model.Runner
-	onRelay := 0
+	onPool := map[int64]int{} // runners by pool id
 	for _, r := range s.runners {
 		if r.JobID == 0 && r.Waiting() {
 			spares = append(spares, r)
 		}
-		if r.WorkerID == model.RelayWorkerID && r.Active() {
-			onRelay++
+		if model.IsPool(r.WorkerID) && r.Active() {
+			onPool[-r.WorkerID]++
 		}
 	}
 	held := map[int64]bool{} // workers kept free for a job that waits long
@@ -228,9 +228,6 @@ func (e *Engine) schedule(s *snapshot) bool {
 			if !inScope(acc, r, j) || !model.Serves(r.Labels, j.Labels) {
 				continue
 			}
-			if r.WorkerID == model.RelayWorkerID && r.RepoID != j.RepoID {
-				continue // its minutes and its failover belong to another repository
-			}
 			if e.designate(j.ID, r.ID) {
 				spares = append(spares[:i], spares[i+1:]...)
 				adopted = true
@@ -263,16 +260,27 @@ func (e *Engine) schedule(s *snapshot) bool {
 		if !found {
 			w, found, why = s.pick(z, caps, skip)
 		}
-		if !found {
-			relay, note := s.relayChoice(j, z, onRelay, e.Relay != nil)
-			if relay && e.place(s, j, relayWorker(s.set), z, Capacity{}) {
-				onRelay++
-				perRepo[j.RepoID]++
-				perAcc[j.AccountID]++
-				dirty = true
+		if e.Relay != nil {
+			// A pool of a lower tier than the worker goes first; without a
+			// worker, the first pool that has room.
+			tier := 0
+			if found {
+				tier = max(w.Tier, 1)
+			}
+			p, ok, note := s.pickPool(j, z, onPool, tier)
+			if ok {
+				if e.place(s, j, poolWorker(p), z, Capacity{}) {
+					onPool[p.ID]++
+					perRepo[j.RepoID]++
+					perAcc[j.AccountID]++
+					dirty = true
+				}
 				continue
 			}
-			e.setReason(j, why+note)
+			why += note
+		}
+		if !found {
+			e.setReason(j, why)
 			full = true
 			if s.now-j.WaitingSince > int64(s.set.NoOvertakeSec)*1000 {
 				// Nothing overtakes it on a worker that could hold it once
@@ -350,9 +358,13 @@ func (e *Engine) place(s *snapshot, j model.Job, w model.Worker, z model.Size, c
 	}
 	msg := fmt.Sprintf("Worker %s chosen (tier %d, %.1f CPUs and %.0f GB free); starting the runner %s",
 		w.Name, w.Tier, c.FreeCPUs(), float64(c.MemMB-c.UsedMemMB)/1024, r.Name)
-	if w.ID == model.RelayWorkerID {
-		msg = fmt.Sprintf("No worker had room for %s; starting the runner %s on a GitHub-hosted machine through the relay workflow of %s",
-			span(int((s.now-j.WaitingSince)/1000)), r.Name, j.Repo)
+	if model.IsPool(w.ID) {
+		for _, p := range s.pools {
+			if p.WorkerID() == w.ID {
+				msg = fmt.Sprintf("Pool %s chosen (tier %d, %d of %d runners in use); starting the runner %s on a %s machine through %s",
+					p.Name, p.Tier, len(poolRunners(s.runners, p)), p.Max, r.Name, p.Machine(z.Name), p.Repo)
+			}
+		}
 	}
 	ok := false
 	err := e.st.Tx(func(tx *store.Tx) error {

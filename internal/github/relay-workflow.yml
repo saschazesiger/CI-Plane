@@ -1,8 +1,8 @@
-# CI-Plane relay: runs one runner of CI-Plane on a GitHub-hosted machine
-# when none of your own workers has room for a job of this repository.
-# CI-Plane starts this workflow by itself, one run per runner, and only if
-# the failover is switched on for this repository; runs started by hand get
-# nothing. Each run uses the GitHub Actions minutes of the repository's owner.
+# CI-Plane relay: runs one runner of CI-Plane on a machine of a pool
+# (GitHub-hosted, Blacksmith, ...) when CI-Plane sends a job there. CI-Plane
+# starts this workflow by itself, one run per runner; runs started by hand
+# get nothing. Each run uses the minutes of this repository's owner.
+# Keep this repository private: its runs show the names of your runners.
 name: CI-Plane relay
 run-name: ${{ inputs.runner }}
 
@@ -17,13 +17,18 @@ on:
         description: Address of CI-Plane (set by CI-Plane)
         required: true
         type: string
+      machine:
+        description: runs-on label of the machine (set by CI-Plane)
+        required: true
+        type: string
 
 permissions:
   id-token: write
 
 jobs:
   runner:
-    uses: saschazesiger/CI-Plane/.github/workflows/ci-plane-relay-runner.yml@relay-v1
+    uses: saschazesiger/CI-Plane/.github/workflows/ci-plane-relay-runner.yml@relay-v2
     with:
       runner: ${{ inputs.runner }}
       url: ${{ inputs.url }}
+      machine: ${{ inputs.machine }}

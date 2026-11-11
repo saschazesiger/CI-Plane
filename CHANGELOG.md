@@ -4,6 +4,15 @@ All notable changes to CI-Plane. Versions follow [Semantic Versioning](https://s
 
 ## Unreleased
 
+- **Pools: runners of other providers** next to your workers. A pool runs runners on GitHub-hosted machines, on
+  Blacksmith or on any other provider of GitHub Actions runners, through a small workflow in a private repository
+  of yours. It has a tier like a worker, so it can be the overflow when your servers are full, or go first to use
+  up free minutes. Each pool has a limit of runners, an optional budget of minutes per month that CI-Plane counts
+  itself, and pauses with growing waits (1 minute to 12 hours) when its starts fail. A job finds the same
+  containers there as on a worker. See [Pools](docs/pools.md).
+- **Two sizes instead of many**: *standard*, and *large* with the label `large`. The labels of earlier sizes
+  (`size-s`, `size-m`, ...) keep working: an upgrade turns the default size and smaller ones into standard and the
+  bigger ones into large.
 - **Jobs are placed by the measured CPU load** of the workers instead of by reserved CPUs. A worker that is busy,
   with jobs or with anything else that runs on it, gets no new jobs; inside a tier the least busy worker wins.
 - **No CPU limits.** The CPUs of a size are now what must be free on a worker for a job to start. A running job may

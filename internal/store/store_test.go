@@ -77,7 +77,7 @@ func TestRoundTripAndReopen(t *testing.T) {
 			t.Errorf("worker\n got %+v\nwant %+v", w, worker)
 		}
 		set, err := tx.Settings()
-		if err != nil || set.DefaultSize != "size-s" || len(set.Sizes) != 4 {
+		if err != nil || set.DefaultSize != "size-s" || len(set.Sizes) != 2 {
 			t.Errorf("settings: %+v %v", set, err)
 		}
 		if _, err := tx.Job(8); !errors.Is(err, ErrNotFound) {

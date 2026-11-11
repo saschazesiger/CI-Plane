@@ -65,7 +65,6 @@ func (s *Server) listAccounts(w http.ResponseWriter, r *http.Request) {
 type limitReq struct {
 	Enabled     *bool `json:"enabled"`
 	MaxParallel *int  `json:"maxParallel"`
-	Relay       *bool `json:"relay"` // repositories only: failover to GitHub-hosted runners
 }
 
 func (l limitReq) check() map[string]string {
@@ -134,13 +133,6 @@ func (s *Server) editRepo(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.MaxParallel != nil {
 			p.MaxParallel = *req.MaxParallel
-		}
-		if req.Relay != nil {
-			if *req.Relay {
-				// Switched on (again): why it switched itself off is history.
-				p.RelayOff, p.RelayOffAt = "", 0
-			}
-			p.Relay = *req.Relay
 		}
 		return tx.SaveRepo(p)
 	})
@@ -249,8 +241,6 @@ var numFields = []numField{
 	{"failureThreshold", func(s *model.Settings) int { return s.FailureThreshold }, 1, 20, 1, "failed starts"},
 	{"noOvertakeSec", func(s *model.Settings) int { return s.NoOvertakeSec }, 0, 24 * 3600, 60, "minutes"},
 	{"historyDays", func(s *model.Settings) int { return s.HistoryDays }, 1, 365, 1, "days"},
-	{"relayAfterSec", func(s *model.Settings) int { return s.RelayAfterSec }, 0, 24 * 3600, 60, "minutes"},
-	{"relayMax", func(s *model.Settings) int { return s.RelayMax }, 1, 100, 1, "runners"},
 }
 
 // checkSettings returns an error per field, keyed by its JSON name (sizes
@@ -265,33 +255,38 @@ func checkSettings(set model.Settings) map[string]string {
 	case reserved[set.BaseLabel]:
 		errs["baseLabel"] = "This label is used by every self-hosted runner; pick one of your own, like ci-plane."
 	}
-	if len(set.Sizes) == 0 {
-		errs["sizes"] = "Keep at least one size."
+	// Two sizes: standard and large. Their names are fixed; what a job of
+	// each needs is the person's to say.
+	if len(set.Sizes) != 2 || set.Sizes[0].Name != model.SizeStandard || set.Sizes[1].Name != model.SizeLarge {
+		errs["sizes"] = "There are two sizes, standard and large."
 	}
-	if len(set.Sizes) > 12 {
-		errs["sizes"] = "Use at most 12 sizes."
+	taken := map[string]bool{model.SizeStandard: true, model.SizeLarge: true, set.BaseLabel: true}
+	for l := range reserved {
+		taken[l] = true
 	}
-	names := map[string]bool{}
 	for i, z := range set.Sizes {
 		k := fmt.Sprintf("sizes.%d.", i)
-		switch {
-		case !labelRe.MatchString(z.Name):
-			errs[k+"name"] = "Use lowercase letters, digits and dashes, like size-m."
-		case reserved[z.Name] || z.Name == set.BaseLabel:
-			errs[k+"name"] = "This name is taken by a label every job has."
-		case names[z.Name]:
-			errs[k+"name"] = "Two sizes have this name."
-		}
-		names[z.Name] = true
 		if z.CPUs < 0.5 || z.CPUs > 256 {
 			errs[k+"cpus"] = "From 0.5 to 256 free CPUs."
 		}
 		if z.MemMB < 512 || z.MemMB > 1024*1024 {
 			errs[k+"memMb"] = "From 0.5 to 1024 GB."
 		}
+		if len(z.Aliases) > 12 {
+			errs[k+"aliases"] = "Use at most 12 other labels."
+		}
+		for _, a := range z.Aliases {
+			switch {
+			case !labelRe.MatchString(a):
+				errs[k+"aliases"] = "Use lowercase letters, digits and dashes, like size-m."
+			case taken[a]:
+				errs[k+"aliases"] = "The label " + a + " is taken already."
+			}
+			taken[a] = true
+		}
 	}
-	if !names[set.DefaultSize] {
-		errs["defaultSize"] = "Choose one of the sizes as the default."
+	if len(set.Sizes) == 2 && errs["sizes.0.memMb"] == "" && errs["sizes.1.memMb"] == "" && set.Sizes[1].MemMB < set.Sizes[0].MemMB {
+		errs["sizes.1.memMb"] = "A large job gets at least the memory of a standard one."
 	}
 	for key, v := range map[string]string{"runnerImage": set.RunnerImage, "dindImage": set.DindImage, "mirrorImage": set.MirrorImage} {
 		if !imageRe.MatchString(strings.TrimSpace(v)) {
@@ -304,7 +299,6 @@ func checkSettings(set model.Settings) map[string]string {
 			errs[f.key] = fmt.Sprintf("Enter a number from %s to %s %s.", shown(f.min, f.factor), shown(f.max, f.factor), f.unit)
 		}
 	}
-	checkRelay(set, errs)
 	return errs
 }
 
@@ -320,8 +314,12 @@ func cleanSettings(set *model.Settings) {
 	set.RunnerImage = strings.TrimSpace(set.RunnerImage)
 	set.DindImage = strings.TrimSpace(set.DindImage)
 	set.MirrorImage = strings.TrimSpace(set.MirrorImage)
+	set.DefaultSize = model.SizeStandard
 	for i := range set.Sizes {
 		set.Sizes[i].Name = strings.ToLower(strings.TrimSpace(set.Sizes[i].Name))
+		for j, a := range set.Sizes[i].Aliases {
+			set.Sizes[i].Aliases[j] = strings.ToLower(strings.TrimSpace(a))
+		}
 	}
 }
 
@@ -336,8 +334,26 @@ func (s *Server) validateSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 	set := model.DefaultSettings()
+	set.Sizes = nil // decoded as sent, not into the default ones
 	if !decode(w, r, &set) {
 		return
+	}
+	// The other labels of a size are not shown as a field: a save that
+	// does not name them keeps them, so that workflows that use them keep
+	// running.
+	var cur model.Settings
+	if err := s.d.Store.View(func(tx *store.Tx) error {
+		var err error
+		cur, err = tx.Settings()
+		return err
+	}); err != nil {
+		s.fail(w, err)
+		return
+	}
+	for i, z := range set.Sizes {
+		if old, ok := cur.SizeByName(z.Name); ok && z.Aliases == nil && old.Name == z.Name {
+			set.Sizes[i].Aliases = old.Aliases
+		}
 	}
 	cleanSettings(&set)
 	if errs := checkSettings(set); len(errs) > 0 {

@@ -11,10 +11,10 @@ file. Read [docs/how-it-works.md](docs/how-it-works.md) for the design before ch
 | `internal/model/` | domain types, settings, label matching |
 | `internal/store/` | SQLite; the only place with SQL |
 | `internal/secret/` | encryption at rest |
-| `internal/engine/` | the scheduler and supervisor; defines `Forge` (GitHub) and `Fleet` (workers) |
+| `internal/engine/` | the scheduler and supervisor; defines `Forge` (GitHub) and `Fleet` (workers); `pools.go` runs runners on machines of other providers ([docs/pools.md](docs/pools.md)) |
 | `internal/sim/` | `Forge` and `Fleet` in memory: tests and demo mode |
-| `internal/node/` | workers over SSH: implements `engine.Fleet` and `api.Workers` |
-| `internal/github/` | GitHub Apps: implements `engine.Forge` and `api.GitHub`, webhooks |
+| `internal/node/` | workers over SSH: implements `engine.Fleet` and `api.Workers`; `docker.go` holds the start script of a runner, also used on pools |
+| `internal/github/` | GitHub Apps: implements `engine.Forge` and `api.GitHub`, webhooks; `relay.go` starts the runners of pools through the relay workflow and hands them out at `/webhook/relay` |
 | `internal/cloudflare/` | tunnel and Access: implements `api.Cloudflare` |
 | `internal/api/` | HTTP API, login, live updates; `services.go` holds the contracts |
 | `internal/demo/` | demo mode on the simulator |

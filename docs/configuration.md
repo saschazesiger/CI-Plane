@@ -33,8 +33,12 @@ job on.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| Sizes | `size-s` 2 CPUs / 4 GB, `size-m` 4 / 8, `size-l` 8 / 16, `size-xl` 16 / 32 | What a job with that label needs: CPUs that must be free on a worker for it to start (not a limit), and memory that is reserved for it and is the limit of each of its containers. 1 to 12 sizes; 0.5 to 256 CPUs, 0.5 to 1024 GB. |
-| Default | `size-m` | The size of a job that names none. |
+| Standard | 4 CPUs, 8 GB | A job without a size label. CPUs that must be free on a worker for it to start (not a limit), and memory that is reserved for it and is the limit of each of its containers. 0.5 to 256 CPUs, 0.5 to 1024 GB. |
+| Large | 8 CPUs, 16 GB | A job with the label `large`. The same ranges; at least the memory of standard. |
+
+On a [pool](pools.md) the size chooses the machine; these values apply on workers only. The labels of earlier
+versions (`size-s`, `size-m` for standard, `size-l`, `size-xl` for large, by default) keep working
+([How it works](how-it-works.md#-choosing-a-worker)).
 
 **Runner**
 
@@ -67,22 +71,13 @@ job on.
 | A worker pauses after | 3 failed starts | 1 to 20 | In a row; then it is *unhealthy* and tested every 30 seconds. |
 | Keep finished jobs and events for | 30 days | 1 to 365 days | Older history is deleted. |
 
-**Failover to GitHub** ([Failover to GitHub](failover.md))
-
-| Setting | Default | Range | Meaning |
-|---|---|---|---|
-| Failover to GitHub | off | | Jobs that found no room may go to GitHub-hosted runners, for the repositories that have it switched on (**Repositories**). Each needs the relay workflow; its owner pays the minutes. |
-| Waiting time | 3 minutes | 0 minutes to 24 hours | How long a job waits for room on your workers first. |
-| At most | 5 runners | 1 to 100 | Runners on GitHub at the same time, all repositories together. |
-| Largest size | `size-m` | one of the sizes | Larger jobs always wait for a worker. |
-
 **Elsewhere**
 
 - **Cloudflare tunnel**: status, the e-mail addresses that may sign in, repair and removal ([Cloudflare](cloudflare.md)).
 - **Password**: change the admin password; other browsers are signed out.
-- **Workers** page: tier, on/off, draining and the [CPU priority](workers.md#-cpu-priority) of each worker.
-- **Repositories** page: on/off, the failover to GitHub ([Failover to GitHub](failover.md)) and parallel jobs per repository and per account ([GitHub](github.md#-limits-per-repository-and-account)).
-- **Workers** page: tiers, on/off, drain ([Workers](workers.md)).
+- **Workers** page: tier, on/off, draining and the [CPU priority](workers.md#-cpu-priority) of each worker, and the
+  [pools](pools.md#-fields) of other providers with their tier, machines and budget.
+- **Repositories** page: on/off and parallel jobs per repository and per account ([GitHub](github.md#-limits-per-repository-and-account)).
 
 ## 💾 Backup and restore
 

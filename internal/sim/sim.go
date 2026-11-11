@@ -490,27 +490,53 @@ func (w *World) Start(_ context.Context, wk model.Worker, spec engine.RunnerSpec
 func (w *World) Remove(_ context.Context, wk model.Worker, name string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if !w.status[wk.ID].Connected {
+	if !w.connected(wk.ID) {
 		return errors.New("simulated: ssh: connection refused")
 	}
 	if w.FailRemove[wk.ID] > 0 {
 		w.FailRemove[wk.ID]--
 		return errors.New("simulated: docker daemon is not responding")
 	}
-	delete(w.containers[wk.ID], name)
+	for id, list := range w.containers {
+		if id == wk.ID || (model.IsPool(id) && model.IsPool(wk.ID)) {
+			delete(list, name)
+		}
+	}
 	return nil
+}
+
+// connected reports whether a worker can be reached. The pools (ids below
+// zero) are reached through GitHub as one: any of them stands for all.
+func (w *World) connected(id int64) bool {
+	if w.status[id].Connected {
+		return true
+	}
+	if model.IsPool(id) {
+		for other, st := range w.status {
+			if model.IsPool(other) && st.Connected {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // List implements engine.Fleet.
 func (w *World) List(_ context.Context, wk model.Worker) ([]engine.Container, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if !w.status[wk.ID].Connected {
+	if !w.connected(wk.ID) {
 		return nil, errors.New("simulated: ssh: connection refused")
 	}
 	out := []engine.Container{}
-	for name, c := range w.containers[wk.ID] {
-		out = append(out, engine.Container{Runner: name, Running: c.running, ExitCode: c.exitCode})
+	for id, list := range w.containers {
+		// One listing covers the runs of all pools (ids below zero).
+		if id != wk.ID && !(model.IsPool(id) && model.IsPool(wk.ID)) {
+			continue
+		}
+		for name, c := range list {
+			out = append(out, engine.Container{Runner: name, Running: c.running, ExitCode: c.exitCode})
+		}
 	}
 	return out, nil
 }

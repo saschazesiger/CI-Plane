@@ -37,6 +37,8 @@ type oidcClaims struct {
 	JobWorkflowRef string `json:"job_workflow_ref"`
 	EventName      string `json:"event_name"`
 	Actor          string `json:"actor"`
+	// RunnerEnvironment is "github-hosted" on a machine of GitHub\'s own.
+	RunnerEnvironment string `json:"runner_environment"`
 }
 
 func (c oidcClaims) hasAudience(want string) bool {

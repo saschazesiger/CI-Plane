@@ -146,10 +146,13 @@ func (d *Demo) push() {
 		d.jobID++
 		id := d.jobID
 		d.mu.Unlock()
-		size := []string{"size-s", "size-m", "size-m", "size-m", "size-l", "size-xl"}[d.intn(6)]
-		labels := []string{"self-hosted", "ci-plane", size}
+		size := []string{"", "", "", "", model.SizeLarge, model.SizeLarge}[d.intn(6)]
+		labels := []string{"self-hosted", "ci-plane"} // a standard job
+		if size != "" {
+			labels = append(labels, size)
+		}
 		if d.intn(10) == 0 {
-			labels = []string{"self-hosted", "ci-plane"} // the default size
+			labels = []string{"self-hosted", "ci-plane", "size-m"} // a label of earlier versions
 		}
 		if d.intn(60) == 0 {
 			labels = []string{"self-hosted", "ci-plane", "macos"}

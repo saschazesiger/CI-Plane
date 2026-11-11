@@ -42,6 +42,8 @@ func buildServices(st *store.Store, box *secret.Box, origin string, logf func(st
 		}
 		return ""
 	})
+	// A runner on a machine of a pool starts with the script of a worker.
+	relay.Script = node.HostedStartScript
 	return Services{
 		Forge: gh, Fleet: nodes, Workers: nodes, GitHub: gh, Cloudflare: cf, Relay: relay,
 		Webhook: gh.WebhookHandler,

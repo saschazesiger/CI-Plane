@@ -104,7 +104,7 @@ on: [push, workflow_dispatch]
 
 jobs:
   hello:
-    runs-on: [self-hosted, ci-plane, size-s]
+    runs-on: [self-hosted, ci-plane]
     steps:
       - uses: actions/checkout@v5
       - run: echo "Hello from $(hostname)"
@@ -117,6 +117,7 @@ a runner named `ci-plane-…` and turns green. Choose **Finish setup**.
 ## ✅ Next
 
 - Add more servers under **Workers**, put the ones you would rather keep free into tier 2: [Workers](workers.md).
+- Let jobs spill over to GitHub-hosted runners or another provider when your workers are full: [Pools](pools.md).
 - Adjust sizes and timeouts under **Settings**: [Configuration](configuration.md).
 - Read [Security](security.md) before connecting more repositories.
 - Something is stuck? [Troubleshooting](troubleshooting.md).

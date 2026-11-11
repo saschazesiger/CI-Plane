@@ -41,6 +41,17 @@ func newRig(t *testing.T) *rig {
 	st.SetClock(r.clock.Load)
 	r.boot()
 	must(t, st.Tx(func(tx *store.Tx) error {
+		// Four sizes, as earlier versions had them: the engine takes any
+		// number, and these tests were written with them.
+		set := model.DefaultSettings()
+		set.Sizes = []model.Size{
+			{Name: "size-s", CPUs: 2, MemMB: 4096}, {Name: "size-m", CPUs: 4, MemMB: 8192},
+			{Name: "size-l", CPUs: 8, MemMB: 16384}, {Name: "size-xl", CPUs: 16, MemMB: 32768},
+		}
+		set.DefaultSize = "size-m"
+		if err := tx.SaveSettings(set); err != nil {
+			return err
+		}
 		if err := tx.SaveAccount(model.Account{ID: orgID, Slug: "ci-plane-acme", Owner: "acme", OwnerType: "Organization", InstallationID: 11, Enabled: true}); err != nil {
 			return err
 		}

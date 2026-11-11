@@ -121,10 +121,9 @@ async function reload() {
 /* ── The side sheet ───────────────────────────────────────────────── */
 
 const IGNORED_HELP = [
-  [/unknown label/, 'CI-Plane runs a job only when every label in runs-on is one it knows. Add the label as a size under Settings, or change runs-on in the workflow.'],
-  [/two sizes/, 'A job can ask for one size only. Change runs-on in the workflow.'],
+  [/unknown label/, 'CI-Plane runs a job only when it knows every label in runs-on: self-hosted, linux, x64, its own label and large. Change runs-on in the workflow.'],
+  [/two sizes/, 'A job is standard, or large with the label large. Change runs-on in the workflow.'],
   [/switched off/, 'Switch it on under Repositories; the next job is then run.'],
-  [/default size/, 'Choose an existing default size under Settings.'],
 ];
 
 function eventGlyph(e) {
@@ -147,10 +146,10 @@ function timelineHtml(events) {
   }).join('');
 }
 
-/** Where the job ran: a link to its worker, or GitHub's machine of the failover, which has no page here. */
+/** Where the job ran: a link to its worker, or to its pool (a negative id) on the same page. */
 function workerFact(j) {
   if (!j.worker) return '–';
-  if (j.workerId < 0) return `${esc(j.worker)} <span class="ds-meta">(a machine of GitHub's, through the failover)</span>`;
+  if (j.workerId < 0) return `<a href="#/workers?pool=${-j.workerId}">${esc(j.worker)}</a> <span class="ds-meta">(a pool)</span>`;
   return `<a href="#/workers?open=${j.workerId}">${esc(j.worker)}</a>`;
 }
 
@@ -176,7 +175,7 @@ function sheetHtml(d) {
     note = alertHtml('', 'Why it waits', esc(j.reason || 'CI-Plane is choosing a worker for it.') +
       ' It starts by itself as soon as a worker has room; nothing needs to be done unless this stays.');
   } else if (j.state === 'ignored') {
-    const help = (IGNORED_HELP.find(([re]) => re.test(j.reason)) || [null, 'Change runs-on in the workflow, or adjust the sizes under Settings.'])[1];
+    const help = (IGNORED_HELP.find(([re]) => re.test(j.reason)) || [null, 'Change runs-on in the workflow.'])[1];
     note = alertHtml('warning', 'Not run by CI-Plane', `${esc(j.reason)}. ${esc(help)}`);
   } else if (j.state === 'running' && !j.runnerId && j.reason) {
     note = alertHtml('', 'Runs elsewhere', esc(j.reason));

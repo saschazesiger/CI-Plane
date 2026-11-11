@@ -359,3 +359,22 @@ func TestJanitorRemovesOnlyOurOldImages(t *testing.T) {
 		}
 	}
 }
+
+func TestHostedStartScriptLeavesOutWhatOnlyAWorkerHas(t *testing.T) {
+	spec := engine.RunnerSpec{Name: "ci-plane-abc123-github-0123456789", Image: "ghcr.io/actions/actions-runner:latest", DindImage: "docker:dind",
+		MemMB: 8192, CPUPriority: model.PriorityBackground, JITConfig: "SECRET"}
+	hosted, worker := HostedStartScript(spec), startScript(spec)
+	for _, gone := range []string{"--registry-mirror", "network connect", "--memory", "--cpu-shares", "SECRET"} {
+		if strings.Contains(hosted, gone) {
+			t.Errorf("the hosted script contains %q", gone)
+		}
+	}
+	for _, kept := range []string{`n='ci-plane-abc123-github-0123456789'`, "IFS= read -r jit", `"$n-dind"`, `"$n-runner"`, "ACTIONS_RUNNER_INPUT_JITCONFIG", "./run.sh"} {
+		if !strings.Contains(hosted, kept) {
+			t.Errorf("the hosted script lacks %q", kept)
+		}
+	}
+	if !strings.Contains(worker, mirrorName) || !strings.Contains(worker, "--memory 8192m") {
+		t.Error("the script of a worker lost its mirror or its limit")
+	}
+}

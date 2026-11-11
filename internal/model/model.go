@@ -109,11 +109,6 @@ type Repo struct {
 	Enabled     bool   `json:"enabled"`
 	MaxParallel int    `json:"maxParallel"` // 0 = unlimited
 	LastJobAt   int64  `json:"lastJobAt"`
-	// Relay: its jobs may go to GitHub-hosted runners when no worker has
-	// room, through the relay workflow in the repository itself.
-	Relay      bool   `json:"relay"`
-	RelayOff   string `json:"relayOff"`   // why the failover switched itself off, if it did
-	RelayOffAt int64  `json:"relayOffAt"` // when
 }
 
 // NewRepo is a repository seen for the first time. A private one takes jobs
@@ -223,19 +218,41 @@ type Event struct {
 	WorkerID int64  `json:"workerId,omitempty"`
 }
 
-// Size is what a job of that name needs: CPUs that must be free on a worker
+// The two sizes. A job is standard unless its runs-on names the large one.
+const (
+	SizeStandard = "standard"
+	SizeLarge    = "large"
+)
+
+// Size is what a job of that size needs on a worker: CPUs that must be free
 // for it to start there (never a limit), and memory that is reserved for it
-// and is the limit of its containers.
+// and is the limit of its containers. On a pool it chooses the machine.
 type Size struct {
 	Name  string  `json:"name"`
 	CPUs  float64 `json:"cpus"`
 	MemMB int     `json:"memMb"`
+	// Aliases are other labels that mean this size, kept so that workflows
+	// written for earlier versions (size-s, size-m, ...) keep running.
+	Aliases []string `json:"aliases,omitempty"`
+}
+
+// Is reports whether a label means this size.
+func (z Size) Is(label string) bool {
+	if z.Name == label {
+		return true
+	}
+	for _, a := range z.Aliases {
+		if a == label {
+			return true
+		}
+	}
+	return false
 }
 
 // Settings are the values editable in the interface.
 type Settings struct {
 	BaseLabel        string `json:"baseLabel"`
-	Sizes            []Size `json:"sizes"`
+	Sizes            []Size `json:"sizes"` // standard and large
 	DefaultSize      string `json:"defaultSize"`
 	RunnerImage      string `json:"runnerImage"`
 	DindImage        string `json:"dindImage"`
@@ -252,13 +269,6 @@ type Settings struct {
 	FailureThreshold int    `json:"failureThreshold"` // failed starts in a row until unhealthy
 	NoOvertakeSec    int    `json:"noOvertakeSec"`    // a job waiting this long is not overtaken
 	HistoryDays      int    `json:"historyDays"`      // finished jobs and events are kept for
-
-	// Failover to GitHub-hosted runners, for the repositories that have it
-	// switched on (Repo.Relay).
-	RelayEnabled  bool   `json:"relayEnabled"`  // for all of them at once
-	RelayAfterSec int    `json:"relayAfterSec"` // a job waits this long for room before it goes to GitHub
-	RelayMax      int    `json:"relayMax"`      // GitHub-hosted runners at the same time
-	RelayMaxSize  string `json:"relayMaxSize"`  // the largest size that goes to GitHub
 }
 
 // DefaultSettings returns the values of a fresh installation.
@@ -266,12 +276,10 @@ func DefaultSettings() Settings {
 	return Settings{
 		BaseLabel: "ci-plane",
 		Sizes: []Size{
-			{Name: "size-s", CPUs: 2, MemMB: 4096},
-			{Name: "size-m", CPUs: 4, MemMB: 8192},
-			{Name: "size-l", CPUs: 8, MemMB: 16384},
-			{Name: "size-xl", CPUs: 16, MemMB: 32768},
+			{Name: SizeStandard, CPUs: 4, MemMB: 8192, Aliases: []string{"size-s", "size-m"}},
+			{Name: SizeLarge, CPUs: 8, MemMB: 16384, Aliases: []string{"size-l", "size-xl"}},
 		},
-		DefaultSize:      "size-m",
+		DefaultSize:      SizeStandard,
 		RunnerImage:      "ghcr.io/actions/actions-runner:latest",
 		DindImage:        "docker:dind",
 		MirrorImage:      "registry:2",
@@ -287,36 +295,66 @@ func DefaultSettings() Settings {
 		FailureThreshold: 3,
 		NoOvertakeSec:    300,
 		HistoryDays:      30,
-		RelayAfterSec:    180,
-		RelayMax:         5,
-		RelayMaxSize:     "size-m",
 	}
 }
 
-// RelayWorkerID is the worker of the runners that run on GitHub-hosted
-// machines, started through the relay workflow of their job's repository. It is no row of the
-// workers table: GitHub runs those machines, CI-Plane only asks for them.
-const RelayWorkerID int64 = -1
-
-// RelayWorkerName is how the interface names that worker.
-const RelayWorkerName = "GitHub-hosted"
-
-// RelayWorkflow is the file name of the relay workflow, in .github/workflows
-// of each repository that has the failover switched on.
-const RelayWorkflow = "ci-plane-relay.yml"
-
-// RelayFits reports whether a job of size z may go to a GitHub-hosted
-// runner: it asks for no more CPUs and memory than the largest size that
-// may go there.
-func (s Settings) RelayFits(z Size) bool {
-	m, ok := s.SizeByName(s.RelayMaxSize)
-	return ok && z.CPUs <= m.CPUs && z.MemMB <= m.MemMB
+// TwoSizes turns the sizes of an earlier version, any number of them with
+// names of the person's choice, into the two there are now. Standard is what
+// the default size was; large is the largest one, so no job gets less memory
+// than before. The old names stay as aliases of the size they became part
+// of. It reports whether anything changed.
+func (s Settings) TwoSizes() (Settings, bool) {
+	if len(s.Sizes) == 2 && s.Sizes[0].Name == SizeStandard && s.Sizes[1].Name == SizeLarge && s.DefaultSize == SizeStandard {
+		return s, false
+	}
+	def := DefaultSettings()
+	std, large := def.Sizes[0], def.Sizes[1]
+	std.Aliases, large.Aliases = nil, nil
+	if len(s.Sizes) > 0 {
+		base := s.Sizes[0]
+		for _, z := range s.Sizes {
+			if z.Is(s.DefaultSize) {
+				base = z
+			}
+		}
+		std.CPUs, std.MemMB = base.CPUs, base.MemMB
+		large.CPUs, large.MemMB = base.CPUs*2, base.MemMB*2
+		bigger := false
+		for _, z := range s.Sizes {
+			names := append([]string{z.Name}, z.Aliases...)
+			if z.MemMB > base.MemMB || (z.MemMB == base.MemMB && z.CPUs > base.CPUs) {
+				if !bigger || z.MemMB > large.MemMB {
+					large.CPUs, large.MemMB = z.CPUs, z.MemMB
+				}
+				bigger = true
+				large.Aliases = append(large.Aliases, names...)
+			} else {
+				std.Aliases = append(std.Aliases, names...)
+			}
+		}
+	}
+	drop := func(list []string) []string {
+		var out []string
+		for _, a := range list {
+			if a != SizeStandard && a != SizeLarge {
+				out = append(out, a)
+			}
+		}
+		return out
+	}
+	std.Aliases, large.Aliases = drop(std.Aliases), drop(large.Aliases)
+	s.Sizes, s.DefaultSize = []Size{std, large}, SizeStandard
+	return s, true
 }
 
-// SizeByName returns the size with that name.
+// RelayWorkflow is the file name of the relay workflow, in .github/workflows
+// of the relay repository of a pool.
+const RelayWorkflow = "ci-plane-relay.yml"
+
+// SizeByName returns the size that a name or an alias means.
 func (s Settings) SizeByName(name string) (Size, bool) {
 	for _, z := range s.Sizes {
-		if z.Name == name {
+		if z.Is(name) {
 			return z, true
 		}
 	}
@@ -334,11 +372,11 @@ func (s Settings) Match(labels []string) (size string, reason string) {
 			hasBase = true
 		case l == "self-hosted" || l == "linux" || l == "x64":
 		default:
-			if _, ok := s.SizeByName(l); ok {
-				if size != "" && size != l {
+			if z, ok := s.SizeByName(l); ok {
+				if size != "" && size != z.Name {
 					return "", "runs-on names two sizes: " + size + " and " + l
 				}
-				size = l
+				size = z.Name
 				continue
 			}
 			return "", "unknown label \"" + raw + "\" in runs-on"
@@ -350,17 +388,23 @@ func (s Settings) Match(labels []string) (size string, reason string) {
 	if size == "" {
 		size = s.DefaultSize
 	}
-	if _, ok := s.SizeByName(size); !ok {
+	z, ok := s.SizeByName(size)
+	if !ok {
 		return "", "the default size \"" + size + "\" does not exist"
 	}
-	return size, ""
+	return z.Name, ""
 }
 
 // RunnerLabels are the labels a runner of that size registers with. GitHub
 // gives a job to any idle runner that has all of the job's labels, so a job
 // without a size label may land on a runner of any size.
 func (s Settings) RunnerLabels(size string) []string {
-	return []string{"self-hosted", "linux", "x64", s.BaseLabel, size}
+	out := []string{"self-hosted", "linux", "x64", s.BaseLabel, size}
+	if z, ok := s.SizeByName(size); ok {
+		out = append(out[:4], z.Name)
+		out = append(out, z.Aliases...)
+	}
+	return out
 }
 
 // LabelKey is a canonical form of a label set.
@@ -386,4 +430,80 @@ func Serves(runnerLabels, jobLabels []string) bool {
 		}
 	}
 	return true
+}
+
+// Pool kinds: who runs the machines of a pool. All of them run GitHub
+// Actions jobs, so a pool differs from another only in the machine labels of
+// its relay workflow; the kind is the preset the person started from.
+const (
+	PoolGitHub     = "github"     // GitHub-hosted runners, standard or larger
+	PoolBlacksmith = "blacksmith" // Blacksmith runners
+	PoolCustom     = "custom"     // any other provider with a runs-on label
+)
+
+// ValidPoolKind reports whether k is one of the pool kinds.
+func ValidPoolKind(k string) bool { return k == PoolGitHub || k == PoolBlacksmith || k == PoolCustom }
+
+// Pool is a source of runners that CI-Plane does not run itself: machines of
+// GitHub or of another provider of GitHub Actions runners. CI-Plane starts a
+// runner there by running the relay workflow in the pool's repository on a
+// machine of the pool. To the scheduler a pool is one more worker with a
+// tier: it is used when no worker or pool of a lower tier has room.
+type Pool struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`     // one of the pool kinds
+	Repo     string `json:"repo"`     // owner/name of the private repository with the relay workflow
+	Tier     int    `json:"tier"`     // 1 is used first; workers of the same tier go first
+	Position int    `json:"position"` // order inside a tier
+	Enabled  bool   `json:"enabled"`
+	AfterSec int    `json:"afterSec"` // only for jobs that have waited this long; 0 = at once
+	Max      int    `json:"max"`      // runners at the same time
+	Standard string `json:"standard"` // runs-on label of the machine for standard jobs
+	Large    string `json:"large"`    // the same for large jobs; empty = they do not go here
+	// BudgetMin is how many minutes of runner time the pool may use per
+	// calendar month (UTC); 0 = no limit. CI-Plane counts them itself.
+	BudgetMin int `json:"budgetMin"`
+
+	// Kept by the engine.
+	Month       string `json:"month"`       // the month UsedSec belongs to, like 2026-11
+	UsedSec     int64  `json:"usedSec"`     // runner time used in Month by runners that are gone
+	Fails       int    `json:"fails"`       // failed starts in a row
+	PausedUntil int64  `json:"pausedUntil"` // no runner is started before; 0 = not paused
+	PauseReason string `json:"pauseReason"` // why the last start failed
+	CreatedAt   int64  `json:"createdAt"`
+}
+
+// WorkerID is the id the runners of the pool carry as their worker: pools
+// share the numbers below zero, workers the ones above.
+func (p Pool) WorkerID() int64 { return -p.ID }
+
+// IsPool reports whether a worker id is that of a pool.
+func IsPool(workerID int64) bool { return workerID < 0 }
+
+// Machine is the runs-on label of the machine for a job of that size, or ""
+// if the pool has none for it.
+func (p Pool) Machine(size string) string {
+	if size == SizeLarge {
+		return p.Large
+	}
+	return p.Standard
+}
+
+// poolPauses are the waits after the first, second, ... failed start in a
+// row on a pool. Short at first: most failures are a hiccup of the provider
+// that is over in minutes. Long in the end: a pool that fails for hours
+// (workflow removed, minutes used up) waits for the person or the next
+// month, and trying twice a day costs nothing while it notices the fix.
+var poolPauses = []int{60, 5 * 60, 15 * 60, 3600, 3 * 3600, 6 * 3600, 12 * 3600}
+
+// PoolPauseSec is how long a pool pauses after its n-th failed start in a row.
+func PoolPauseSec(n int) int {
+	if n < 1 {
+		return 0
+	}
+	if n > len(poolPauses) {
+		n = len(poolPauses)
+	}
+	return poolPauses[n-1]
 }

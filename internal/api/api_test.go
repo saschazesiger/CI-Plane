@@ -655,11 +655,12 @@ func TestAccountsReposAndSettings(t *testing.T) {
 	// Settings: field errors, then a save.
 	set := model.DefaultSettings()
 	set.Sizes = append(set.Sizes, model.Size{Name: "size-s", CPUs: 0, MemMB: 100})
-	set.DefaultSize = "huge"
+	set.Sizes[1].CPUs, set.Sizes[1].MemMB = 0, 100
+	set.Sizes[0].Aliases = []string{"Not A Label", "large"}
 	set.IdleTimeoutSec = 5
 	bad := r.expect(r.local_("PUT", "/api/settings", set), 400)
 	fields := bad.body["fields"].(map[string]any)
-	for _, k := range []string{"sizes.4.name", "sizes.4.cpus", "sizes.4.memMb", "defaultSize", "idleTimeoutSec"} {
+	for _, k := range []string{"sizes", "sizes.1.cpus", "sizes.1.memMb", "sizes.0.aliases", "idleTimeoutSec"} {
 		if fields[k] == nil {
 			t.Errorf("no error for %s: %v", k, fields)
 		}
@@ -671,13 +672,37 @@ func TestAccountsReposAndSettings(t *testing.T) {
 	if len(v.body["fields"].(map[string]any)) == 0 {
 		t.Fatal("validate found nothing")
 	}
+	// A large job never gets less memory than a standard one.
 	set = model.DefaultSettings()
-	set.Sizes[0].Name = " Size-Tiny "
-	set.DefaultSize = "size-m"
-	r.expect(r.local_("PUT", "/api/settings", set), 200)
+	set.Sizes[1].MemMB = set.Sizes[0].MemMB / 2
+	if bad = r.expect(r.local_("PUT", "/api/settings", set), 400); !strings.Contains(bad.raw, "sizes.1.memMb") {
+		t.Fatalf("large smaller than standard: %s", bad.raw)
+	}
+	asJSON := func(v any) string {
+		b, _ := json.Marshal(v)
+		return string(b)
+	}
+	// A save that does not name the other labels of a size keeps them:
+	// the interface only shows CPUs and memory.
+	body := map[string]any{}
+	b, _ := json.Marshal(model.DefaultSettings())
+	_ = json.Unmarshal(b, &body)
+	body["sizes"] = []map[string]any{{"name": "standard", "cpus": 3, "memMb": 6144}, {"name": "large", "cpus": 6, "memMb": 12288}}
+	body["defaultSize"] = "anything"
+	r.expect(r.local_("PUT", "/api/settings", body), 200)
 	got := r.expect(r.local_("GET", "/api/settings", nil), 200)
-	if got.body["settings"].(map[string]any)["sizes"].([]any)[0].(map[string]any)["name"] != "size-tiny" {
-		t.Fatalf("saved: %v", got.body)
+	saved := got.body["settings"].(map[string]any)
+	std := saved["sizes"].([]any)[0].(map[string]any)
+	if std["cpus"] != float64(3) || asJSON(std["aliases"]) != `["size-s","size-m"]` || saved["defaultSize"] != "standard" {
+		t.Fatalf("saved: %v", saved)
+	}
+	// Naming them changes them.
+	body["sizes"] = []map[string]any{{"name": "standard", "cpus": 3, "memMb": 6144, "aliases": []string{"small"}}, {"name": "large", "cpus": 6, "memMb": 12288, "aliases": []string{}}}
+	r.expect(r.local_("PUT", "/api/settings", body), 200)
+	got = r.expect(r.local_("GET", "/api/settings", nil), 200)
+	sizes := got.body["settings"].(map[string]any)["sizes"].([]any)
+	if asJSON(sizes[0].(map[string]any)["aliases"]) != `["small"]` || sizes[1].(map[string]any)["aliases"] != nil {
+		t.Fatalf("saved aliases: %v", sizes)
 	}
 }
 

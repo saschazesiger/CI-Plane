@@ -70,6 +70,20 @@ log: `docker logs ci-plane`.
 | Worker *disk-full*: *… GB of disk free, … GB are needed* | Docker's disk is nearly full. | **Clean up**, `docker image prune` for images that are not CI-Plane's, or lower *Least free disk*. |
 | *The Docker daemon of the runner did not start* | The worker's kernel or Docker refuses privileged containers or the nested daemon (rootless Docker, some LXC containers). | Use a VM or bare metal with a normal Docker Engine. |
 
+## 🏊 Pools
+
+**Check** on a pool lists what is missing. When a pool pauses, it shows why ([Pools](pools.md#-when-a-pool-fails)).
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| *The relay workflow is not in …* or *… is not on the branch … of …* | The workflow was never added, was removed, or is on another branch. | **Add the workflow on GitHub** on the pool, and commit it to the default branch. |
+| *The GitHub App of … may not start workflows* | The app has *Actions: read* only (apps of early versions). | Give it *Actions: Read and write* at the link shown and accept the new permission on its installation ([GitHub](github.md#permissions)). |
+| *The relay workflow in … is disabled* | GitHub disabled it, or someone did, under *Actions*. | Enable it under *Actions* in the relay repository. |
+| *The Cloudflare tunnel is not set up or not connected* | Runs on a pool reach CI-Plane through the tunnel. | Check the tunnel under **Settings** ([Cloudflare](cloudflare.md)). |
+| *This repository is public* | A pool's runs show the names of your runners. | Use a private relay repository. |
+| *the runner did not connect to GitHub within 600 seconds* | The provider had no machine free, the minutes or the spending limit are used up, or the machine's label is wrong. | Open the run in the relay repository's *Actions* tab: its log says why. Check the label against the provider's list. |
+| *its run of the relay workflow failed or was cancelled* | The run ended with an error, for example a runner image that could not be pulled. | The run's log on GitHub says why. A pool cannot pull an image that needs a login. |
+
 ## ⏳ Jobs
 
 The reason a job waits is shown in the job list and its timeline.
@@ -78,7 +92,7 @@ The reason a job waits is shown in the job list and its timeline.
 |---|---|
 | *No worker has been added yet* | Add a worker. |
 | *No worker is available: all are switched off, draining or offline* | Switch one on, stop draining, or bring one back. |
-| *No worker is large enough for size-xl (16 free CPUs, 32 GB)* | Use a smaller size, or add a larger worker (a worker offers its CPUs and memory minus 10 % and 1 GB). |
+| *No worker is large enough for large (8 free CPUs, 16 GB)* | Lower the values of the size under **Settings**, add a larger worker (a worker offers its CPUs and memory minus 10 % and 1 GB), or add a [pool](pools.md) with a machine for large jobs. |
 | *No worker has 4 free CPUs and 8 GB right now; the job starts when one does* | Normal under load: the workers are busy, with jobs or with other work, or their memory is reserved. The side sheet of a worker shows what takes its CPUs. Add workers, or use smaller sizes. |
 | *Waiting: GitHub does not register runners for … right now (…)* | GitHub refused the last runner; the text in brackets says why (suspended app, outage, rate limit). CI-Plane tries again by itself, at the latest after five minutes. |
 | *Waiting: the GitHub App of … is not installed on the account any more* | Install the app again from the **Repositories** page. |
@@ -87,7 +101,10 @@ The reason a job waits is shown in the job list and its timeline.
 | *Could not give the runners the CPU priority … on this worker* | The worker's CPU priority needs systemd and the right to start privileged containers. Check `systemctl --version` and `docker info` on the server, or set the worker's CPU priority to *normal*. |
 | *Waiting: … is limited to N parallel jobs* | Raise the limit on **Repositories** (0 means none). |
 | *Waiting to try again after a failed start* | The timeline shows the failed attempt and its cause; it is retried with growing waits. |
-| *The size … no longer exists in the settings* | The size was renamed or deleted after the job was queued. Re-run the job. |
+| *The size … no longer exists in the settings* | The job was queued under a size of an earlier version that is gone. Re-run the job. |
+| *…; … pauses until … after … failed starts in a row* | A pool failed to start runners and pauses; the pool on the **Workers** page says why. Fix the cause, then **Try again now** ([Pools](pools.md#-when-a-pool-fails)). |
+| *…; … has used its … minutes of this month* | The pool's budget is used up. Raise it, or wait for the next month ([Pools](pools.md#-budget)). |
+| *…; it goes to … once it has waited …* | The pool takes only jobs that have waited that long; the job starts there by itself, or earlier on a worker. |
 
 | Ignored with | Fix |
 |---|---|

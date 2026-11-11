@@ -16,6 +16,7 @@ import (
 	"github.com/saschazesiger/CI-Plane/internal/engine"
 	"github.com/saschazesiger/CI-Plane/internal/github"
 	"github.com/saschazesiger/CI-Plane/internal/model"
+	"github.com/saschazesiger/CI-Plane/internal/sim"
 	"github.com/saschazesiger/CI-Plane/internal/store"
 )
 
@@ -395,7 +396,7 @@ var (
 	_ api.Cloudflare = (*Cloudflare)(nil)
 )
 
-// Relay stands in for the failover to GitHub-hosted runners: the simulated
+// Relay stands in for what runs the runners of the pools: the simulated
 // world runs them, so there is nothing to check.
 type Relay struct{}
 
@@ -404,9 +405,20 @@ func (*Relay) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 }
 
 // Check implements api.Relay.
-func (*Relay) Check(context.Context, int64) api.RelayCheck {
+func (*Relay) Check(context.Context, string) api.RelayCheck {
 	return api.RelayCheck{Problems: []string{}}
 }
 
 // Workflow implements api.Relay.
 func (*Relay) Workflow() string { return github.RelayWorkflowYAML }
+
+// poolHosts runs the runners of pools in the simulated world. A pool the
+// visitor adds is there at once: nothing has to be reached.
+type poolHosts struct{ *sim.World }
+
+func (h poolHosts) Status(id int64) engine.WorkerStatus {
+	if !h.World.Status(id).Connected {
+		h.World.Connect(id)
+	}
+	return h.World.Status(id)
+}

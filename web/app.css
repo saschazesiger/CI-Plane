@@ -93,11 +93,6 @@
   min-width: 96px;
 }
 
-/* The failover of a repository: its switch, and the Check button once it is on. */
-.cp-col-relay {
-  min-width: 192px;
-}
-
 .cp-limit {
   width: 96px;
 }

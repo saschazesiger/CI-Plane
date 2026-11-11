@@ -477,16 +477,16 @@ async function loadWorkerStep(params) {
 /* ── Step 5: try it ───────────────────────────────────────────────── */
 
 function snippet(set) {
-  const def = set.sizes.find((z) => z.name === set.defaultSize);
+  const std = set.sizes[0];
   return 'jobs:\n  build:\n' +
-    `    runs-on: [self-hosted, ${set.baseLabel}]${def ? `   # ${def.name}: starts where ${def.cpus} CPUs are free, ${def.memMb / 1024} GB` : ''}\n` +
+    `    runs-on: [self-hosted, ${set.baseLabel}]${std ? `   # starts where ${std.cpus} CPUs are free, up to ${std.memMb / 1024} GB of memory` : ''}\n` +
     '    steps:\n      - uses: actions/checkout@v4\n      - run: echo "Hello from CI-Plane"\n';
 }
 
 function tryHtml(d) {
   const set = d.settings.settings;
-  const sizes = set.sizes.map((z) => `<tr data-ds-key="z-${esc(z.name)}"><th scope="row">${esc(z.name)}${z.name === set.defaultSize ? ' <span class="ds-tag ds-tone-neutral">Default</span>' : ''}</th>` +
-    `<td class="ds-num">${z.cpus}</td><td class="ds-num">${z.memMb / 1024} GB</td><td><code>[self-hosted, ${esc(set.baseLabel)}, ${esc(z.name)}]</code></td></tr>`).join('');
+  const sizes = set.sizes.map((z, i) => `<tr data-ds-key="z-${esc(z.name)}"><th scope="row">${i ? 'Large' : 'Standard'}</th>` +
+    `<td class="ds-num">${z.cpus}</td><td class="ds-num">${z.memMb / 1024} GB</td><td><code>[self-hosted, ${esc(set.baseLabel)}${i ? ', large' : ''}]</code></td></tr>`).join('');
   const jobs = d.jobs.jobs;
   const liveHtml = jobs.length
     ? empty({ done: true, title: 'The first job arrived', text: 'CI-Plane picked it up. Every job shows up under Jobs with its timeline.' }) +
@@ -498,7 +498,7 @@ function tryHtml(d) {
     `<p class="ds-muted">Use this runs-on line in a workflow of a connected repository. Jobs without the label ${esc(set.baseLabel)} stay on GitHub's own runners.</p>` +
     codeWithCopy('snippet', snippet(set), 'Example workflow') +
     '<h3 class="ds-card__subtitle">Sizes</h3>' +
-    '<p class="ds-muted">Add one size to runs-on for a smaller or larger job: it starts where that many CPUs are free and gets that much memory. You can change the sizes under Settings.</p>' +
+    '<p class="ds-muted">A job is standard. Add the label <code>large</code> to runs-on for a job that needs more: it starts where that many CPUs are free and may use that much memory. You can change both under Settings.</p>' +
     `<div class="ds-table-wrap"><table class="ds-table ds-density-tight"><caption class="ds-sr">Sizes</caption><thead><tr><th scope="col">Size</th><th scope="col" class="ds-num">Free CPUs to start</th><th scope="col" class="ds-num">Memory</th><th scope="col">runs-on</th></tr></thead><tbody>${sizes}</tbody></table></div>` +
     '<h3 class="ds-card__subtitle">Live</h3>' + `<div id="try-live">${liveHtml}</div>`;
 }

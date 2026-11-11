@@ -136,10 +136,12 @@ type RunnerSpec struct {
 	// never limited: a job may use every CPU nobody else wants, and the
 	// priority decides who gets it when the CPUs are contended.
 	CPUPriority string
-	// RepoID and Repo are the repository of the job the runner was started
-	// for; the relay runs it there.
-	RepoID int64
-	Repo   string
+	// On a pool: the runs-on label of the machine the runner runs on, and
+	// the pool's repository, whose relay workflow starts it there.
+	Machine string
+	Repo    string
+	// GitHubHosted says that the machine must be one of GitHub's own.
+	GitHubHosted bool
 }
 
 // Container is the runner container of one runner on a worker.
@@ -200,8 +202,8 @@ type Engine struct {
 	OnChange func()
 	// Logf, if set, receives diagnostics.
 	Logf func(format string, args ...any)
-	// Relay, if set, runs runners on GitHub-hosted machines: the worker
-	// model.RelayWorkerID. Set it before Run.
+	// Relay, if set, runs the runners of the pools (model.Pool). Set it
+	// before Run.
 	Relay Hosts
 
 	now  func() int64
@@ -231,7 +233,9 @@ func New(st *store.Store, forge Forge, fleet Fleet) *Engine {
 		id = newID()[:6]
 		return tx.Set("instance", []byte(id))
 	})
-	_ = st.Tx(relayPerRepository)
+	if err := st.Tx(migrate); err != nil {
+		panic("upgrade the database: " + err.Error())
+	}
 	return &Engine{
 		prefix: NamePrefix + id + "-",
 		st:     st, forge: forge, fleet: fleet,

@@ -27,10 +27,12 @@ because GitHub only sends webhooks to an https address.
 | Runners are registered on | the organisation | each repository |
 
 *Actions: write* is what lets CI-Plane have GitHub run a job again whose worker was lost
-([Reliability](reliability.md#-a-job-whose-worker-is-lost)). An app that was created by an earlier version of
+([Reliability](reliability.md#-a-job-whose-worker-is-lost)), and start the relay workflow of a
+[pool](pools.md) in its relay repository. An app that was created by an earlier version of
 CI-Plane only has *read*. To change it once: open the app on GitHub (*Settings → Developer settings → GitHub Apps →
 Edit*), set **Actions** to *Read and write* under *Permissions & events*, save, and accept the new permission where
-GitHub asks for it (the installation's page). Everything else works without it.
+GitHub asks for it (the installation's page). Everything else works without it; **Check** on a pool says when it is
+missing.
 
 On an organisation, runners are registered on the organisation and join its **Default** runner group. Personal
 accounts have no organisation-level runners, so CI-Plane registers them on each repository, which GitHub only allows
@@ -61,23 +63,25 @@ delete it under *Advanced*.
 A job is sent to CI-Plane with the label `ci-plane` in `runs-on`:
 
 ```yaml
-runs-on: [self-hosted, ci-plane, size-l]
+runs-on: [self-hosted, ci-plane]          # standard
+runs-on: [self-hosted, ci-plane, large]   # large
 ```
 
 | Rule | |
 |---|---|
 | Needed | `ci-plane` (the *Label of CI-Plane* in the settings) |
 | Allowed | `self-hosted`, `linux`, `x64`, and at most one size |
-| Size | `size-s`, `size-m`, `size-l`, `size-xl` by default; without one, the default size (`size-m`) |
+| Size | `large`; without one, the job is standard. `standard` may be named too, and the labels of earlier versions mean a size (`size-s`, `size-m`: standard; `size-l`, `size-xl`: large, by default) |
 | Case | labels are compared without regard to case |
 | Anything else | the job is *ignored* and the reason is shown under **Jobs**, for example *unknown label "gpu" in runs-on* |
 
 Jobs without `ci-plane` are not CI-Plane's business and are not stored. Each runner registers with
-`self-hosted, linux, x64, ci-plane, <size>`. GitHub gives a job to any idle runner that has all of its labels, so a job
-that names no size may run on a runner of any size. Name the size to get exactly that size.
+`self-hosted, linux, x64, ci-plane, <size>` and the earlier labels of its size, so workflows written for an earlier
+version keep running. GitHub gives a job to any idle runner that has all of its labels, so a standard job that names
+no size may run on a large runner; a large job only ever runs on a large one.
 
-Sizes are edited under **Settings → Sizes** (up to 12; names in lowercase letters, digits and dashes). They apply
-from the next job on.
+What each size needs on a worker (free CPUs, memory) is edited under **Settings → Sizes** and applies from the next
+job on. On a [pool](pools.md) the size chooses the machine.
 
 ## 🆚 Differences to `ubuntu-latest`
 
@@ -115,6 +119,7 @@ Build it, push it to a registry the workers can reach, and enter it under **Sett
 
 - Workers pull the image as the user `ci-plane`. For a private registry, log in once on every worker:
   `sudo -u ci-plane docker login ghcr.io`.
+  A [pool's](pools.md) machine cannot log in, so it can only use an image that needs no login.
 - The janitor pulls the image again once a day. Use a tag you move (`:latest`, `:2`), and rebuild when a new runner
   version comes out: GitHub refuses runners that are too old.
 - The first job after a change pulls the new image, which makes that start slower.

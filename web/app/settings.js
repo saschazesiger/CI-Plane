@@ -1,6 +1,5 @@
 /*
- * Settings: sizes, images, capacity, timeouts and the failover to GitHub
- * in one form whose edited fields are marked and wait in the save bar; the
+ * Settings: the two sizes, images, capacity and timeouts in one form whose edited fields are marked and wait in the save bar; the
  * Cloudflare tunnel with its allowed e-mail addresses; the password; the
  * version.
  */
@@ -8,7 +7,6 @@ import * as api from './api.js';
 import { ctx } from './main.js';
 import {
   $, $$, M, esc, icon, head, chip, busyButton, alertHtml, taskSteps, toast, toastError, setError, showFieldErrors, clearErrors,
-  day, clock, plural, cpus,
 } from './ui.js';
 
 const DS = window.DS;
@@ -33,14 +31,9 @@ const NUMBERS = {
     ['failureThreshold', 'A worker pauses after', 'failed starts', 1, 'In a row. CI-Plane tests it every 30 seconds and takes it back by itself.'],
     ['historyDays', 'Keep finished jobs and events for', 'days', 1, 'Older history is deleted.'],
   ],
-  relay: [
-    ['relayAfterSec', 'Waiting time', 'minutes', 60, 'How long a job waits for room on your workers before it goes to GitHub. Your workers always come first.'],
-    ['relayMax', 'At most', 'runners', 1, 'On GitHub at the same time. Your GitHub plan has its own limit of parallel jobs.'],
-  ],
 };
 
-/* relay: what GET /api/relay says; setupOpen: whether the relay workflow is shown. */
-const state = { saved: null, sizes: [], defaultSize: '', uid: 0, relay: null, setupOpen: false };
+const state = { saved: null };
 
 function numberField([key, label, unit, scale, hint], s) {
   const value = s[key] / scale;
@@ -57,96 +50,34 @@ function textField(key, label, hint, s) {
     `<small class="ds-field__hint" id="set-${key}-hint">${hint}</small></div>`;
 }
 
-/* ── Failover to GitHub ───────────────────────────────────────────── */
+/* The two sizes, in this order; only what a job of each needs can change. */
+const SIZES = [
+  ['Standard job', 'Every job without the label large.'],
+  ['Large job', 'A job with the label <code>large</code> in runs-on.'],
+];
 
-const RELAY_FILE = '.github/workflows/ci-plane-relay.yml';
-
-/** How many jobs run on GitHub-hosted runners now: it moves by itself. */
-function relayStatusHtml() {
-  const r = state.relay;
-  return r.active > 0 ? `<div class="cp-row">${chip('running', `${plural(r.active, 'job')} on GitHub-hosted runners now`)}</div>` : '';
+function sizeField(i, key, label, value, unit, scale) {
+  const id = `size-${i}-${key}`;
+  return `<div class="ds-field"><label class="ds-field__label" for="${id}">${label}${CHANGED}</label>` +
+    `<div class="ds-input-group"><input class="ds-input" id="${id}" type="number" step="0.5" min="0.5" inputmode="decimal" data-field="sizes.${i}.${key}" data-size="${i}" data-size-key="${key}" data-scale="${scale}" value="${value / scale}">` +
+    `<span class="ds-input-group__suffix" aria-hidden="true">${unit}</span></div></div>`;
 }
 
-/** The repositories with the failover on, or switched off by itself: they move by themselves too. */
-function relayReposHtml() {
-  const r = state.relay;
-  if (!r.repos.length) {
-    return '<p class="ds-muted">No repository has the failover switched on yet.</p>';
-  }
-  const rows = r.repos.map((p) => {
-    const onGitHub = r.perRepo[String(p.id)] || 0;
-    let status;
-    let meta;
-    let description = '';
-    if (p.relay) {
-      status = chip('ok', 'On', 'check');
-      if (onGitHub) meta = `${plural(onGitHub, 'job')} on GitHub-hosted runners now`;
-      else if (!state.saved.relayEnabled) meta = 'Its jobs wait for your workers until the failover is allowed above';
-      else meta = 'Waiting jobs go to GitHub when no worker has room';
-    } else {
-      status = chip('warning', 'Switched itself off', 'alert');
-      meta = `On ${day(p.relayOffAt)} at ${clock(p.relayOffAt)}`;
-      description = `<span class="ds-list__description">${esc(/[.!?]$/.test(p.relayOff) ? p.relayOff : `${p.relayOff}.`)}</span>`;
-    }
-    return `<li class="ds-list__item" data-ds-key="r${p.id}"><span class="ds-list__text">` +
-      `<span class="ds-list__title"><a class="ds-list__action" href="#/repositories?repo=${p.id}">${esc(p.fullName)}</a></span>` +
-      `${description}<span class="ds-list__meta">${meta}</span></span>${status}${icon('chevronRight', 20, 'ds-list__chevron')}</li>`;
+function sizesHtml(s) {
+  return s.sizes.map((z, i) => {
+    const [title, text] = SIZES[i] || [esc(z.name), ''];
+    const also = z.aliases && z.aliases.length ? ` Also: ${z.aliases.map((a) => `<code>${esc(a)}</code>`).join(', ')}.` : '';
+    return `<fieldset class="ds-fieldset ds-fieldset--outlined"><legend class="ds-fieldset__legend">${title}</legend><p class="ds-fieldset__hint">${text}${also}</p>` +
+      `<div class="ds-form-grid ds-form-grid--2">${sizeField(i, 'cpus', 'CPUs that must be free', z.cpus, 'CPUs', 1)}${sizeField(i, 'memMb', 'Memory', z.memMb, 'GB', 1024)}</div></fieldset>`;
   }).join('');
-  return `<ul class="ds-list ds-list--interactive" aria-labelledby="relay-repos-title">${rows}</ul>`;
-}
-
-function relayHtml(s) {
-  const r = state.relay;
-  if (!r || !r.available) return '';
-  const sizes = s.sizes.some((z) => z.name === s.relayMaxSize) ? s.sizes : [...s.sizes, { name: s.relayMaxSize }];
-  const sizeOptions = sizes.map((z) => `<option value="${esc(z.name)}"${z.name === s.relayMaxSize ? ' selected' : ''}>` +
-    `${esc(z.name)}${z.cpus ? `: ${cpus(z.cpus)} CPUs, ${Math.round(z.memMb / 102.4) / 10} GB` : ''}</option>`).join('');
-  return '<section class="ds-card" id="relay-card" aria-labelledby="relay-title"><h2 class="ds-card__title" id="relay-title">Failover to GitHub</h2>' +
-    '<p class="ds-muted">When no worker has had room for a job for the waiting time below, and its repository has the failover switched on, ' +
-      'CI-Plane starts its runner on a GitHub-hosted machine, through the relay workflow in that repository. ' +
-      'This uses the GitHub Actions minutes of the repository\'s owner.</p>' +
-    `<div class="ds-stack" id="relay-status"${relayStatusHtml() ? '' : ' hidden'}>${relayStatusHtml()}</div>` +
-    `<div class="ds-field"><label class="ds-check"><input type="checkbox" id="set-relayEnabled" name="relayEnabled" data-field="relayEnabled" aria-describedby="set-relayEnabled-hint"${s.relayEnabled ? ' checked' : ''}>` +
-      `<span>Allow the failover for repositories that have it switched on${CHANGED}</span></label>` +
-      '<small class="ds-field__hint" id="set-relayEnabled-hint">Clear it to keep every job on your workers, for example when the Actions minutes are used up. The switch of each repository stays as it is.</small></div>' +
-    '<div class="ds-form-grid ds-form-grid--3">' +
-      NUMBERS.relay.map((f) => numberField(f, s)).join('') +
-      '<div class="ds-field"><label class="ds-field__label" for="set-relayMaxSize">Largest size' + CHANGED + '</label>' +
-        `<select class="ds-input" id="set-relayMaxSize" name="relayMaxSize" data-field="relayMaxSize" aria-describedby="set-relayMaxSize-hint">${sizeOptions}</select>` +
-        '<small class="ds-field__hint" id="set-relayMaxSize-hint">Larger jobs always wait for a worker. A GitHub-hosted machine of a private repository has 2 CPUs and 7 GB.</small></div>' +
-    '</div>' +
-    '<div class="ds-card__section"><h3 class="ds-card__subtitle" id="relay-repos-title">Repositories</h3>' +
-    `<p class="ds-muted">Switch the failover on per repository on the <a href="#/repositories">Repositories</a> page. Each repository needs the workflow below as <code>${RELAY_FILE}</code> on its default branch; ` +
-      'Check there says what is missing and opens GitHub with the file filled in, ready to commit.</p>' +
-    `<div id="relay-repos">${relayReposHtml()}</div></div>` +
-    `<details class="ds-collapsible ds-disclosure" id="relay-setup"${state.setupOpen ? ' open' : ''}><summary>The relay workflow${icon('chevronDown', 20, 'ds-chevron')}</summary><div class="ds-disclosure__body ds-stack">` +
-      '<figure class="ds-code"><div class="ds-code__head ds-sm">' +
-        `<span class="ds-code__title">${RELAY_FILE}</span><span class="ds-code__actions">` +
-        `<button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Copy the relay workflow" data-tip="Copy" data-copy="relay-workflow">` +
-        `<span class="ds-icon-swap" data-swap="a"><span class="ds-icon-swap__a">${icon('copy', 20)}</span><span class="ds-icon-swap__b">${icon('check', 20)}</span></span></button></span></div>` +
-        `<pre class="ds-code-block" id="relay-workflow" tabindex="0" aria-label="The relay workflow, ${RELAY_FILE}"><code>${esc(r.workflow)}</code></pre></figure>` +
-    '</div></details>' +
-    '</section>';
-}
-
-function sizeRows() {
-  return state.sizes.map((z, i) => `<tr data-ds-key="z${z.uid}" data-size="${i}">` +
-    `<td data-label="Name"><input class="ds-input" id="size-${z.uid}-name" aria-label="Name of size ${i + 1}" data-field="sizes.${i}.name" data-size-field="name" value="${esc(z.name)}" autocomplete="off" spellcheck="false"></td>` +
-    `<td data-label="Free CPUs to start"><input class="ds-input" id="size-${z.uid}-cpus" type="number" step="0.5" min="0.5" inputmode="decimal" aria-label="Free CPUs that size ${i + 1} needs to start" data-field="sizes.${i}.cpus" data-size-field="cpus" value="${z.cpus}"></td>` +
-    `<td data-label="Memory (GB)"><input class="ds-input" id="size-${z.uid}-mem" type="number" step="0.5" min="0.5" inputmode="decimal" aria-label="Memory of size ${i + 1} in GB" data-field="sizes.${i}.memMb" data-size-field="memGb" value="${z.memMb / 1024}"></td>` +
-    `<td data-label="Default"><input class="ds-radio-input" type="radio" name="defaultSize" value="${i}" aria-label="Size ${i + 1} is the default"${z.name === state.defaultSize ? ' checked' : ''}></td>` +
-    `<td class="ds-table__actions"><button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" data-remove-size="${i}" aria-label="Remove size ${i + 1}" data-tip="Remove">${icon('close', 20)}</button></td></tr>`).join('');
 }
 
 function formHtml(s) {
   return '<form class="ds-stack ds-stack--page" id="settings-form" novalidate>' +
     '<section class="ds-card" aria-labelledby="sizes-title"><h2 class="ds-card__title" id="sizes-title">Sizes</h2>' +
-      `<p class="ds-muted">A job asks for a size with one more label in runs-on, for example <code>runs-on: [self-hosted, ${esc(s.baseLabel)}, size-l]</code>. A job starts on a worker that has the free CPUs of its size right now and can reserve its memory. The memory is also the limit of the job; the CPUs are not: a job may use every CPU nothing else wants. A job without a size gets the default.</p>` +
-      '<div class="ds-table-wrap"><table class="ds-table ds-table--stack"><caption class="ds-sr">Sizes</caption><thead><tr>' +
-        '<th scope="col">Name</th><th scope="col">Free CPUs to start</th><th scope="col">Memory (GB)</th><th scope="col">Default</th><th scope="col"><span class="ds-sr">Remove</span></th>' +
-      `</tr></thead><tbody id="sizes-body">${sizeRows()}</tbody></table></div>` +
-      `<p class="ds-meta" id="sizes-error" hidden></p>` +
-      `<button class="ds-btn ds-btn--text ds-add-row" type="button" data-act="add-size">${icon('plus', 16)}Add a size</button>` +
+      `<p class="ds-muted">There are two sizes. A job is standard unless its runs-on has the label <code>large</code>, like <code>runs-on: [self-hosted, ${esc(s.baseLabel)}, large]</code>. ` +
+        'On a worker, the size says how many CPUs must be free for the job to start and how much memory it may use; the CPUs are no limit, a job may use every CPU nothing else wants. On a pool, it picks the machine.</p>' +
+      `<div class="ds-grid-2">${sizesHtml(s)}</div>` +
     '</section>' +
     '<section class="ds-card" aria-labelledby="runner-title"><h2 class="ds-card__title" id="runner-title">Runner</h2>' +
       textField('runnerImage', 'Runner image', 'GitHub\'s official image. An image of your own must be built on it.', s) +
@@ -160,7 +91,6 @@ function formHtml(s) {
       `<section class="ds-card" aria-labelledby="cap-title"><h2 class="ds-card__title" id="cap-title">Capacity and disk</h2>${NUMBERS.capacity.map((f) => numberField(f, s)).join('')}</section>` +
       `<section class="ds-card" aria-labelledby="time-title"><h2 class="ds-card__title" id="time-title">Timeouts and limits</h2>${NUMBERS.timeouts.map((f) => numberField(f, s)).join('')}</section>` +
     '</div>' +
-    relayHtml(s) +
     '</form>';
 }
 
@@ -212,9 +142,10 @@ function passwordHtml() {
 
 function takeSaved(settings) {
   state.saved = settings;
-  state.sizes = settings.sizes.map((z) => ({ ...z, uid: ++state.uid }));
-  state.defaultSize = settings.defaultSize;
 }
+
+/* The fields of the form that are saved: the named ones and the sizes. */
+const FIELDS = '[name][data-field], [data-size]';
 
 /* A field's value as typed, and as saved: text and number fields, check boxes, selects. */
 const SELECT = (input) => input.tagName === 'SELECT';
@@ -239,10 +170,8 @@ function restore(input) {
   else input.value = input.defaultValue;
 }
 
-/** Renders the form anew from saved settings; the relay workflow stays open or closed as it is. */
+/** Renders the form anew from saved settings. */
 function renderForm(settings) {
-  const setup = $('#relay-setup');
-  if (setup) state.setupOpen = setup.open;
   DS.dom.morphHtml($('#settings-slot'), formHtml(settings));
 }
 
@@ -254,21 +183,14 @@ function collect() {
     if (input.type === 'checkbox') s[input.name] = input.checked;
     else s[input.name] = scale ? Math.round(Number(input.value) * scale) : input.value.trim();
   }
-  s.sizes = state.sizes.map(({ name, cpus, memMb }) => ({ name: name.trim().toLowerCase(), cpus, memMb }));
-  s.defaultSize = state.defaultSize;
-  return s;
-}
-
-function readSizes() {
-  for (const row of $$('#sizes-body tr')) {
-    const z = state.sizes[Number(row.getAttribute('data-size'))];
-    if (!z) continue;
-    z.name = $('[data-size-field="name"]', row).value;
-    z.cpus = Number($('[data-size-field="cpus"]', row).value);
-    z.memMb = Math.round(Number($('[data-size-field="memGb"]', row).value) * 1024);
+  // Without aliases: the server keeps the labels of earlier versions as they are.
+  s.sizes = state.saved.sizes.map(({ name, cpus, memMb }) => ({ name, cpus, memMb }));
+  for (const input of $$('#settings-form [data-size]')) {
+    const z = s.sizes[Number(input.getAttribute('data-size'))];
+    const scale = Number(input.getAttribute('data-scale'));
+    if (z) z[input.getAttribute('data-size-key')] = scale === 1 ? Number(input.value) : Math.round(Number(input.value) * scale);
   }
-  const def = $('input[name="defaultSize"]:checked');
-  if (def && state.sizes[Number(def.value)]) state.defaultSize = state.sizes[Number(def.value)].name;
+  return s;
 }
 
 /** Marks edited fields and shows the save bar while anything differs from what is saved. */
@@ -276,14 +198,11 @@ function syncChanges() {
   const form = $('#settings-form');
   if (!form) return;
   let changed = 0;
-  for (const input of $$('[name][data-field]', form)) {
+  for (const input of $$(FIELDS, form)) {
     const differs = typed(input) !== initial(input);
     input.closest('.ds-field').classList.toggle('ds-field--changed', differs);
     if (differs) changed += 1;
   }
-  const saved = JSON.stringify([state.saved.sizes.map(({ name, cpus, memMb }) => [name, cpus, memMb]), state.saved.defaultSize]);
-  const now = JSON.stringify([state.sizes.map(({ name, cpus, memMb }) => [name.trim().toLowerCase(), cpus, memMb]), state.defaultSize]);
-  if (saved !== now) changed += 1;
   if (!changed) {
     savebar.hide();
     return;
@@ -292,16 +211,10 @@ function syncChanges() {
   savebar.show();
 }
 
-function renderSizes() {
-  const body = $('#sizes-body');
-  M.flip(body, (morph) => DS.dom.morphHtml(body, sizeRows(), morph), { items: 'tr' });
-}
-
 async function save(event) {
   event.preventDefault();
   if (!savebar.shown) return;
   const form = $('#settings-form');
-  readSizes();
   clearErrors(form);
   const next = collect();
   let r;
@@ -310,7 +223,6 @@ async function save(event) {
   } catch (error) {
     const first = showFieldErrors(form, error.fields);
     if (error.fields && error.fields.sizes) toast(error.fields.sizes, { kind: 'error', key: 'settings' });
-    else if (error.fields && error.fields.defaultSize) toast(error.fields.defaultSize, { kind: 'error', key: 'settings' });
     else if (!first) toastError(error, 'settings');
     DS.overlay.announce(error.message, { assertive: true });
     return;
@@ -318,7 +230,7 @@ async function save(event) {
   takeSaved(r.settings);
   renderForm(r.settings);
   // The saved values are the fields' new defaults, so Discard returns to them.
-  for (const input of $$('#settings-form [name][data-field]')) settle(input);
+  for (const input of $$(FIELDS, $('#settings-form'))) settle(input);
   syncChanges();
   DS.overlay.closeToasts(null, { key: 'settings' });
   toast('Settings saved. They apply from the next job on.');
@@ -328,7 +240,7 @@ $('#savebar-discard').addEventListener('click', () => {
   if (!state.saved) return;
   takeSaved(state.saved);
   renderForm(state.saved);
-  for (const input of $$('#settings-form [name][data-field]')) restore(input);
+  for (const input of $$(FIELDS, $('#settings-form'))) restore(input);
   clearErrors($('#settings-form'));
   syncChanges();
 });
@@ -340,15 +252,12 @@ export default {
   topics: ['state', 'tasks'],
 
   async load() {
-    const [settings, cf, relay] = await Promise.all([api.get('/api/settings'), api.get('/api/cloudflare'), api.get('/api/relay')]);
-    return { ...settings, cf, relay };
+    const [settings, cf] = await Promise.all([api.get('/api/settings'), api.get('/api/cloudflare')]);
+    return { ...settings, cf };
   },
 
   html(d) {
     takeSaved(d.settings);
-    state.relay = d.relay;
-    // Open while no repository uses it; later it is only in the way.
-    state.setupOpen = !d.relay.repos.length;
     return head('Settings', 'Changes to sizes, images and limits wait in the bar at the bottom until you save them; they apply from the next job on.') +
       `<div id="settings-slot">${formHtml(d.settings)}</div>` +
       '<div class="ds-grid-2">' +
@@ -368,19 +277,11 @@ export default {
   mount(d) {
     const section = ctx.params.get('section');
     if (section === 'cloudflare') $('#tunnel-card').scrollIntoView({ block: 'start' });
-    else if (section === 'relay' && $('#relay-card')) $('#relay-card').scrollIntoView({ block: 'start' });
   },
 
   update(d) {
-    // The tunnel and the state of the failover move by themselves; the form keeps what is typed.
+    // The tunnel moves by itself; the form keeps what is typed.
     DS.dom.morphHtml($('#tunnel-card'), tunnelHtml(d.cf));
-    state.relay = d.relay;
-    if (!$('#relay-card')) return;
-    const status = $('#relay-status');
-    DS.dom.morphHtml(status, relayStatusHtml());
-    status.hidden = !status.firstElementChild;
-    const list = $('#relay-repos');
-    M.flip(list, (morph) => DS.dom.morphHtml(list, relayReposHtml(), morph), { items: '.ds-list__item', live: true });
   },
 
   leave() {
@@ -421,33 +322,12 @@ export default {
       return;
     }
     if (type === 'input' || type === 'change') {
-      if (t.closest('#settings-form')) {
-        if (t.closest('#sizes-body')) readSizes();
-        syncChanges();
-      }
+      if (t.closest('#settings-form')) syncChanges();
       return;
     }
     if (type !== 'click') return;
     let el;
-    if (t.closest('[data-act="add-size"]')) {
-      readSizes();
-      state.sizes.push({ name: `size-${state.sizes.length + 1}`, cpus: 2, memMb: 4096, uid: ++state.uid });
-      renderSizes();
-      syncChanges();
-      const rows = $$('#sizes-body input[data-size-field="name"]');
-      rows[rows.length - 1].select();
-    } else if ((el = t.closest('[data-remove-size]'))) {
-      readSizes();
-      const i = Number(el.getAttribute('data-remove-size'));
-      if (state.sizes.length === 1) {
-        toast('Keep at least one size: every job needs one.', { kind: 'info' });
-        return;
-      }
-      const [gone] = state.sizes.splice(i, 1);
-      if (gone.name === state.defaultSize) state.defaultSize = state.sizes[0].name;
-      renderSizes();
-      syncChanges();
-    } else if ((el = t.closest('[data-act="cf-remove"]'))) {
+    if ((el = t.closest('[data-act="cf-remove"]'))) {
       const ok = await DS.overlay.confirm({
         title: 'Remove the tunnel?',
         text: 'CI-Plane deletes the tunnel, its DNS record and the Access applications on Cloudflare and stops cloudflared. GitHub can no longer hand it jobs, and this page is reachable on your network only.',

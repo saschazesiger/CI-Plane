@@ -1,8 +1,8 @@
-# CI-Plane relay runner: the part of the relay workflow that runs a runner
-# of CI-Plane on a GitHub-hosted machine. Repositories with the failover on
-# call it from their .github/workflows/ci-plane-relay.yml, pinned to a tag;
-# CI-Plane checks in the run's OIDC token that this file, at that tag, is
-# what runs, so whoever can change the calling file cannot change this.
+# CI-Plane relay runner: runs one runner of CI-Plane on a machine of a pool
+# (GitHub-hosted, Blacksmith, ...). The repository of a pool calls it from
+# its .github/workflows/ci-plane-relay.yml, pinned to a tag; CI-Plane checks
+# in the run's OIDC token that this file, at that tag, is what runs, so
+# whoever can change the calling file cannot change this.
 name: CI-Plane relay runner
 
 on:
@@ -16,10 +16,14 @@ on:
         description: Address of CI-Plane (set by CI-Plane)
         required: true
         type: string
+      machine:
+        description: runs-on label of the machine (set by CI-Plane)
+        required: true
+        type: string
 
 jobs:
   runner:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.machine }}
     timeout-minutes: 360
     # Only what is needed to prove to CI-Plane that this run is the one it
     # started: the job that runs on the runner gets its own token from GitHub.
@@ -29,7 +33,6 @@ jobs:
       - name: Run the runner of CI-Plane
         env:
           CI_PLANE_URL: ${{ inputs.url }}
-          GH_TOKEN: ${{ github.token }}
           # A runner that gets no job within this time stops by itself, so
           # that it does not use minutes while CI-Plane cannot remove it.
           IDLE_MINUTES: 20
@@ -41,14 +44,14 @@ jobs:
           esac
           answer="$RUNNER_TEMP/ci-plane-answer.json"
           config="$RUNNER_TEMP/ci-plane-config"
-          touch "$answer" "$config"
-          chmod 600 "$answer" "$config"
+          script="$RUNNER_TEMP/ci-plane-start.sh"
+          touch "$answer" "$config" "$script"
+          chmod 600 "$answer" "$config" "$script"
 
-          # Collect the runner's configuration. CI-Plane hands it only to the
-          # run it started, which the OIDC token of this run proves. The
-          # token names CI-Plane's address as its audience: it is no good
-          # anywhere else, nor is a token made for another address any good
-          # here.
+          # Collect the runner. CI-Plane hands it only to the run it started,
+          # which the OIDC token of this run proves. The token names
+          # CI-Plane's address as its audience: it is no good anywhere else,
+          # nor is a token made for another address any good here.
           code=000
           for try in 1 2 3 4 5 6; do
             oidc=$(curl -fsSL --retry 3 -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
@@ -68,55 +71,43 @@ jobs:
             echo "::error::CI-Plane did not hand out the runner (HTTP $code): $(jq -r '.error // empty' "$answer" 2>/dev/null || true)"
             exit 1
           fi
+          name=$(jq -r .runner "$answer")
+          case "$name" in
+            ci-plane-*[!a-z0-9-]*|"") echo "::error::CI-Plane named no runner"; exit 1 ;;
+            ci-plane-*) ;;
+            *) echo "::error::CI-Plane named no runner"; exit 1 ;;
+          esac
           jq -j .jitconfig "$answer" > "$config"
+          jq -r .script "$answer" > "$script"
           rm -f "$answer"
           echo "::add-mask::$(cat "$config")"
 
-          # The latest runner, checked against the digest GitHub publishes.
-          release=$(curl -fsSL --retry 3 -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/actions/runner/releases/latest)
-          tag=$(jq -r .tag_name <<<"$release")
-          file="actions-runner-linux-x64-${tag#v}.tar.gz"
-          digest=$(jq -r --arg f "$file" '.assets[] | select(.name == $f) | .digest // ""' <<<"$release")
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$file" "https://github.com/actions/runner/releases/download/$tag/$file"
-          if [ -n "$digest" ]; then
-            echo "${digest#sha256:}  $RUNNER_TEMP/$file" | sha256sum -c --quiet -
-          fi
-          dir="$HOME/ci-plane-runner"
-          mkdir -p "$dir"
-          tar -xzf "$RUNNER_TEMP/$file" -C "$dir"
-          rm -f "$RUNNER_TEMP/$file"
-          cd "$dir"
+          # Start the runner the way a worker of CI-Plane does: in the same
+          # two containers (its own Docker daemon and the runner image), so
+          # the job finds the same environment as on a worker. The script
+          # comes from CI-Plane and reads the configuration from its input;
+          # neither the job nor the script sees the variables of this
+          # workflow.
+          { cat "$config"; echo; } | env -i HOME="$HOME" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin sh "$script"
+          rm -f "$config" "$script"
 
-          # The job gets the machine's usual environment, not the variables
-          # and tokens of this workflow. The configuration goes through the
-          # environment, not the command line, and its file is deleted.
-          env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL=/bin/bash LANG=C.UTF-8 \
-            PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-            bash -c 'set -a; . /etc/environment; set +a
-              ACTIONS_RUNNER_INPUT_JITCONFIG=$(cat "$1"); rm -f "$1"; export ACTIONS_RUNNER_INPUT_JITCONFIG
-              exec ./run.sh' relay "$config" &
-          runner=$!
-
-          # The runner exits after its one job. Until it takes one, a job
-          # log (_diag/Worker_*.log) does not exist.
+          # The runner exits after its one job. Until it takes one, there is
+          # no job log (_diag/Worker_*.log) in it.
           deadline=$(( $(date +%s) + IDLE_MINUTES * 60 ))
-          while kill -0 "$runner" 2>/dev/null; do
-            if compgen -G "_diag/Worker_*.log" >/dev/null; then
+          while [ "$(docker inspect -f '{{.State.Running}}' "$name-runner" 2>/dev/null)" = true ]; do
+            if docker exec "$name-runner" sh -c 'ls /home/runner/_diag/Worker_*.log >/dev/null 2>&1'; then
               break
             fi
             if [ "$(date +%s)" -ge "$deadline" ]; then
               echo "No job came within $IDLE_MINUTES minutes; stopping the runner."
-              pkill -INT -f "$dir/bin/Runner.Listener" || true
-              kill -INT "$runner" 2>/dev/null || true
-              for _ in $(seq 30); do
-                kill -0 "$runner" 2>/dev/null || break
-                sleep 1
-              done
-              pkill -KILL -f "$dir/bin/" || true
-              kill -KILL "$runner" 2>/dev/null || true
+              docker stop -t 20 "$name-runner" >/dev/null || true
               exit 0
             fi
             sleep 10
           done
-          wait "$runner"
+          code=$(docker wait "$name-runner")
+          if [ "$code" != 0 ]; then
+            echo "::error::The runner ended with code $code"
+            docker logs --tail 40 "$name-runner" 2>&1 || true
+          fi
+          exit "$code"

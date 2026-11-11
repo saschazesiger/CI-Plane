@@ -77,6 +77,14 @@ CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, level TEXT NOT NULL, kind TEXT NOT NULL,
   message TEXT NOT NULL, job_id INTEGER NOT NULL DEFAULT 0, runner_id TEXT NOT NULL DEFAULT '', worker_id INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS pools (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, kind TEXT NOT NULL, repo TEXT NOT NULL DEFAULT '',
+  tier INTEGER NOT NULL DEFAULT 1, position INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 1,
+  after_sec INTEGER NOT NULL DEFAULT 0, max INTEGER NOT NULL DEFAULT 1,
+  standard TEXT NOT NULL DEFAULT '', large TEXT NOT NULL DEFAULT '', budget_min INTEGER NOT NULL DEFAULT 0,
+  month TEXT NOT NULL DEFAULT '', used_sec INTEGER NOT NULL DEFAULT 0, fails INTEGER NOT NULL DEFAULT 0,
+  paused_until INTEGER NOT NULL DEFAULT 0, pause_reason TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL
+);
 CREATE INDEX IF NOT EXISTS events_job ON events(job_id);
 CREATE INDEX IF NOT EXISTS events_worker ON events(worker_id);
 `
@@ -104,9 +112,6 @@ func Open(dir string) (*Store, error) {
 		{"workers", "cpu_priority", "TEXT NOT NULL DEFAULT 'normal'"},
 		{"jobs", "run_attempt", "INTEGER NOT NULL DEFAULT 0"},
 		{"jobs", "rerun", "TEXT NOT NULL DEFAULT ''"},
-		{"repos", "relay", "INTEGER NOT NULL DEFAULT 0"},
-		{"repos", "relay_off", "TEXT NOT NULL DEFAULT ''"},
-		{"repos", "relay_off_at", "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		if err := addColumn(db, c.table, c.column, c.def); err != nil {
 			db.Close()
@@ -276,9 +281,16 @@ func (t *Tx) SetJSON(key string, v any) error {
 // Settings returns the settings, defaults filled in for anything unset.
 func (t *Tx) Settings() (model.Settings, error) {
 	s := model.DefaultSettings()
+	// Decoding into the default sizes would leave their aliases on sizes
+	// that are stored without any.
+	sizes := s.Sizes
+	s.Sizes = nil
 	err := t.GetJSON("settings", &s)
 	if errors.Is(err, ErrNotFound) {
 		err = nil
+	}
+	if s.Sizes == nil {
+		s.Sizes = sizes
 	}
 	return s, err
 }
@@ -338,11 +350,11 @@ func (t *Tx) DeleteAccount(id int64) error {
 	return err
 }
 
-const repoCols = `id, account_id, full_name, private, enabled, max_parallel, last_job_at, relay, relay_off, relay_off_at`
+const repoCols = `id, account_id, full_name, private, enabled, max_parallel, last_job_at`
 
 func scanRepo(r interface{ Scan(...any) error }) (model.Repo, error) {
 	var p model.Repo
-	err := r.Scan(&p.ID, &p.AccountID, &p.FullName, &p.Private, &p.Enabled, &p.MaxParallel, &p.LastJobAt, &p.Relay, &p.RelayOff, &p.RelayOffAt)
+	err := r.Scan(&p.ID, &p.AccountID, &p.FullName, &p.Private, &p.Enabled, &p.MaxParallel, &p.LastJobAt)
 	return p, err
 }
 
@@ -351,17 +363,16 @@ func scanRepo(r interface{ Scan(...any) error }) (model.Repo, error) {
 // repository that was private and is public now is switched off, like any
 // public repository that is new (see model.Repo.Enabled).
 func (t *Tx) UpsertRepo(p model.Repo) error {
-	_, err := t.q.Exec(`INSERT INTO repos(`+repoCols+`) VALUES(?,?,?,?,?,?,?,?,?,?)
+	_, err := t.q.Exec(`INSERT INTO repos(`+repoCols+`) VALUES(?,?,?,?,?,?,?)
 	  ON CONFLICT(id) DO UPDATE SET account_id=excluded.account_id, full_name=excluded.full_name,
 	    enabled=CASE WHEN repos.private=1 AND excluded.private=0 THEN 0 ELSE repos.enabled END, private=excluded.private`,
-		p.ID, p.AccountID, p.FullName, b2i(p.Private), b2i(p.Enabled), p.MaxParallel, p.LastJobAt, b2i(p.Relay), p.RelayOff, p.RelayOffAt)
+		p.ID, p.AccountID, p.FullName, b2i(p.Private), b2i(p.Enabled), p.MaxParallel, p.LastJobAt)
 	return err
 }
 
 // SaveRepo stores the user's choices of a repository.
 func (t *Tx) SaveRepo(p model.Repo) error {
-	_, err := t.q.Exec(`UPDATE repos SET enabled=?, max_parallel=?, last_job_at=?, relay=?, relay_off=?, relay_off_at=? WHERE id=?`,
-		b2i(p.Enabled), p.MaxParallel, p.LastJobAt, b2i(p.Relay), p.RelayOff, p.RelayOffAt, p.ID)
+	_, err := t.q.Exec(`UPDATE repos SET enabled=?, max_parallel=?, last_job_at=? WHERE id=?`, b2i(p.Enabled), p.MaxParallel, p.LastJobAt, p.ID)
 	return err
 }
 
@@ -471,6 +482,73 @@ func (t *Tx) Workers() ([]model.Worker, error) {
 // DeleteWorker removes a worker.
 func (t *Tx) DeleteWorker(id int64) error {
 	_, err := t.q.Exec(`DELETE FROM workers WHERE id=?`, id)
+	return err
+}
+
+// --- pools -----------------------------------------------------------------
+
+const poolCols = `id, name, kind, repo, tier, position, enabled, after_sec, max, standard, large, budget_min,
+ month, used_sec, fails, paused_until, pause_reason, created_at`
+
+func scanPool(r interface{ Scan(...any) error }) (model.Pool, error) {
+	var p model.Pool
+	err := r.Scan(&p.ID, &p.Name, &p.Kind, &p.Repo, &p.Tier, &p.Position, &p.Enabled, &p.AfterSec, &p.Max, &p.Standard, &p.Large,
+		&p.BudgetMin, &p.Month, &p.UsedSec, &p.Fails, &p.PausedUntil, &p.PauseReason, &p.CreatedAt)
+	return p, err
+}
+
+// AddPool stores a new pool and returns it with its id.
+func (t *Tx) AddPool(p model.Pool) (model.Pool, error) {
+	if p.CreatedAt == 0 {
+		p.CreatedAt = t.now()
+	}
+	res, err := t.q.Exec(`INSERT INTO pools(name, kind, repo, tier, position, enabled, after_sec, max, standard, large, budget_min,
+	  month, used_sec, fails, paused_until, pause_reason, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		p.Name, p.Kind, p.Repo, p.Tier, p.Position, b2i(p.Enabled), p.AfterSec, p.Max, p.Standard, p.Large, p.BudgetMin,
+		p.Month, p.UsedSec, p.Fails, p.PausedUntil, p.PauseReason, p.CreatedAt)
+	if err != nil {
+		return p, err
+	}
+	p.ID, err = res.LastInsertId()
+	return p, err
+}
+
+// SavePool stores a pool.
+func (t *Tx) SavePool(p model.Pool) error {
+	_, err := t.q.Exec(`UPDATE pools SET name=?, kind=?, repo=?, tier=?, position=?, enabled=?, after_sec=?, max=?, standard=?, large=?,
+	  budget_min=?, month=?, used_sec=?, fails=?, paused_until=?, pause_reason=? WHERE id=?`,
+		p.Name, p.Kind, p.Repo, p.Tier, p.Position, b2i(p.Enabled), p.AfterSec, p.Max, p.Standard, p.Large, p.BudgetMin,
+		p.Month, p.UsedSec, p.Fails, p.PausedUntil, p.PauseReason, p.ID)
+	return err
+}
+
+// Pool returns one pool.
+func (t *Tx) Pool(id int64) (model.Pool, error) {
+	p, err := scanPool(t.q.QueryRow(`SELECT `+poolCols+` FROM pools WHERE id=?`, id))
+	return p, notFound(err)
+}
+
+// Pools lists the pools by tier, then position.
+func (t *Tx) Pools() ([]model.Pool, error) {
+	rows, err := t.q.Query(`SELECT ` + poolCols + ` FROM pools ORDER BY tier, position, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []model.Pool{}
+	for rows.Next() {
+		p, err := scanPool(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// DeletePool removes a pool.
+func (t *Tx) DeletePool(id int64) error {
+	_, err := t.q.Exec(`DELETE FROM pools WHERE id=?`, id)
 	return err
 }
 
