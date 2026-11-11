@@ -71,10 +71,9 @@ job on.
 
 | Setting | Default | Range | Meaning |
 |---|---|---|---|
-| Failover to GitHub | off | | Jobs that found no room may go to GitHub-hosted runners. It switches itself off after as many failed starts in a row as *A worker pauses after*. |
-| Relay repository | | a private repository CI-Plane sees | Runs the relay workflow; its owner pays the minutes. |
+| Failover to GitHub | off | | Jobs that found no room may go to GitHub-hosted runners, for the repositories that have it switched on (**Repositories**). Each needs the relay workflow; its owner pays the minutes. |
 | Waiting time | 3 minutes | 0 minutes to 24 hours | How long a job waits for room on your workers first. |
-| At most | 5 runners | 1 to 100 | Runners on GitHub at the same time. |
+| At most | 5 runners | 1 to 100 | Runners on GitHub at the same time, all repositories together. |
 | Largest size | `size-m` | one of the sizes | Larger jobs always wait for a worker. |
 
 **Elsewhere**
@@ -82,7 +81,7 @@ job on.
 - **Cloudflare tunnel**: status, the e-mail addresses that may sign in, repair and removal ([Cloudflare](cloudflare.md)).
 - **Password**: change the admin password; other browsers are signed out.
 - **Workers** page: tier, on/off, draining and the [CPU priority](workers.md#-cpu-priority) of each worker.
-- **Repositories** page: on/off and parallel jobs per repository and per account ([GitHub](github.md#-limits-per-repository-and-account)).
+- **Repositories** page: on/off, the failover to GitHub ([Failover to GitHub](failover.md)) and parallel jobs per repository and per account ([GitHub](github.md#-limits-per-repository-and-account)).
 - **Workers** page: tiers, on/off, drain ([Workers](workers.md)).
 
 ## 💾 Backup and restore

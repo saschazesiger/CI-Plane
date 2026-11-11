@@ -8,29 +8,41 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/saschazesiger/CI-Plane/internal/api"
 	"github.com/saschazesiger/CI-Plane/internal/engine"
 	"github.com/saschazesiger/CI-Plane/internal/model"
 	"github.com/saschazesiger/CI-Plane/internal/store"
 )
 
-// RelayWorkflowYAML is the relay workflow the person adds to the relay
-// repository as .github/workflows/ci-plane-relay.yml.
+// RelayWorkflowYAML is the relay workflow the person adds to each repository
+// with the failover on, as .github/workflows/ci-plane-relay.yml. It only
+// calls the relay runner workflow of CI-Plane's own repository.
 //
 //go:embed relay-workflow.yml
 var RelayWorkflowYAML string
+
+// relayRunnerRefs are the versions of the relay runner workflow whose runs
+// may collect a runner, as the OIDC claim job_workflow_ref names them. The
+// workflow is pinned by a tag of CI-Plane's repository, so whoever may change
+// ci-plane-relay.yml in a repository can call it, but cannot change what
+// runs: a run of anything else is refused.
+var relayRunnerRefs = []string{
+	"saschazesiger/CI-Plane/.github/workflows/ci-plane-relay-runner.yml@refs/tags/relay-v1",
+}
 
 var _ engine.Hosts = (*Relay)(nil)
 
 // Relay runs runners on GitHub-hosted machines: it is the worker
 // model.RelayWorkerID of the engine. Starting a runner dispatches the relay
-// workflow in the relay repository with the runner's name; the run proves
-// with its OIDC token who it is and collects the runner's configuration
-// (ServeHTTP). Its runs are what containers are on a worker.
+// workflow in the repository of the job it is for, with the runner's name;
+// the run proves with its OIDC token who it is and collects the runner's
+// configuration (ServeHTTP). Its runs are what containers are on a worker.
 type Relay struct {
 	s *Service
 	// PublicURL returns the address under which GitHub reaches CI-Plane,
@@ -77,67 +89,49 @@ func pendingName(runner string) string { return "relay:" + runner }
 // until it is removed.
 type relayPending struct {
 	JITConfig   string `json:"jitconfig"`
-	At          int64  `json:"at"`          // when the workflow was dispatched, Unix ms
-	Repo        string `json:"repo"`        // the relay repository it was dispatched in
+	At          int64  `json:"at"`     // when the workflow was dispatched, Unix ms
+	RepoID      int64  `json:"repoId"` // the repository it was dispatched in
+	Repo        string `json:"repo"`
 	CollectedBy string `json:"collectedBy"` // run id that collected it
 	CollectedAt int64  `json:"collectedAt"`
 }
 
-// relayRepo is the relay repository as CI-Plane knows it.
+// relayRepo is a repository with its account, as CI-Plane knows them.
 type relayRepo struct {
 	model.Repo
 	account model.Account
 }
 
-// find looks a repository up among those the apps are installed on.
-// name empty means the relay repository of the settings.
-func (r *Relay) find(name string) (relayRepo, error) {
+// find looks a repository up among those the apps are installed on: by
+// id, or by name if id is 0. Its errors say what the person has to do.
+func (r *Relay) find(id int64, name string) (relayRepo, error) {
 	var out relayRepo
 	err := r.s.st.View(func(tx *store.Tx) error {
-		if name == "" {
-			set, err := tx.Settings()
-			if err != nil {
-				return err
-			}
-			if name = set.RelayRepo; name == "" {
-				return errors.New("no relay repository is chosen; choose one under Settings → Failover to GitHub")
-			}
-		}
 		repos, err := tx.Repos(0)
 		if err != nil {
 			return err
 		}
 		for _, p := range repos {
-			if strings.EqualFold(p.FullName, name) {
+			if (id != 0 && p.ID == id) || (id == 0 && strings.EqualFold(p.FullName, name)) {
 				out.Repo = p
 				break
 			}
 		}
 		if out.ID == 0 {
-			return fmt.Errorf("CI-Plane does not see the relay repository %s: install the GitHub App of %s on it", name, ownerOf(name))
+			if name == "" {
+				return errors.New("CI-Plane does not see this repository any more: install the GitHub App on it again")
+			}
+			return fmt.Errorf("CI-Plane does not see the repository %s any more: install the GitHub App of %s on it", name, ownerOf(name))
 		}
 		if out.account, err = tx.Account(out.AccountID); err != nil {
-			return fmt.Errorf("the account of the relay repository %s is not connected: %w", name, err)
+			return fmt.Errorf("the account of %s is not connected: %w", out.FullName, err)
+		}
+		if out.account.InstallationID == 0 {
+			return fmt.Errorf("the GitHub App of %s is not installed any more; install it again under Repositories", out.account.Owner)
 		}
 		return nil
 	})
 	return out, err
-}
-
-// repo is the relay repository of the settings, checked for starting
-// runners in it. Its errors say what the person has to do.
-func (r *Relay) repo() (relayRepo, error) {
-	out, err := r.find("")
-	if err != nil {
-		return out, err
-	}
-	switch {
-	case !out.Private:
-		return out, fmt.Errorf("the relay repository %s is public; use a private repository, because its runs show the names of your runners", out.FullName)
-	case out.account.InstallationID == 0:
-		return out, fmt.Errorf("the GitHub App of %s is not installed any more; install it again under Repositories", out.account.Owner)
-	}
-	return out, nil
 }
 
 func ownerOf(full string) string {
@@ -172,7 +166,7 @@ func (r *Relay) defaultBranch(ctx context.Context, rr relayRepo) (string, error)
 		return "", passing(err)
 	}
 	if out.DefaultBranch == "" {
-		return "", fmt.Errorf("the relay repository %s has no default branch; push the relay workflow to it first", rr.FullName)
+		return "", fmt.Errorf("the repository %s has no default branch; push the relay workflow to it first", rr.FullName)
 	}
 	r.mu.Lock()
 	r.branches[rr.FullName] = out.DefaultBranch
@@ -206,7 +200,7 @@ func passing(err error) error {
 // runner. A run left of an earlier start under the same name is stopped
 // first, so it can be repeated.
 func (r *Relay) Start(ctx context.Context, _ model.Worker, spec engine.RunnerSpec) error {
-	rr, err := r.repo()
+	rr, err := r.find(spec.RepoID, spec.Repo)
 	if err != nil {
 		return err
 	}
@@ -225,7 +219,7 @@ func (r *Relay) Start(ctx context.Context, _ model.Worker, spec engine.RunnerSpe
 		return err
 	}
 	now := r.s.now()
-	b, _ := json.Marshal(relayPending{JITConfig: spec.JITConfig, At: now.UnixMilli(), Repo: rr.FullName})
+	b, _ := json.Marshal(relayPending{JITConfig: spec.JITConfig, At: now.UnixMilli(), RepoID: rr.ID, Repo: rr.FullName})
 	if err := r.s.st.Tx(func(tx *store.Tx) error { return r.s.box.Put(tx, pendingName(spec.Name), b) }); err != nil {
 		return err
 	}
@@ -243,7 +237,7 @@ func (r *Relay) Start(ctx context.Context, _ model.Worker, spec engine.RunnerSpe
 		r.drop(spec.Name)
 		switch statusOf(err) {
 		case http.StatusNotFound:
-			return fmt.Errorf("the relay workflow .github/workflows/%s is not on the branch %s of %s: add it as shown under Settings → Failover to GitHub", model.RelayWorkflow, branch, rr.FullName)
+			return fmt.Errorf("the relay workflow .github/workflows/%s is not on the branch %s of %s: add it as shown under Repositories, or switch the failover of the repository off", model.RelayWorkflow, branch, rr.FullName)
 		case http.StatusUnprocessableEntity:
 			return fmt.Errorf("GitHub did not start the relay workflow in %s: %w. Replace the workflow with the one shown under Settings → Failover to GitHub", rr.FullName, err)
 		case http.StatusForbidden:
@@ -281,8 +275,11 @@ func (r *Relay) drop(name string) {
 // still runs, in the repository it was started in, and the runner is
 // forgotten.
 func (r *Relay) Remove(ctx context.Context, _ model.Worker, name string) error {
-	p, _ := r.pending(name)
-	rr, err := r.find(p.Repo)
+	p, ok := r.pending(name)
+	if !ok {
+		return nil // never dispatched, or removed already
+	}
+	rr, err := r.find(p.RepoID, p.Repo)
 	if err != nil {
 		// Neither repository is known any more: there is no run CI-Plane
 		// could stop. The runner's registration is gone, so a run that
@@ -307,7 +304,10 @@ func (r *Relay) Remove(ctx context.Context, _ model.Worker, name string) error {
 // at since that GitHub does not list yet cannot be cancelled: then stop
 // fails, and is tried again.
 func (r *Relay) stop(ctx context.Context, rr relayRepo, name string, since time.Time) error {
-	runs, err := r.runs(ctx, rr)
+	runs, err := r.runs(ctx, rr, since)
+	if errors.Is(err, errNoWorkflow) {
+		return nil // without the workflow there is no run of it
+	}
 	if err != nil {
 		return err
 	}
@@ -354,22 +354,31 @@ func (x relayRun) created() time.Time {
 // runs lists the runs of the relay workflow of the last relayWindow,
 // newest first. The address stays the same from call to call, so an
 // unchanged first page costs nothing of the rate limit.
-func (r *Relay) runs(ctx context.Context, rr relayRepo) ([]relayRun, error) {
+func (r *Relay) runs(ctx context.Context, rr relayRepo, from time.Time) ([]relayRun, error) {
 	wf, err := r.workflowPath(rr.FullName)
 	if err != nil {
 		return nil, err
 	}
 	since := r.s.now().Add(-relayWindow)
+	// Only runs since the oldest runner that is still there, rounded down to
+	// the hour: the address stays the same between listings, so an
+	// unchanged answer costs nothing of the rate limit, and the listing
+	// stays short in a repository with many runs.
+	if !from.IsZero() && from.After(since) {
+		since = from.Add(-2 * time.Minute).Truncate(time.Hour)
+	}
+	created := ">=" + since.UTC().Format("2006-01-02T15:04:05Z")
+	r.s.dropConditional(rr.AccountID, wf+"/runs?", "created="+url.QueryEscape(created))
 	var all []relayRun
 	for page := 1; page <= 20; page++ {
 		var out struct {
 			Runs []relayRun `json:"workflow_runs"`
 		}
-		q := url.Values{"event": {"workflow_dispatch"}, "per_page": {"100"}, "page": {strconv.Itoa(page)}}
+		q := url.Values{"event": {"workflow_dispatch"}, "per_page": {"100"}, "page": {strconv.Itoa(page)}, "created": {created}}
 		_, err := r.s.getJSON(ctx, call{method: http.MethodGet, path: wf + "/runs?" + q.Encode(), auth: authInstallation, account: rr.AccountID, conditional: true}, &out)
 		if err != nil {
 			if statusOf(err) == http.StatusNotFound {
-				return nil, fmt.Errorf("the relay workflow .github/workflows/%s is not in %s", model.RelayWorkflow, rr.FullName)
+				return nil, fmt.Errorf("%w: .github/workflows/%s is not in %s", errNoWorkflow, model.RelayWorkflow, rr.FullName)
 			}
 			return nil, passing(err)
 		}
@@ -388,13 +397,61 @@ func (r *Relay) runs(ctx context.Context, rr relayRepo) ([]relayRun, error) {
 // runners they run. A run that ended successfully is a runner that exited
 // by itself.
 func (r *Relay) List(ctx context.Context, _ model.Worker) ([]engine.Container, error) {
-	rr, err := r.repo()
-	if err != nil {
+	// The repositories with runners of the relay: those of the runners
+	// that were dispatched and not removed yet.
+	type group struct {
+		id     int64
+		name   string
+		oldest int64 // the earliest dispatch, Unix ms
+		names  []string
+	}
+	groups := map[string]*group{}
+	var keys []string
+	if err := r.s.st.View(func(tx *store.Tx) error {
+		var err error
+		keys, err = tx.Keys("secret:" + pendingName(""))
+		return err
+	}); err != nil {
 		return nil, err
 	}
-	runs, err := r.runs(ctx, rr)
-	if err != nil {
-		return nil, err
+	for _, k := range keys {
+		name := strings.TrimPrefix(k, "secret:"+pendingName(""))
+		p, ok := r.pending(name)
+		if !ok {
+			continue
+		}
+		key := strings.ToLower(p.Repo)
+		if p.RepoID != 0 {
+			key = strconv.FormatInt(p.RepoID, 10)
+		}
+		g := groups[key]
+		if g == nil {
+			g = &group{id: p.RepoID, name: p.Repo, oldest: p.At}
+			groups[key] = g
+		}
+		g.oldest = min(g.oldest, p.At)
+		g.names = append(g.names, name)
+	}
+	var runs []relayRun
+	unknown := map[string]bool{} // runners whose runs cannot be seen right now
+	for _, g := range groups {
+		rr, err := r.find(g.id, g.name)
+		var more []relayRun
+		if err == nil {
+			more, err = r.runs(ctx, rr, time.UnixMilli(g.oldest))
+		}
+		if err != nil {
+			// One repository that cannot be asked must neither hide the
+			// runs of the others nor have its own runners judged gone:
+			// their state is unknown, and they end like any runner whose
+			// job is over, or by the timeouts of the engine.
+			r.s.logf("relay: runs of %s: %v", g.name, err)
+			for _, n := range g.names {
+				unknown[n] = true
+			}
+			continue
+		}
+		runs = append(runs, more...)
 	}
 	r.mu.Lock()
 	recent := make(map[string]time.Time, len(r.recent))
@@ -421,6 +478,9 @@ func (r *Relay) List(ctx context.Context, _ model.Worker) ([]engine.Container, e
 			continue
 		}
 		by[run.Title] = c
+	}
+	for n := range unknown {
+		by[n] = engine.Container{Runner: n, Running: true}
 	}
 	// A run GitHub does not list yet was only just dispatched.
 	now := r.s.now()
@@ -452,20 +512,18 @@ func (r *Relay) Status(int64) engine.WorkerStatus {
 	return engine.WorkerStatus{Connected: true, At: r.s.now().UnixMilli()}
 }
 
-// Check says what keeps the failover from working, in words for the
-// person: nothing if it is ready.
-func (r *Relay) Check(ctx context.Context) []string {
-	var out []string
+// Check says what keeps the failover of a repository from working, in
+// words for the person, and where the relay workflow can be added if it is
+// missing.
+func (r *Relay) Check(ctx context.Context, repoID int64) api.RelayCheck {
+	out := api.RelayCheck{Problems: []string{}}
 	if r.PublicURL == nil || !strings.HasPrefix(r.PublicURL(), "https://") {
-		out = append(out, "The Cloudflare tunnel is not set up or not connected, so the relay workflow could not reach CI-Plane. Check it under Settings.")
+		out.Problems = append(out.Problems, "The Cloudflare tunnel is not set up or not connected, so the relay workflow could not reach CI-Plane. Check it under Settings.")
 	}
-	rr, err := r.repo()
+	rr, err := r.find(repoID, "")
 	if err != nil {
-		return append(out, upper(err.Error())+".")
-	}
-	wf, err := r.workflowPath(rr.FullName)
-	if err != nil {
-		return append(out, upper(err.Error())+".")
+		out.Problems = append(out.Problems, upper(err.Error())+".")
+		return out
 	}
 	// The app must be allowed to start workflows; apps created by early
 	// versions of CI-Plane may only read Actions.
@@ -474,7 +532,12 @@ func (r *Relay) Check(ctx context.Context) []string {
 	}
 	ip, _ := repoPath(rr.FullName)
 	if _, err := r.s.getJSON(ctx, call{method: http.MethodGet, path: ip + "/installation", auth: authApp, account: rr.AccountID}, &inst); err == nil && inst.Permissions["actions"] != "write" {
-		out = append(out, fmt.Sprintf("The GitHub App of %s may not start workflows. Give it \"Actions: Read and write\" at %s and accept the new permission on its installation.", rr.account.Owner, appPermissionsURL(rr.account)))
+		out.Problems = append(out.Problems, fmt.Sprintf("The GitHub App of %s may not start workflows. Give it \"Actions: Read and write\" at %s and accept the new permission on its installation.", rr.account.Owner, appPermissionsURL(rr.account)))
+	}
+	wf, err := r.workflowPath(rr.FullName)
+	if err != nil {
+		out.Problems = append(out.Problems, upper(err.Error())+".")
+		return out
 	}
 	var info struct {
 		State string `json:"state"`
@@ -482,11 +545,20 @@ func (r *Relay) Check(ctx context.Context) []string {
 	_, err = r.s.getJSON(ctx, call{method: http.MethodGet, path: wf, auth: authInstallation, account: rr.AccountID}, &info)
 	switch {
 	case statusOf(err) == http.StatusNotFound:
-		out = append(out, fmt.Sprintf("The relay workflow is not in %s. Add it as .github/workflows/%s on the default branch.", rr.FullName, model.RelayWorkflow))
+		out.Problems = append(out.Problems, fmt.Sprintf("The relay workflow is not in %s. Add it as .github/workflows/%s on the default branch.", rr.FullName, model.RelayWorkflow))
+		if branch, err := r.defaultBranch(ctx, rr); err == nil {
+			segs := strings.Split(branch, "/")
+			for i := range segs {
+				segs[i] = url.PathEscape(segs[i])
+			}
+			out.AddURL = r.s.WebURL + "/" + rr.FullName + "/new/" + strings.Join(segs, "/") + "?" + url.Values{
+				"filename": {".github/workflows/" + model.RelayWorkflow}, "value": {workflowBody()},
+			}.Encode()
+		}
 	case err != nil:
-		out = append(out, "GitHub could not be asked about the relay workflow: "+err.Error()+".")
+		out.Problems = append(out.Problems, "GitHub could not be asked about the relay workflow: "+err.Error()+".")
 	case info.State != "active":
-		out = append(out, fmt.Sprintf("The relay workflow in %s is disabled (%s). Enable it under Actions in the repository.", rr.FullName, info.State))
+		out.Problems = append(out.Problems, fmt.Sprintf("The relay workflow in %s is disabled (%s). Enable it under Actions in the repository.", rr.FullName, info.State))
 	}
 	return out
 }
@@ -506,14 +578,26 @@ func upper(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
+// workflowBody is the relay workflow without its leading comment, short
+// enough to travel in an address.
+func workflowBody() string {
+	lines := strings.SplitAfter(RelayWorkflowYAML, "\n")
+	i := 0
+	for i < len(lines) && strings.HasPrefix(lines[i], "#") {
+		i++
+	}
+	return strings.Join(lines[i:], "")
+}
+
 // Workflow returns the relay workflow.
 func (r *Relay) Workflow() string { return RelayWorkflowYAML }
 
 // ServeHTTP hands the configuration of its runner to a run of the relay
 // workflow: POST with the run's OIDC token as bearer token. It is reachable
 // from the internet, so it trusts nothing but the token: it must come from
-// the relay workflow on the default branch of the relay repository, started
-// by the GitHub App, and the run's title names the runner. Only that run
+// the relay workflow on the default branch of the repository the runner was
+// started for, started by its GitHub App, and the run's title names the
+// runner. Only that run
 // gets the configuration, and it may ask again for a few minutes in case
 // the answer was lost.
 func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -533,7 +617,17 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	ctx := req.Context()
-	claims, err := r.oidc.verify(ctx, strings.TrimSpace(token), model.RelayAudience)
+	// The token must be made for this address: a token a run made for
+	// another address (given to it by a changed workflow) is no good here.
+	base := ""
+	if r.PublicURL != nil {
+		base = strings.TrimRight(r.PublicURL(), "/")
+	}
+	if base == "" {
+		fail(http.StatusServiceUnavailable, "CI-Plane does not know its public address right now; try again")
+		return
+	}
+	claims, err := r.oidc.verify(ctx, strings.TrimSpace(token), base)
 	if err != nil {
 		var bad errToken
 		if errors.As(err, &bad) {
@@ -544,14 +638,15 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		fail(http.StatusServiceUnavailable, "CI-Plane cannot check the token right now; try again")
 		return
 	}
-	rr, err := r.repo()
-	if err != nil {
-		// Anybody can show a token of some repository: say nothing about ours.
-		r.s.logf("relay: run %s of %s asked for its runner: %v", claims.RunID, claims.Repository, err)
+	// Anybody can show a token of some repository: say nothing about ours.
+	repoID, _ := strconv.ParseInt(claims.RepositoryID, 10, 64)
+	rr, err := r.find(repoID, "")
+	if repoID == 0 || err != nil {
+		r.s.logf("relay: run %s of %s (%s) asked for a runner: %v", claims.RunID, claims.Repository, claims.RepositoryID, err)
 		fail(http.StatusForbidden, "CI-Plane hands out no runners to this repository")
 		return
 	}
-	if claims.RepositoryID != strconv.FormatInt(rr.ID, 10) || !strings.EqualFold(claims.Repository, rr.FullName) {
+	if !strings.EqualFold(claims.Repository, rr.FullName) {
 		r.s.logf("relay: refused a token of %s (%s)", claims.Repository, claims.RepositoryID)
 		fail(http.StatusForbidden, "CI-Plane hands out no runners to this repository")
 		return
@@ -559,7 +654,7 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	branch, err := r.defaultBranch(ctx, rr)
 	if err != nil {
 		r.s.logf("relay: default branch of %s: %v", rr.FullName, err)
-		fail(http.StatusServiceUnavailable, "CI-Plane cannot ask GitHub about the relay repository right now; try again")
+		fail(http.StatusServiceUnavailable, "CI-Plane cannot ask GitHub about the repository right now; try again")
 		return
 	}
 	switch {
@@ -568,6 +663,10 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	case claims.EventName != "workflow_dispatch" || !strings.EqualFold(claims.Actor, rr.account.Slug+"[bot]"):
 		fail(http.StatusForbidden, "only runs that CI-Plane started may collect runners")
+		return
+	case !slices.Contains(relayRunnerRefs, claims.JobWorkflowRef):
+		r.s.logf("relay: refused a run of %s from %s", rr.FullName, claims.JobWorkflowRef)
+		fail(http.StatusForbidden, "only the relay runner workflow of CI-Plane may collect runners; replace "+model.RelayWorkflow+" with the one CI-Plane shows")
 		return
 	}
 	// The run's title is the runner's name: GitHub says which run this is.
@@ -588,6 +687,9 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	now := r.s.now()
+	// A re-run of the run (by a person, with the same run id) is another
+	// attempt and gets nothing.
+	by := claims.RunID + "/" + claims.RunAttempt
 	var cfg relayPending
 	err = r.s.st.Tx(func(tx *store.Tx) error {
 		b, err := r.s.box.Get(tx, pendingName(name))
@@ -598,7 +700,9 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return err
 		}
 		switch {
-		case cfg.CollectedBy == claims.RunID && now.UnixMilli()-cfg.CollectedAt < relayRecollect.Milliseconds():
+		case cfg.RepoID != rr.ID && !(cfg.RepoID == 0 && strings.EqualFold(cfg.Repo, rr.FullName)):
+			return store.ErrNotFound // a runner of another repository
+		case cfg.CollectedBy == by && now.UnixMilli()-cfg.CollectedAt < relayRecollect.Milliseconds():
 			return nil // the same run again: its first answer was lost
 		case cfg.CollectedBy != "" || cfg.JITConfig == "":
 			return store.ErrNotFound
@@ -607,7 +711,7 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			// re-run of an earlier one, for instance.
 			return errStale
 		}
-		cfg.CollectedBy, cfg.CollectedAt = claims.RunID, now.UnixMilli()
+		cfg.CollectedBy, cfg.CollectedAt = by, now.UnixMilli()
 		b, _ = json.Marshal(cfg)
 		return r.s.box.Put(tx, pendingName(name), b)
 	})
@@ -629,4 +733,7 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"runner": name, "jitconfig": cfg.JITConfig})
 }
 
-var errStale = errors.New("stale run")
+var (
+	errStale      = errors.New("stale run")
+	errNoWorkflow = errors.New("the relay workflow is missing")
+)

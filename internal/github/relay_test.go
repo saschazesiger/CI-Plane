@@ -25,7 +25,7 @@ import (
 	"github.com/saschazesiger/CI-Plane/internal/store"
 )
 
-// relayFake is the relay repository on GitHub and the issuer of Actions
+// relayFake is a repository with the relay workflow on GitHub and the issuer of Actions
 // tokens; everything else goes to the fake GitHub of the env.
 type relayFake struct {
 	t   *testing.T
@@ -144,10 +144,11 @@ func newRelayFake(t *testing.T, e *env) *relayFake {
 func (f *relayFake) token(change func(map[string]any)) string {
 	now := time.Now().Unix()
 	claims := map[string]any{
-		"iss": f.srv.URL, "aud": model.RelayAudience, "exp": now + 300, "nbf": now - 5, "iat": now - 5,
-		"repository": "acme/relay", "repository_id": "555", "run_id": "9001",
+		"iss": f.srv.URL, "aud": "https://ci.example", "exp": now + 300, "nbf": now - 5, "iat": now - 5,
+		"repository": "acme/relay", "repository_id": "555", "run_id": "9001", "run_attempt": "1",
 		"workflow_ref": "acme/relay/.github/workflows/ci-plane-relay.yml@refs/heads/main", "event_name": "workflow_dispatch",
-		"actor": "ci-plane-acme[bot]",
+		"actor":            "ci-plane-acme[bot]",
+		"job_workflow_ref": relayRunnerRefs[0],
 	}
 	if change != nil {
 		change(claims)
@@ -190,15 +191,7 @@ func newRelayEnv(t *testing.T, private bool) *relayEnv {
 	e.addApp(1, "acme", "Organization", 77, "s")
 	f := newRelayFake(t, e)
 	if err := e.st.Tx(func(tx *store.Tx) error {
-		if err := tx.UpsertRepo(model.Repo{ID: 555, AccountID: 1, FullName: "acme/relay", Private: private, Enabled: true}); err != nil {
-			return err
-		}
-		set, err := tx.Settings()
-		if err != nil {
-			return err
-		}
-		set.RelayEnabled, set.RelayRepo = true, "acme/relay"
-		return tx.SaveSettings(set)
+		return tx.UpsertRepo(model.Repo{ID: 555, AccountID: 1, FullName: "acme/relay", Private: private, Enabled: true, Relay: true})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +219,7 @@ func (re *relayEnv) collect(token string) (int, map[string]string) {
 func TestRelayStartCollectAndEnd(t *testing.T) {
 	re := newRelayEnv(t, true)
 	name := "ci-plane-abc123-github-hosted-01"
-	spec := engine.RunnerSpec{Name: name, JITConfig: "SECRETJIT-1"}
+	spec := engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: "SECRETJIT-1"}
 	if err := re.relay.Start(ctx, model.Worker{ID: model.RelayWorkerID}, spec); err != nil {
 		t.Fatal(err)
 	}
@@ -276,6 +269,9 @@ func TestRelayStartCollectAndEnd(t *testing.T) {
 	re.fake.mu.Lock()
 	re.fake.runs = re.fake.runs[:1]
 	re.fake.mu.Unlock()
+	if code, out = re.collect(re.fake.token(func(c map[string]any) { c["run_attempt"] = "2" })); code != 404 {
+		t.Fatalf("collect by a re-run of the same run: %d %v", code, out)
+	}
 	re.advance(6 * time.Minute)
 	if code, out = re.collect(re.fake.token(nil)); code != 404 {
 		t.Fatalf("collect of the same run much later: %d %v", code, out)
@@ -298,7 +294,7 @@ func TestRelayStartCollectAndEnd(t *testing.T) {
 func TestRelayRemoveCancelsTheRunAndForgetsTheRunner(t *testing.T) {
 	re := newRelayEnv(t, true)
 	name := "ci-plane-abc123-github-hosted-02"
-	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Name: name, JITConfig: "SECRETJIT-2"}); err != nil {
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: "SECRETJIT-2"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := re.relay.Remove(ctx, model.Worker{}, name); err != nil {
@@ -310,8 +306,27 @@ func TestRelayRemoveCancelsTheRunAndForgetsTheRunner(t *testing.T) {
 	if code, _ := re.collect(re.fake.token(nil)); code != 404 {
 		t.Fatalf("a removed runner was handed out: %d", code)
 	}
+	// Its repository has no runner of the relay any more: nothing to list.
+	if list, err := re.relay.List(ctx, model.Worker{}); err != nil || len(list) != 0 {
+		t.Fatalf("after removal: %+v %v", list, err)
+	}
+	// A runner whose run is cancelled while it waits shows as ended, not normally.
+	other := "ci-plane-abc123-github-hosted-02b"
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: other, JITConfig: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	re.fake.mu.Lock()
+	run := re.fake.runs[len(re.fake.runs)-1]
+	run.Status, run.Conclusion = "completed", "cancelled"
+	re.fake.mu.Unlock()
 	list, _ := re.relay.List(ctx, model.Worker{})
-	if len(list) != 1 || list[0].Running || list[0].ExitCode == 0 {
+	found := false
+	for _, c := range list {
+		if c.Runner == other {
+			found = !c.Running && c.ExitCode != 0
+		}
+	}
+	if !found {
 		t.Fatalf("a cancelled run: %+v", list)
 	}
 }
@@ -320,7 +335,7 @@ func TestRelayStartAgainStopsTheEarlierRun(t *testing.T) {
 	re := newRelayEnv(t, true)
 	name := "ci-plane-abc123-github-hosted-03"
 	for i := 0; i < 2; i++ {
-		if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Name: name, JITConfig: fmt.Sprint("SECRETJIT-", i)}); err != nil {
+		if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: fmt.Sprint("SECRETJIT-", i)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -340,7 +355,7 @@ func TestRelayStartAgainStopsTheEarlierRun(t *testing.T) {
 func TestRelayRefusesTokensThatAreNotTheRelayRun(t *testing.T) {
 	re := newRelayEnv(t, true)
 	name := "ci-plane-abc123-github-hosted-04"
-	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Name: name, JITConfig: "SECRETJIT-4"}); err != nil {
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: "SECRETJIT-4"}); err != nil {
 		t.Fatal(err)
 	}
 	other, _ := rsa.GenerateKey(rand.Reader, 2048)
@@ -363,11 +378,22 @@ func TestRelayRefusesTokensThatAreNotTheRelayRun(t *testing.T) {
 			c["workflow_ref"] = "acme/relay/.github/workflows/ci-plane-relay.yml@refs/heads/evil"
 		}), 403},
 		{"other audience", re.fake.token(func(c map[string]any) { c["aud"] = "sts.amazonaws.com" }), 401},
+		{"made for another address", re.fake.token(func(c map[string]any) { c["aud"] = "https://evil.example" }), 401},
+		{"the old fixed audience", re.fake.token(func(c map[string]any) { c["aud"] = "ci-plane-relay" }), 401},
+		{"changed relay workflow", re.fake.token(func(c map[string]any) {
+			c["job_workflow_ref"] = "acme/relay/.github/workflows/ci-plane-relay.yml@refs/heads/main"
+		}), 403},
+		{"runner workflow of a fork", re.fake.token(func(c map[string]any) {
+			c["job_workflow_ref"] = "mallory/CI-Plane/.github/workflows/ci-plane-relay-runner.yml@refs/tags/relay-v1"
+		}), 403},
+		{"runner workflow at another ref", re.fake.token(func(c map[string]any) {
+			c["job_workflow_ref"] = "saschazesiger/CI-Plane/.github/workflows/ci-plane-relay-runner.yml@refs/heads/main"
+		}), 403},
 		{"expired", re.fake.token(func(c map[string]any) { c["exp"] = now - 600 }), 401},
 		{"other issuer", re.fake.token(func(c map[string]any) { c["iss"] = "https://evil.example" }), 401},
 		{"wrong key", re.fake.sign(map[string]any{"alg": "RS256", "kid": "k1"}, map[string]any{
-			"iss": re.fake.srv.URL, "aud": model.RelayAudience, "exp": now + 300, "repository": "acme/relay", "repository_id": "555",
-			"run_id": "9001", "workflow_ref": "acme/relay/.github/workflows/ci-plane-relay.yml@refs/heads/main", "event_name": "workflow_dispatch",
+			"iss": re.fake.srv.URL, "aud": "https://ci.example", "exp": now + 300, "repository": "acme/relay", "repository_id": "555",
+			"run_id": "9001", "run_attempt": "1", "workflow_ref": "acme/relay/.github/workflows/ci-plane-relay.yml@refs/heads/main", "event_name": "workflow_dispatch",
 		}, other), 401},
 		{"unknown key", re.fake.sign(map[string]any{"alg": "RS256", "kid": "k9"}, map[string]any{"iss": re.fake.srv.URL}, re.fake.key), 401},
 		{"alg none", base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","kid":"k1"}`)) + "." +
@@ -386,7 +412,7 @@ func TestRelayRefusesTokensThatAreNotTheRelayRun(t *testing.T) {
 
 func TestRelayErrorsSayWhatToDo(t *testing.T) {
 	re := newRelayEnv(t, true)
-	spec := engine.RunnerSpec{Name: "ci-plane-abc123-github-hosted-05", JITConfig: "SECRETJIT-5"}
+	spec := engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: "ci-plane-abc123-github-hosted-05", JITConfig: "SECRETJIT-5"}
 
 	re.url = ""
 	if err := re.relay.Start(ctx, model.Worker{}, spec); err == nil || !strings.Contains(err.Error(), "Cloudflare") {
@@ -401,8 +427,10 @@ func TestRelayErrorsSayWhatToDo(t *testing.T) {
 	if err := re.relay.Start(ctx, model.Worker{}, spec); err == nil || !strings.Contains(err.Error(), "ci-plane-relay.yml") {
 		t.Errorf("no workflow: %v", err)
 	}
-	if p := re.relay.Check(ctx); len(p) != 1 || !strings.Contains(p[0], "not in acme/relay") {
-		t.Errorf("check without workflow: %v", p)
+	if c := re.relay.Check(ctx, 555); len(c.Problems) != 1 || !strings.Contains(c.Problems[0], "not in acme/relay") ||
+		!strings.Contains(c.AddURL, "/acme/relay/new/main?filename=.github%2Fworkflows%2Fci-plane-relay.yml&value=name%3A+CI-Plane+relay") ||
+		len(c.AddURL) > 7500 {
+		t.Errorf("check without workflow: %d %+v", len(c.AddURL), c)
 	}
 	re.fake.noWorkflow = false
 
@@ -422,31 +450,27 @@ func TestRelayErrorsSayWhatToDo(t *testing.T) {
 		!strings.Contains(err.Error(), "github.com/organizations/acme/settings/apps/ci-plane-acme/permissions") {
 		t.Errorf("app without Actions write: %v", err)
 	}
-	if p := re.relay.Check(ctx); len(p) != 1 || !strings.Contains(p[0], "may not start workflows") {
+	if p := re.relay.Check(ctx, 555).Problems; len(p) != 1 || !strings.Contains(p[0], "may not start workflows") {
 		t.Errorf("check of an app without Actions write: %v", p)
 	}
 	re.fake.readOnly = false
 
 	re.fake.disabled = true
-	if p := re.relay.Check(ctx); len(p) != 1 || !strings.Contains(p[0], "disabled") {
+	if p := re.relay.Check(ctx, 555).Problems; len(p) != 1 || !strings.Contains(p[0], "disabled") {
 		t.Errorf("check of a disabled workflow: %v", p)
 	}
 	re.fake.disabled = false
-	if p := re.relay.Check(ctx); len(p) != 0 {
+	if p := re.relay.Check(ctx, 555).Problems; len(p) != 0 {
 		t.Errorf("check when ready: %v", p)
 	}
 
+	// A public repository runs the relay workflow like any other.
 	public := newRelayEnv(t, false)
-	if err := public.relay.Start(ctx, model.Worker{}, spec); err == nil || !strings.Contains(err.Error(), "public") {
+	if err := public.relay.Start(ctx, model.Worker{}, spec); err != nil {
 		t.Errorf("public repository: %v", err)
 	}
 
-	_ = re.st.Tx(func(tx *store.Tx) error {
-		set, _ := tx.Settings()
-		set.RelayRepo = "acme/unknown"
-		return tx.SaveSettings(set)
-	})
-	if p := re.relay.Check(ctx); len(p) != 1 || !strings.Contains(p[0], "install the GitHub App of acme") {
+	if p := re.relay.Check(ctx, 999).Problems; len(p) != 1 || !strings.Contains(p[0], "does not see") {
 		t.Errorf("check of an unknown repository: %v", p)
 	}
 }
@@ -454,7 +478,7 @@ func TestRelayErrorsSayWhatToDo(t *testing.T) {
 func TestRelayListsAJustDispatchedRunUntilGitHubShowsIt(t *testing.T) {
 	re := newRelayEnv(t, true)
 	name := "ci-plane-abc123-github-hosted-06"
-	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{Name: name, JITConfig: "x"}); err != nil {
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: "x"}); err != nil {
 		t.Fatal(err)
 	}
 	// GitHub has not listed the run yet.
@@ -471,4 +495,29 @@ func TestRelayListsAJustDispatchedRunUntilGitHubShowsIt(t *testing.T) {
 		t.Fatalf("a run GitHub never showed still counts: %+v", list)
 	}
 	_ = hidden
+}
+
+func TestRelayListKeepsOtherRepositoriesWhenOneCannotBeAsked(t *testing.T) {
+	re := newRelayEnv(t, true)
+	name := "ci-plane-abc123-github-hosted-07"
+	if err := re.relay.Start(ctx, model.Worker{}, engine.RunnerSpec{RepoID: 555, Repo: "acme/relay", Name: name, JITConfig: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	// A runner of a repository CI-Plane no longer sees.
+	other := "ci-plane-abc123-github-hosted-08"
+	b, _ := json.Marshal(relayPending{JITConfig: "y", At: time.Now().UnixMilli(), RepoID: 556, Repo: "acme/gone"})
+	if err := re.st.Tx(func(tx *store.Tx) error { return re.box.Put(tx, pendingName(other), b) }); err != nil {
+		t.Fatal(err)
+	}
+	list, err := re.relay.List(ctx, model.Worker{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, c := range list {
+		got[c.Runner] = c.Running
+	}
+	if !got[name] || !got[other] || len(got) != 2 {
+		t.Fatalf("list: %+v", list)
+	}
 }

@@ -65,6 +65,7 @@ func (s *Server) listAccounts(w http.ResponseWriter, r *http.Request) {
 type limitReq struct {
 	Enabled     *bool `json:"enabled"`
 	MaxParallel *int  `json:"maxParallel"`
+	Relay       *bool `json:"relay"` // repositories only: failover to GitHub-hosted runners
 }
 
 func (l limitReq) check() map[string]string {
@@ -133,6 +134,13 @@ func (s *Server) editRepo(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.MaxParallel != nil {
 			p.MaxParallel = *req.MaxParallel
+		}
+		if req.Relay != nil {
+			if *req.Relay {
+				// Switched on (again): why it switched itself off is history.
+				p.RelayOff, p.RelayOffAt = "", 0
+			}
+			p.Relay = *req.Relay
 		}
 		return tx.SaveRepo(p)
 	})
@@ -312,7 +320,6 @@ func cleanSettings(set *model.Settings) {
 	set.RunnerImage = strings.TrimSpace(set.RunnerImage)
 	set.DindImage = strings.TrimSpace(set.DindImage)
 	set.MirrorImage = strings.TrimSpace(set.MirrorImage)
-	set.RelayRepo = strings.Trim(strings.TrimSpace(set.RelayRepo), "/")
 	for i := range set.Sizes {
 		set.Sizes[i].Name = strings.ToLower(strings.TrimSpace(set.Sizes[i].Name))
 	}
@@ -324,18 +331,7 @@ func (s *Server) validateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cleanSettings(&set)
-	errs := checkSettings(set)
-	if err := s.d.Store.View(func(tx *store.Tx) error {
-		msg, err := checkRelayRepo(tx, set)
-		if msg != "" && errs["relayRepo"] == "" {
-			errs["relayRepo"] = msg
-		}
-		return err
-	}); err != nil {
-		s.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"fields": errs})
+	writeJSON(w, http.StatusOK, map[string]any{"fields": checkSettings(set)})
 }
 
 func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
@@ -344,18 +340,7 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cleanSettings(&set)
-	errs := checkSettings(set)
-	if err := s.d.Store.View(func(tx *store.Tx) error {
-		msg, err := checkRelayRepo(tx, set)
-		if msg != "" && errs["relayRepo"] == "" {
-			errs["relayRepo"] = msg
-		}
-		return err
-	}); err != nil {
-		s.fail(w, err)
-		return
-	}
-	if len(errs) > 0 {
+	if errs := checkSettings(set); len(errs) > 0 {
 		msg := "1 field needs attention."
 		if len(errs) > 1 {
 			msg = fmt.Sprintf("%d fields need attention.", len(errs))
@@ -363,15 +348,7 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "The settings were not saved: " + msg, Fields: errs})
 		return
 	}
-	if err := s.d.Store.Tx(func(tx *store.Tx) error {
-		if set.RelayEnabled {
-			// Switched on (again): what switched it off is history.
-			if err := tx.Delete(model.RelayOffKey); err != nil {
-				return err
-			}
-		}
-		return tx.SaveSettings(set)
-	}); err != nil {
+	if err := s.d.Store.Tx(func(tx *store.Tx) error { return tx.SaveSettings(set) }); err != nil {
 		s.fail(w, err)
 		return
 	}

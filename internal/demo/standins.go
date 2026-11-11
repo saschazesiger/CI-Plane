@@ -404,7 +404,9 @@ func (*Relay) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 }
 
 // Check implements api.Relay.
-func (*Relay) Check(context.Context) []string { return nil }
+func (*Relay) Check(context.Context, int64) api.RelayCheck {
+	return api.RelayCheck{Problems: []string{}}
+}
 
 // Workflow implements api.Relay.
 func (*Relay) Workflow() string { return github.RelayWorkflowYAML }

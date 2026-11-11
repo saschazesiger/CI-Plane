@@ -12,16 +12,17 @@ import (
 )
 
 type fakeRelay struct {
-	hits     int
-	problems []string
+	hits  int
+	check RelayCheck
+	asked int64
 }
 
 func (f *fakeRelay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.hits++
 	io.WriteString(w, `{"jitconfig":"x"}`)
 }
-func (f *fakeRelay) Check(context.Context) []string { return f.problems }
-func (f *fakeRelay) Workflow() string               { return "name: CI-Plane relay\n" }
+func (f *fakeRelay) Check(_ context.Context, repo int64) RelayCheck { f.asked = repo; return f.check }
+func (f *fakeRelay) Workflow() string                               { return "name: CI-Plane relay\n" }
 
 func TestRelayPathPassesTheTunnelWithoutAccess(t *testing.T) {
 	r := newRig(t, false)
@@ -44,9 +45,9 @@ func TestRelayPathPassesTheTunnelWithoutAccess(t *testing.T) {
 	}
 }
 
-func TestRelaySettings(t *testing.T) {
+func TestRelayPerRepository(t *testing.T) {
 	r := newRig(t, false)
-	relay := &fakeRelay{problems: []string{"The relay workflow is not in acme/relay."}}
+	relay := &fakeRelay{check: RelayCheck{Problems: []string{"The relay workflow is not in acme/site."}, AddURL: "https://github.com/acme/site/new/main"}}
 	r.srv.d.Relay = relay
 	r.signIn()
 	must := func(err error) {
@@ -59,80 +60,45 @@ func TestRelaySettings(t *testing.T) {
 		if err := tx.SaveAccount(model.Account{ID: 1, Owner: "acme", OwnerType: "Organization", InstallationID: 5, Enabled: true}); err != nil {
 			return err
 		}
-		if err := tx.UpsertRepo(model.Repo{ID: 7, AccountID: 1, FullName: "acme/relay", Private: true}); err != nil {
+		if err := tx.UpsertRepo(model.Repo{ID: 7, AccountID: 1, FullName: "acme/site", Private: true, Enabled: true}); err != nil {
 			return err
 		}
-		return tx.UpsertRepo(model.Repo{ID: 8, AccountID: 1, FullName: "acme/site", Private: false})
+		// It switched itself off earlier.
+		p, err := tx.Repo(7)
+		if err != nil {
+			return err
+		}
+		p.RelayOff, p.RelayOffAt = "minutes used up", 1
+		return tx.SaveRepo(p)
 	}))
 
 	set := model.DefaultSettings()
-	set.RelayEnabled = true
-	got := r.expect(r.local_("PUT", "/api/settings", set), 400)
-	if !strings.Contains(got.raw, "relayRepo") {
-		t.Fatalf("on without a repository: %s", got.raw)
-	}
-	for repo, want := range map[string]string{"acme/site": "public", "acme/other": "does not see", "not a repo": "owner/name"} {
-		set.RelayRepo = repo
-		got = r.expect(r.local_("POST", "/api/settings/validate", set), 200)
-		if !strings.Contains(got.raw, want) {
-			t.Errorf("%s: %s, want %q", repo, got.raw, want)
-		}
-	}
-	set.RelayRepo, set.RelayMaxSize = "acme/relay", "size-q"
-	if got = r.expect(r.local_("PUT", "/api/settings", set), 400); !strings.Contains(got.raw, "relayMaxSize") {
+	set.RelayEnabled, set.RelayMaxSize = true, "size-q"
+	if got := r.expect(r.local_("PUT", "/api/settings", set), 400); !strings.Contains(got.raw, "relayMaxSize") {
 		t.Fatalf("unknown size: %s", got.raw)
-	}
-
-	// It switched itself off; switching it on again clears that.
-	must(r.st.Tx(func(tx *store.Tx) error {
-		return tx.SetJSON(model.RelayOffKey, model.RelayOff{At: 1, Reason: "minutes used up"})
-	}))
-	state := r.expect(r.local_("GET", "/api/relay", nil), 200)
-	if off, _ := state.body["off"].(map[string]any); off["reason"] != "minutes used up" || state.body["workflow"] == "" {
-		t.Fatalf("state: %s", state.raw)
 	}
 	set.RelayMaxSize = "size-m"
 	r.expect(r.local_("PUT", "/api/settings", set), 200)
-	if state = r.expect(r.local_("GET", "/api/relay", nil), 200); state.body["off"] != nil {
-		t.Fatalf("still off after switching on: %s", state.raw)
-	}
-	repos, _ := state.body["repos"].([]any)
-	if len(repos) != 2 {
-		t.Fatalf("repos: %v", repos)
+
+	state := r.expect(r.local_("GET", "/api/relay", nil), 200)
+	if repos, _ := state.body["repos"].([]any); len(repos) != 1 || state.body["workflow"] == "" {
+		t.Fatalf("state: %s", state.raw)
 	}
 
-	check := r.expect(r.local_("POST", "/api/relay/check", nil), 200)
-	if !strings.Contains(check.raw, "not in acme/relay") {
+	// Switching it on for the repository clears why it went off.
+	got := r.expect(r.local_("PATCH", "/api/repos/7", map[string]any{"relay": true}), 200)
+	if repo, _ := got.body["repo"].(map[string]any); repo["relay"] != true || repo["relayOff"] != "" {
+		t.Fatalf("repo: %s", got.raw)
+	}
+	// Other changes leave it on.
+	got = r.expect(r.local_("PATCH", "/api/repos/7", map[string]any{"maxParallel": 2}), 200)
+	if repo, _ := got.body["repo"].(map[string]any); repo["relay"] != true {
+		t.Fatalf("repo after another change: %s", got.raw)
+	}
+
+	check := r.expect(r.local_("POST", "/api/relay/check", map[string]any{"repo": 7}), 200)
+	if relay.asked != 7 || !strings.Contains(check.raw, "not in acme/site") || check.body["addUrl"] == "" {
 		t.Fatalf("check: %s", check.raw)
 	}
-}
-
-func TestRelayRepositoryStaysWhileRunnersUseIt(t *testing.T) {
-	r := newRig(t, false)
-	r.signIn()
-	if err := r.st.Tx(func(tx *store.Tx) error {
-		if err := tx.SaveAccount(model.Account{ID: 1, Owner: "acme", OwnerType: "Organization", InstallationID: 5, Enabled: true}); err != nil {
-			return err
-		}
-		for _, p := range []model.Repo{{ID: 7, AccountID: 1, FullName: "acme/relay", Private: true}, {ID: 9, AccountID: 1, FullName: "acme/relay2", Private: true}} {
-			if err := tx.UpsertRepo(p); err != nil {
-				return err
-			}
-		}
-		set := model.DefaultSettings()
-		set.RelayEnabled, set.RelayRepo = true, "acme/relay"
-		if err := tx.SaveSettings(set); err != nil {
-			return err
-		}
-		return tx.SaveRunner(model.Runner{ID: "r1", Name: "ci-plane-x-github-hosted-r1", WorkerID: model.RelayWorkerID, AccountID: 1, State: model.RunnerBusy})
-	}); err != nil {
-		t.Fatal(err)
-	}
-	set := model.DefaultSettings()
-	set.RelayEnabled, set.RelayRepo = true, "acme/relay2"
-	if got := r.expect(r.local_("PUT", "/api/settings", set), 400); !strings.Contains(got.raw, "1 runners run through acme/relay") {
-		t.Fatalf("changed under a running runner: %s", got.raw)
-	}
-	set.RelayRepo, set.RelayAfterSec = "acme/relay", 60
-	r.expect(r.local_("PUT", "/api/settings", set), 200)
+	r.expect(r.local_("POST", "/api/relay/check", map[string]any{"repo": 99}), 404)
 }

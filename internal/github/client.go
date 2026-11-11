@@ -355,3 +355,17 @@ func nextCursor(h http.Header) string {
 	}
 	return ""
 }
+
+// dropConditional forgets the cached answers of an account for addresses
+// that start with prefix, except those that contain keep: a listing whose
+// query moved on would otherwise keep its old answers for ever.
+func (s *Service) dropConditional(account int64, prefix, keep string) {
+	start := strconv.FormatInt(account, 10) + "|" + prefix
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k := range s.cond {
+		if strings.HasPrefix(k, start) && !strings.Contains(k, keep) {
+			delete(s.cond, k)
+		}
+	}
+}

@@ -144,9 +144,17 @@ type Relay interface {
 	// ServeHTTP hands runs of the relay workflow their runner
 	// (/webhook/relay on the tunnel).
 	http.Handler
-	// Check says what keeps the failover from working, one sentence per
-	// problem; nothing if it is ready.
-	Check(ctx context.Context) []string
-	// Workflow is the relay workflow to add to the relay repository.
+	// Check says what keeps the failover of a repository from working.
+	Check(ctx context.Context, repoID int64) RelayCheck
+	// Workflow is the relay workflow to add to each repository with the
+	// failover on.
 	Workflow() string
+}
+
+// RelayCheck is what keeps the failover of a repository from working.
+type RelayCheck struct {
+	Problems []string `json:"problems"` // one sentence each; none if it is ready
+	// AddURL opens GitHub's editor with the relay workflow filled in, when
+	// it is missing from the repository.
+	AddURL string `json:"addUrl,omitempty"`
 }

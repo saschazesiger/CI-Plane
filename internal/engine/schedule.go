@@ -228,6 +228,9 @@ func (e *Engine) schedule(s *snapshot) bool {
 			if !inScope(acc, r, j) || !model.Serves(r.Labels, j.Labels) {
 				continue
 			}
+			if r.WorkerID == model.RelayWorkerID && r.RepoID != j.RepoID {
+				continue // its minutes and its failover belong to another repository
+			}
 			if e.designate(j.ID, r.ID) {
 				spares = append(spares[:i], spares[i+1:]...)
 				adopted = true
@@ -348,8 +351,8 @@ func (e *Engine) place(s *snapshot, j model.Job, w model.Worker, z model.Size, c
 	msg := fmt.Sprintf("Worker %s chosen (tier %d, %.1f CPUs and %.0f GB free); starting the runner %s",
 		w.Name, w.Tier, c.FreeCPUs(), float64(c.MemMB-c.UsedMemMB)/1024, r.Name)
 	if w.ID == model.RelayWorkerID {
-		msg = fmt.Sprintf("No worker had room for %s; starting the runner %s on a GitHub-hosted machine through %s",
-			span(int((s.now-j.WaitingSince)/1000)), r.Name, s.set.RelayRepo)
+		msg = fmt.Sprintf("No worker had room for %s; starting the runner %s on a GitHub-hosted machine through the relay workflow of %s",
+			span(int((s.now-j.WaitingSince)/1000)), r.Name, j.Repo)
 	}
 	ok := false
 	err := e.st.Tx(func(tx *store.Tx) error {

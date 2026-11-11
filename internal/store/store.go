@@ -104,6 +104,9 @@ func Open(dir string) (*Store, error) {
 		{"workers", "cpu_priority", "TEXT NOT NULL DEFAULT 'normal'"},
 		{"jobs", "run_attempt", "INTEGER NOT NULL DEFAULT 0"},
 		{"jobs", "rerun", "TEXT NOT NULL DEFAULT ''"},
+		{"repos", "relay", "INTEGER NOT NULL DEFAULT 0"},
+		{"repos", "relay_off", "TEXT NOT NULL DEFAULT ''"},
+		{"repos", "relay_off_at", "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		if err := addColumn(db, c.table, c.column, c.def); err != nil {
 			db.Close()
@@ -234,6 +237,24 @@ func (t *Tx) Delete(key string) error {
 	return err
 }
 
+// Keys lists the keys that start with prefix.
+func (t *Tx) Keys(prefix string) ([]string, error) {
+	rows, err := t.q.Query(`SELECT key FROM kv WHERE substr(key, 1, ?) = ? ORDER BY key`, len(prefix), prefix)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
 // GetJSON decodes the value of a key into v; ErrNotFound if unset.
 func (t *Tx) GetJSON(key string, v any) error {
 	b, err := t.Get(key)
@@ -317,11 +338,11 @@ func (t *Tx) DeleteAccount(id int64) error {
 	return err
 }
 
-const repoCols = `id, account_id, full_name, private, enabled, max_parallel, last_job_at`
+const repoCols = `id, account_id, full_name, private, enabled, max_parallel, last_job_at, relay, relay_off, relay_off_at`
 
 func scanRepo(r interface{ Scan(...any) error }) (model.Repo, error) {
 	var p model.Repo
-	err := r.Scan(&p.ID, &p.AccountID, &p.FullName, &p.Private, &p.Enabled, &p.MaxParallel, &p.LastJobAt)
+	err := r.Scan(&p.ID, &p.AccountID, &p.FullName, &p.Private, &p.Enabled, &p.MaxParallel, &p.LastJobAt, &p.Relay, &p.RelayOff, &p.RelayOffAt)
 	return p, err
 }
 
@@ -330,16 +351,17 @@ func scanRepo(r interface{ Scan(...any) error }) (model.Repo, error) {
 // repository that was private and is public now is switched off, like any
 // public repository that is new (see model.Repo.Enabled).
 func (t *Tx) UpsertRepo(p model.Repo) error {
-	_, err := t.q.Exec(`INSERT INTO repos(`+repoCols+`) VALUES(?,?,?,?,?,?,?)
+	_, err := t.q.Exec(`INSERT INTO repos(`+repoCols+`) VALUES(?,?,?,?,?,?,?,?,?,?)
 	  ON CONFLICT(id) DO UPDATE SET account_id=excluded.account_id, full_name=excluded.full_name,
 	    enabled=CASE WHEN repos.private=1 AND excluded.private=0 THEN 0 ELSE repos.enabled END, private=excluded.private`,
-		p.ID, p.AccountID, p.FullName, b2i(p.Private), b2i(p.Enabled), p.MaxParallel, p.LastJobAt)
+		p.ID, p.AccountID, p.FullName, b2i(p.Private), b2i(p.Enabled), p.MaxParallel, p.LastJobAt, b2i(p.Relay), p.RelayOff, p.RelayOffAt)
 	return err
 }
 
 // SaveRepo stores the user's choices of a repository.
 func (t *Tx) SaveRepo(p model.Repo) error {
-	_, err := t.q.Exec(`UPDATE repos SET enabled=?, max_parallel=?, last_job_at=? WHERE id=?`, b2i(p.Enabled), p.MaxParallel, p.LastJobAt, p.ID)
+	_, err := t.q.Exec(`UPDATE repos SET enabled=?, max_parallel=?, last_job_at=?, relay=?, relay_off=?, relay_off_at=? WHERE id=?`,
+		b2i(p.Enabled), p.MaxParallel, p.LastJobAt, b2i(p.Relay), p.RelayOff, p.RelayOffAt, p.ID)
 	return err
 }
 

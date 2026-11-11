@@ -1,7 +1,8 @@
 # CI-Plane relay: runs one runner of CI-Plane on a GitHub-hosted machine
-# when none of your own workers has room for a job. CI-Plane starts this
-# workflow by itself, one run per runner; runs started by hand get nothing.
-# Keep this repository private: its runs show the names of your runners.
+# when none of your own workers has room for a job of this repository.
+# CI-Plane starts this workflow by itself, one run per runner, and only if
+# the failover is switched on for this repository; runs started by hand get
+# nothing. Each run uses the GitHub Actions minutes of the repository's owner.
 name: CI-Plane relay
 run-name: ${{ inputs.runner }}
 
@@ -17,104 +18,12 @@ on:
         required: true
         type: string
 
-# Only what is needed to prove to CI-Plane that this run is the one it
-# started: the job that runs on the runner gets its own token from GitHub.
 permissions:
   id-token: write
 
 jobs:
   runner:
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-    steps:
-      - name: Run the runner of CI-Plane
-        env:
-          CI_PLANE_URL: ${{ inputs.url }}
-          GH_TOKEN: ${{ github.token }}
-          # A runner that gets no job within this time stops by itself, so
-          # that it does not use minutes while CI-Plane cannot remove it.
-          IDLE_MINUTES: 20
-        run: |
-          set -euo pipefail
-          case "$CI_PLANE_URL" in
-            https://*) ;;
-            *) echo "::error::The address of CI-Plane must start with https://"; exit 1 ;;
-          esac
-          answer="$RUNNER_TEMP/ci-plane-answer.json"
-          config="$RUNNER_TEMP/ci-plane-config"
-          touch "$answer" "$config"
-          chmod 600 "$answer" "$config"
-
-          # Collect the runner's configuration. CI-Plane hands it only to the
-          # run it started, which the OIDC token of this run proves.
-          code=000
-          for try in 1 2 3 4 5 6; do
-            oidc=$(curl -fsSL --retry 3 -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=ci-plane-relay" | jq -r .value) || oidc=""
-            if [ -n "$oidc" ] && [ "$oidc" != null ]; then
-              echo "::add-mask::$oidc"
-              code=$(curl -sS -o "$answer" -w '%{http_code}' -X POST \
-                -H "Authorization: Bearer $oidc" "${CI_PLANE_URL%/}/webhook/relay") || code=000
-            fi
-            case "$code" in
-              200) break ;;
-              000|429|5??) sleep $((try * 5)) ;;
-              *) break ;;
-            esac
-          done
-          if [ "$code" != 200 ]; then
-            echo "::error::CI-Plane did not hand out the runner (HTTP $code): $(jq -r '.error // empty' "$answer" 2>/dev/null || true)"
-            exit 1
-          fi
-          jq -j .jitconfig "$answer" > "$config"
-          rm -f "$answer"
-          echo "::add-mask::$(cat "$config")"
-
-          # The latest runner, checked against the digest GitHub publishes.
-          release=$(curl -fsSL --retry 3 -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/actions/runner/releases/latest)
-          tag=$(jq -r .tag_name <<<"$release")
-          file="actions-runner-linux-x64-${tag#v}.tar.gz"
-          digest=$(jq -r --arg f "$file" '.assets[] | select(.name == $f) | .digest // ""' <<<"$release")
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$file" "https://github.com/actions/runner/releases/download/$tag/$file"
-          if [ -n "$digest" ]; then
-            echo "${digest#sha256:}  $RUNNER_TEMP/$file" | sha256sum -c --quiet -
-          fi
-          dir="$HOME/ci-plane-runner"
-          mkdir -p "$dir"
-          tar -xzf "$RUNNER_TEMP/$file" -C "$dir"
-          rm -f "$RUNNER_TEMP/$file"
-          cd "$dir"
-
-          # The job gets the machine's usual environment, not the variables
-          # and tokens of this workflow. The configuration goes through the
-          # environment, not the command line, and its file is deleted.
-          env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL=/bin/bash LANG=C.UTF-8 \
-            PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-            bash -c 'set -a; . /etc/environment; set +a
-              ACTIONS_RUNNER_INPUT_JITCONFIG=$(cat "$1"); rm -f "$1"; export ACTIONS_RUNNER_INPUT_JITCONFIG
-              exec ./run.sh' relay "$config" &
-          runner=$!
-
-          # The runner exits after its one job. Until it takes one, a job
-          # log (_diag/Worker_*.log) does not exist.
-          deadline=$(( $(date +%s) + IDLE_MINUTES * 60 ))
-          while kill -0 "$runner" 2>/dev/null; do
-            if compgen -G "_diag/Worker_*.log" >/dev/null; then
-              break
-            fi
-            if [ "$(date +%s)" -ge "$deadline" ]; then
-              echo "No job came within $IDLE_MINUTES minutes; stopping the runner."
-              pkill -INT -f "$dir/bin/Runner.Listener" || true
-              kill -INT "$runner" 2>/dev/null || true
-              for _ in $(seq 30); do
-                kill -0 "$runner" 2>/dev/null || break
-                sleep 1
-              done
-              pkill -KILL -f "$dir/bin/" || true
-              kill -KILL "$runner" 2>/dev/null || true
-              exit 0
-            fi
-            sleep 10
-          done
-          wait "$runner"
+    uses: saschazesiger/CI-Plane/.github/workflows/ci-plane-relay-runner.yml@relay-v1
+    with:
+      runner: ${{ inputs.runner }}
+      url: ${{ inputs.url }}

@@ -136,6 +136,10 @@ type RunnerSpec struct {
 	// never limited: a job may use every CPU nobody else wants, and the
 	// priority decides who gets it when the CPUs are contended.
 	CPUPriority string
+	// RepoID and Repo are the repository of the job the runner was started
+	// for; the relay runs it there.
+	RepoID int64
+	Repo   string
 }
 
 // Container is the runner container of one runner on a worker.
@@ -227,6 +231,7 @@ func New(st *store.Store, forge Forge, fleet Fleet) *Engine {
 		id = newID()[:6]
 		return tx.Set("instance", []byte(id))
 	})
+	_ = st.Tx(relayPerRepository)
 	return &Engine{
 		prefix: NamePrefix + id + "-",
 		st:     st, forge: forge, fleet: fleet,

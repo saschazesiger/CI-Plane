@@ -376,7 +376,8 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 		return 0
 	}
 
-	spec := RunnerSpec{Name: r.Name, JITConfig: reg.JITConfig, Image: set.RunnerImage, DindImage: set.DindImage, MemMB: r.MemMB, CPUPriority: w.CPUPriority}
+	spec := RunnerSpec{Name: r.Name, JITConfig: reg.JITConfig, Image: set.RunnerImage, DindImage: set.DindImage, MemMB: r.MemMB, CPUPriority: w.CPUPriority,
+		RepoID: r.RepoID, Repo: r.Repo}
 	if err := fleet.Start(ctx, w, spec); err != nil {
 		// A worker that is not reachable did not fail to start anything.
 		what := "the worker could not start the runner: "
@@ -466,7 +467,7 @@ func (e *Engine) watchOnline(ctx context.Context, s *snapshot, starting []model.
 					return tx.SaveRunner(cur)
 				})
 				if r.WorkerID == model.RelayWorkerID {
-					e.relayWorks()
+					e.relayWorks(r.RepoID)
 				}
 				e.changed()
 			}
@@ -522,7 +523,7 @@ func (e *Engine) failStart(runnerID, reason string, blame bool) {
 // and waits longer after every attempt, so a runner that cannot work does
 // not start in a tight loop.
 func (e *Engine) fail(runnerID, reason string, blame, idle bool) {
-	onRelay := false
+	var onRelay int64 // the repository whose relay failed
 	err := e.st.Tx(func(tx *store.Tx) error {
 		r, err := tx.Runner(runnerID)
 		if err != nil {
@@ -531,7 +532,9 @@ func (e *Engine) fail(runnerID, reason string, blame, idle bool) {
 		if r.State != model.RunnerProvisioning && r.State != model.RunnerStarting && !(idle && r.State == model.RunnerIdle) {
 			return nil
 		}
-		onRelay = blame && r.WorkerID == model.RelayWorkerID
+		if blame && r.WorkerID == model.RelayWorkerID {
+			onRelay = r.RepoID
+		}
 		r.State, r.Failed, r.Error, r.EndedAt = model.RunnerCleaning, true, reason, e.now()
 		if err := tx.SaveRunner(r); err != nil {
 			return err
@@ -563,8 +566,8 @@ func (e *Engine) fail(runnerID, reason string, blame, idle bool) {
 	if err != nil {
 		e.logf("engine: fail start of %s: %v", runnerID, err)
 	}
-	if onRelay {
-		e.relayFailed(reason)
+	if onRelay != 0 {
+		e.relayFailed(onRelay, reason)
 	}
 	e.changed()
 }

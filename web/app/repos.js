@@ -1,20 +1,33 @@
 /*
  * Repositories: one card per GitHub account or organisation with its
  * health, a switch and a limit of parallel jobs, and its repositories in a
- * table with the same per repository.
+ * table with the same per repository, plus the failover to GitHub-hosted
+ * runners and its check.
  */
 import * as api from './api.js';
 import { ctx } from './main.js';
-import { $, M, esc, icon, head, ago, chip, empty, switchHtml, busyButton, alertHtml, toast, toastError, setError } from './ui.js';
+import { $, M, esc, icon, head, ago, day, clock, chip, empty, switchHtml, busyButton, alertHtml, toast, toastError, setError } from './ui.js';
 
 const DS = window.DS;
+
+/* The result of the last check of the failover, by repository id; it stays while the page is open. */
+const checks = new Map();
+
+const sentence = (text) => (/[.!?]$/.test(text) ? text : `${text}.`);
 
 function limitText(n) {
   return n > 0 ? `at most ${n} job${n === 1 ? '' : 's'} at a time` : 'no limit';
 }
 
-function repoRow(a, p) {
-  const now = [p.running ? `${p.running} running` : '', p.queued ? `${p.queued} waiting` : ''].filter(Boolean).join(', ') || '–';
+function repoRow(a, p, d) {
+  const onGitHub = d.relay.perRepo[String(p.id)] || 0;
+  const now = [p.running ? `${p.running} running` : '', p.queued ? `${p.queued} waiting` : '', onGitHub ? `${onGitHub} on GitHub` : '']
+    .filter(Boolean).join(', ') || '–';
+  const relay = d.relay.available
+    ? `<td><div class="cp-row">${switchHtml({ id: `relay-${p.id}`, attrs: `data-relay="${p.id}"`, label: `Failover of ${p.fullName} to GitHub-hosted runners`, checked: p.relay, srLabel: true })}` +
+      // Switching it on checks by itself; then the check is at hand for after a fix.
+      (p.relay || p.relayOff ? busyButton('ds-btn ds-btn--text ds-sm', 'Check', 'Checking', 'Checked', `data-relay-check="${p.id}" aria-label="Check the failover of ${esc(p.fullName)}"`) : '') + '</div></td>'
+    : '';
   return `<tr data-ds-key="r${p.id}">` +
     `<td class="ds-col--text">${esc(p.fullName)}${p.private ? '' : ` ${chip('warning', 'Public', 'globe')}`}</td>` +
     `<td class="ds-nowrap">${now}</td>` +
@@ -22,10 +35,41 @@ function repoRow(a, p) {
     `<td><div class="ds-field"><label class="ds-sr" for="limit-r${p.id}">Parallel jobs of ${esc(p.fullName)}, 0 for no limit</label>` +
       `<input class="ds-input cp-limit" id="limit-r${p.id}" type="number" min="0" max="1000" step="1" inputmode="numeric" value="${p.maxParallel}" data-limit-repo="${p.id}" data-name="${esc(p.fullName)}"></div></td>` +
     `<td>${switchHtml({ id: `repo-${p.id}`, attrs: `data-repo="${p.id}"`, label: `Run the jobs of ${p.fullName}`, checked: p.enabled, srLabel: true })}</td>` +
+    relay +
     `<td class="ds-table__actions"><span class="ds-hover-actions"><button class="ds-btn ds-btn--quiet ds-btn--icon ds-sm" type="button" data-remove-repo="${p.id}" data-name="${esc(p.fullName)}" aria-label="Remove ${esc(p.fullName)}" data-tip="Remove">${icon('trash', 18)}</button></span></td></tr>`;
 }
 
-function accountCard(a) {
+/** Why the failover of a repository switched itself off, and what its last check found. */
+function relayNotes(p, d) {
+  if (!d.relay.available) return '';
+  const name = esc(p.fullName);
+  const c = checks.get(p.id);
+  const again = (label, aria) => busyButton('ds-btn ds-btn--text ds-sm', label, 'Checking', 'Checked', `data-relay-check="${p.id}" aria-label="${aria}"`);
+  let html = '';
+  if (p.relayOff && !p.relay) {
+    html += alertHtml('warning', `The failover of ${p.fullName} switched itself off on ${day(p.relayOffAt)} at ${clock(p.relayOffAt)}`,
+      esc(sentence(p.relayOff)), c ? '' : again('Check', `Check the failover of ${name}`), `data-ds-key="off-${p.id}"`);
+  }
+  if (!c) return html;
+  if (!c.problems.length) {
+    return html + alertHtml('success', '', `Ready: ${name} has the relay workflow, and GitHub-hosted runners can reach CI-Plane.` +
+      (p.relay ? '' : ' Switch its failover on to use it.'), '', `data-ds-key="check-${p.id}"`);
+  }
+  const add = c.addUrl
+    ? `<a class="ds-btn ds-btn--text ds-sm" href="${esc(c.addUrl)}" target="_blank" rel="noopener">Add the workflow on GitHub${icon('external', 16)}</a>` : '';
+  return html + alertHtml('warning', `The failover of ${p.fullName} is not ready`, c.problems.map((x) => esc(sentence(x))).join('</p><p>'),
+    add + again('Check again', `Check the failover of ${name} again`), `data-ds-key="check-${p.id}"`);
+}
+
+/** The failover is off for all repositories in the settings while some have it switched on. */
+function relayHint(d) {
+  if (!d.relay.available || d.relayEnabled || !d.accounts.some((a) => a.repos.some((p) => p.relay))) return '';
+  return alertHtml('', 'The failover to GitHub is off for all repositories',
+    'Repositories with it switched on wait for your workers until you allow it again in the settings.',
+    `<a class="ds-btn ds-btn--text ds-sm" href="#/settings?section=relay">Open the settings${icon('arrowRight', 16)}</a>`, 'data-ds-key="relay-hint"');
+}
+
+function accountCard(a, d) {
   const org = a.ownerType === 'Organization';
   const meta = [
     `App ${esc(a.slug)}`,
@@ -42,7 +86,8 @@ function accountCard(a) {
   const repos = a.repos.length
     ? '<div class="ds-table-wrap"><table class="ds-table"><caption class="ds-sr">Repositories of ' + esc(a.owner) + '</caption><thead><tr>' +
       '<th scope="col">Repository</th><th scope="col">Now</th><th scope="col" class="ds-col--secondary">Last job</th><th scope="col">Parallel jobs</th><th scope="col">On</th>' +
-      `<th scope="col"><span class="ds-sr">Actions</span></th></tr></thead><tbody>${a.repos.map((p) => repoRow(a, p)).join('')}</tbody></table></div>`
+      (d.relay.available ? '<th scope="col" class="cp-col-relay">Failover to GitHub</th>' : '') +
+      `<th scope="col"><span class="ds-sr">Actions</span></th></tr></thead><tbody>${a.repos.map((p) => repoRow(a, p, d)).join('')}</tbody></table></div>`
     : `<p class="ds-muted">${a.installationId ? 'The app is installed, but on no repository yet. Choose repositories on GitHub.' : 'Repositories show up here once the app is installed.'}</p>`;
   return `<section class="ds-card" data-ds-key="a${a.id}" aria-labelledby="acc-${a.id}">` +
     `<div class="ds-card__row"><h2 class="ds-card__title" id="acc-${a.id}">${icon(org ? 'building' : 'user', 20)}${esc(a.owner)} <span class="ds-tag ds-tone-neutral">${org ? 'Organisation' : 'Personal account'}</span></h2>` +
@@ -51,6 +96,7 @@ function accountCard(a) {
     `<div class="ds-inline-form"><div class="ds-field"><label class="ds-field__label" for="limit-a${a.id}">Parallel jobs of ${esc(a.owner)}</label>` +
       `<input class="ds-input cp-limit" id="limit-a${a.id}" type="number" min="0" max="1000" step="1" inputmode="numeric" value="${a.maxParallel}" data-limit-account="${a.id}" data-name="${esc(a.owner)}" aria-describedby="limit-a${a.id}-hint">` +
       `<small class="ds-field__hint" id="limit-a${a.id}-hint">Across all its repositories; 0 means no limit. Now ${a.running} running.</small></div></div>` +
+    a.repos.map((p) => relayNotes(p, d)).join('') +
     repos +
     '<nav class="ds-card__links" aria-label="Actions for ' + esc(a.owner) + '">' +
       `<a class="ds-btn ds-btn--text ds-card__link" href="${esc(a.installUrl)}">Choose repositories on GitHub${icon('external', 16)}</a>` +
@@ -60,7 +106,60 @@ function accountCard(a) {
 }
 
 function cardsHtml(d) {
-  return d.accounts.map(accountCard).join('');
+  return relayHint(d) + d.accounts.map((a) => accountCard(a, d)).join('');
+}
+
+/** Renders the cards again from what is known, after a change made here. */
+function render() {
+  const stack = $('#accounts');
+  if (stack && ctx.data) M.flip(stack, (morph) => DS.dom.morphHtml(stack, cardsHtml(ctx.data), morph));
+}
+
+function findRepo(id) {
+  for (const a of ctx.data.accounts) {
+    const p = a.repos.find((r) => r.id === id);
+    if (p) return p;
+  }
+  return null;
+}
+
+/** Asks GitHub whether the failover of a repository would work, and shows what it found. */
+async function checkRelay(id, button) {
+  let r;
+  try {
+    const ask = () => api.post('/api/relay/check', { repo: id });
+    r = await (button ? M.busy(button, ask) : ask());
+  } catch (error) {
+    toastError(error, 'relay-check');
+    return;
+  }
+  checks.set(id, { problems: r.problems || [], addUrl: r.addUrl || '' });
+  render();
+  const p = findRepo(id);
+  const name = p ? p.fullName : 'The repository';
+  DS.overlay.announce(r.problems && r.problems.length ? `The failover of ${name} is not ready. ${r.problems.join(' ')}` : `Ready: ${name} has the relay workflow.`);
+}
+
+async function switchRelay(input) {
+  const id = Number(input.getAttribute('data-relay'));
+  const on = input.checked;
+  try {
+    await api.patch(`/api/repos/${id}`, { relay: on });
+  } catch (error) {
+    input.checked = !on;
+    toastError(error, 'switch');
+    return;
+  }
+  const p = findRepo(id);
+  if (p) {
+    p.relay = on;
+    // Switched on again: why it switched itself off is history.
+    if (on) Object.assign(p, { relayOff: '', relayOffAt: 0 });
+  }
+  checks.delete(id);
+  render();
+  // The workflow is usually missing at first: say so right away.
+  if (on) await checkRelay(id, $(`#accounts tr [data-relay-check="${id}"]`));
 }
 
 async function saveLimit(input, path, name) {
@@ -81,9 +180,13 @@ async function saveLimit(input, path, name) {
 
 export default {
   title: 'Repositories',
-  load: () => api.get('/api/accounts'),
+  async load() {
+    const [d, relay, settings] = await Promise.all([api.get('/api/accounts'), api.get('/api/relay'), api.get('/api/settings')]);
+    return { ...d, relay, relayEnabled: settings.settings.relayEnabled };
+  },
 
   html(d) {
+    checks.clear();
     const action = `<a class="ds-btn ds-btn--filled" href="#/repositories/add">${icon('plus', 16)}Add repository or organisation</a>`;
     const lead = 'The GitHub accounts and organisations whose jobs CI-Plane runs. A repository that is switched off is ignored.';
     if (!d.accounts.length) {
@@ -94,6 +197,12 @@ export default {
     return head('Repositories', lead, action) +
       alertHtml('', 'Only connect repositories you trust', 'Jobs run in privileged containers on your workers. Never use CI-Plane for public repositories that accept pull requests from forks.') +
       `<div class="ds-stack ds-stack--page" id="accounts">${cardsHtml(d)}</div>`;
+  },
+
+  mount(d, params) {
+    // From the list of the failover in the settings: show that repository.
+    const row = params.get('repo') && $(`#accounts tr[data-ds-key="r${Number(params.get('repo'))}"]`);
+    if (row) row.scrollIntoView({ block: 'center' });
   },
 
   update(d) {
@@ -108,7 +217,9 @@ export default {
   async on(type, event) {
     const t = event.target;
     if (type === 'change') {
-      if (t.hasAttribute('data-repo') || t.hasAttribute('data-account')) {
+      if (t.hasAttribute('data-relay')) {
+        switchRelay(t);
+      } else if (t.hasAttribute('data-repo') || t.hasAttribute('data-account')) {
         const path = t.hasAttribute('data-repo') ? `/api/repos/${t.getAttribute('data-repo')}` : `/api/accounts/${t.getAttribute('data-account')}`;
         try {
           await api.patch(path, { enabled: t.checked });
@@ -130,7 +241,9 @@ export default {
     }
     if (type !== 'click') return;
     let el;
-    if ((el = t.closest('[data-sync]'))) {
+    if ((el = t.closest('[data-relay-check]'))) {
+      checkRelay(Number(el.getAttribute('data-relay-check')), el);
+    } else if ((el = t.closest('[data-sync]'))) {
       try {
         await M.busy(el, () => api.post(`/api/accounts/${el.getAttribute('data-sync')}/sync`));
         toast('The repositories were read again from GitHub.');

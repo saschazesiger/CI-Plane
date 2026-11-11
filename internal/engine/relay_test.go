@@ -12,17 +12,46 @@ import (
 )
 
 // withRelay gives the rig a relay on the simulated world and switches the
-// failover on with the given wait.
+// failover on with the given wait, for every repository.
 func (r *rig) withRelay(afterSec int, change ...func(*model.Settings)) {
 	r.t.Helper()
 	r.eng.Relay = r.world
 	r.world.Connect(model.RelayWorkerID)
 	r.settings(func(s *model.Settings) {
-		s.RelayEnabled, s.RelayRepo, s.RelayAfterSec = true, "acme/relay", afterSec
+		s.RelayEnabled, s.RelayAfterSec = true, afterSec
 		for _, c := range change {
 			c(s)
 		}
 	})
+	for _, id := range []int64{1, 2, 3} {
+		r.relayOf(id, true)
+	}
+}
+
+// relayOf switches the failover of a repository.
+func (r *rig) relayOf(repoID int64, on bool) model.Repo {
+	r.t.Helper()
+	var p model.Repo
+	must(r.t, r.st.Tx(func(tx *store.Tx) error {
+		var err error
+		if p, err = tx.Repo(repoID); err != nil {
+			return err
+		}
+		p.Relay = on
+		return tx.SaveRepo(p)
+	}))
+	return p
+}
+
+func (r *rig) repo(id int64) model.Repo {
+	r.t.Helper()
+	var p model.Repo
+	must(r.t, r.st.View(func(tx *store.Tx) error {
+		var err error
+		p, err = tx.Repo(id)
+		return err
+	}))
+	return p
 }
 
 func (r *rig) settings(change func(*model.Settings)) model.Settings {
@@ -94,7 +123,7 @@ func TestRelayTakesAJobThatWaitedLongEnough(t *testing.T) {
 		t.Errorf("relay runs left: %v", c)
 	}
 	r.clean(w)
-	if tl := r.timeline(id); !strings.Contains(tl, "GitHub-hosted machine through acme/relay") {
+	if tl := r.timeline(id); !strings.Contains(tl, "GitHub-hosted machine through the relay workflow of acme/api") {
 		t.Errorf("timeline does not say the job went to GitHub:\n%s", tl)
 	}
 }
@@ -168,16 +197,19 @@ func TestRelaySwitchesItselfOffAfterFailedStarts(t *testing.T) {
 		r.advance(30)
 	}
 	set := r.settings(nil)
-	if set.RelayEnabled {
+	repo := r.repo(1)
+	if repo.Relay {
 		t.Fatalf("still on after %d failed starts\n%s", 10-r.world.FailStart[model.RelayWorkerID], r.timeline(id))
 	}
 	if n := 10 - r.world.FailStart[model.RelayWorkerID]; n != set.FailureThreshold {
 		t.Errorf("%d starts were tried, want %d", n, set.FailureThreshold)
 	}
-	var off model.RelayOff
-	must(t, r.st.View(func(tx *store.Tx) error { return tx.GetJSON(model.RelayOffKey, &off) }))
-	if off.At == 0 || !strings.Contains(off.Reason, "spending limit") {
-		t.Errorf("no reason stored: %+v", off)
+	if repo.RelayOffAt == 0 || !strings.Contains(repo.RelayOff, "spending limit") || !strings.Contains(repo.RelayOff, "acme/api") {
+		t.Errorf("no reason stored: %+v", repo)
+	}
+	// Only that repository: the others keep theirs, and so does the switch for all.
+	if !set.RelayEnabled || !r.repo(2).Relay {
+		t.Error("the failover of other repositories was switched off too")
 	}
 	j := r.job(id)
 	if j.State != model.JobQueued {
@@ -218,7 +250,7 @@ func TestRelayCountResetsWhenARunnerComesOnline(t *testing.T) {
 	if j := r.job(b); j.State != model.JobCompleted {
 		t.Fatalf("second job: %s\n%s", j.State, r.timeline(b))
 	}
-	if !r.settings(nil).RelayEnabled {
+	if !r.repo(1).Relay {
 		t.Fatal("the failover switched off although runners came online in between")
 	}
 }
@@ -286,11 +318,17 @@ func TestRelayRunLostWhileItsJobRuns(t *testing.T) {
 func TestRelayRunNobodyKnowsIsStopped(t *testing.T) {
 	r := newRig(t)
 	r.withRelay(0)
+	// Runs are only looked at while a runner is on the relay.
+	r.queue("acme/api", 1000)
+	r.pass(2)
 	name := r.eng.Prefix() + "github-hosted-0123456789"
 	r.world.AddContainer(model.RelayWorkerID, name)
-	r.pass(2)
-	if c := r.world.Containers(model.RelayWorkerID); len(c) != 0 {
-		t.Fatalf("unknown relay run left: %v", c)
+	r.advance(15)
+	r.pass(3)
+	for _, c := range r.world.Containers(model.RelayWorkerID) {
+		if c == name {
+			t.Fatalf("unknown relay run left: %v", r.world.Containers(model.RelayWorkerID))
+		}
 	}
 }
 
@@ -315,7 +353,7 @@ func TestPassingFailuresDoNotSwitchTheRelayOff(t *testing.T) {
 	r.eng.Relay = &passingRelay{Hosts: r.world, fails: 6}
 	id := r.queue("acme/api", 1)
 	r.run(60)
-	if !r.settings(nil).RelayEnabled {
+	if !r.repo(1).Relay {
 		t.Fatalf("switched off by passing failures\n%s", r.timeline(id))
 	}
 	if j := r.job(id); j.State != model.JobCompleted {
@@ -334,7 +372,91 @@ func TestFailuresOfJobsPlacedTogetherCountOnce(t *testing.T) {
 	if n := 3 - r.world.FailStart[model.RelayWorkerID]; n != 3 {
 		t.Fatalf("%d starts tried", n)
 	}
-	if !r.settings(nil).RelayEnabled {
+	if !r.repo(1).Relay {
 		t.Fatal("three jobs that failed together switched the failover off")
+	}
+}
+
+func TestRelayOnlyForRepositoriesThatHaveItOn(t *testing.T) {
+	r := newRig(t)
+	r.withRelay(0)
+	r.relayOf(2, false)
+	on := r.queue("acme/api", 1)
+	off := r.queue("acme/web", 1)
+	r.pass(2)
+	if j := r.job(on); j.State != model.JobAssigned || r.runner(j.RunnerID).WorkerID != model.RelayWorkerID {
+		t.Fatalf("job of a repository with the failover: %s %q", j.State, j.Reason)
+	}
+	if j := r.job(off); j.State != model.JobQueued || strings.Contains(j.Reason, "GitHub-hosted") {
+		t.Fatalf("job of a repository without the failover: %s %q", j.State, j.Reason)
+	}
+	// The switch for all of them stops it everywhere.
+	r.settings(func(s *model.Settings) { s.RelayEnabled = false })
+	again := r.queue("acme/api", 1)
+	r.pass(2)
+	if j := r.job(again); j.State != model.JobQueued {
+		t.Fatalf("job while the failover is off for all: %s", j.State)
+	}
+	// The runner started on GitHub knows the repository it is for.
+	if spec := r.world.Specs[r.runner(r.job(on).RunnerID).Name]; spec.RepoID != 1 || spec.Repo != "acme/api" {
+		t.Fatalf("spec: %+v", spec)
+	}
+}
+
+func TestOldRelayRepositoryIsForgottenWithANote(t *testing.T) {
+	r := newRig(t)
+	must(t, r.st.Tx(func(tx *store.Tx) error {
+		if err := tx.Set("settings", []byte(`{"relayEnabled":true,"relayRepo":"acme/ci-plane-relay","relayAfterSec":180}`)); err != nil {
+			return err
+		}
+		return tx.Set("relay.off", []byte(`{"at":1,"reason":"x"}`))
+	}))
+	r.boot()
+	r.boot() // a second start adds nothing
+	if set := r.settings(nil); !set.RelayEnabled || set.RelayAfterSec != 180 {
+		t.Fatalf("settings: %+v", set)
+	}
+	n := 0
+	must(t, r.st.View(func(tx *store.Tx) error {
+		if b, err := tx.Get("settings"); err != nil || strings.Contains(string(b), "relayRepo") {
+			t.Errorf("settings still name the relay repository: %s %v", b, err)
+		}
+		if _, err := tx.Get("relay.off"); err == nil {
+			t.Error("relay.off is still there")
+		}
+		evs, err := tx.Events(store.EventFilter{})
+		for _, e := range evs {
+			if e.Kind == "relay.moved" && strings.Contains(e.Message, "acme/ci-plane-relay") {
+				n++
+			}
+		}
+		return err
+	}))
+	if n != 1 {
+		t.Fatalf("%d notes", n)
+	}
+}
+
+func TestWaitingJobSaysWhyItDoesNotGoToGitHub(t *testing.T) {
+	r := newRig(t)
+	r.withRelay(0)
+	r.settings(func(s *model.Settings) { s.RelayEnabled = false })
+	id := r.queue("acme/api", 1)
+	r.pass(2)
+	if j := r.job(id); !strings.Contains(j.Reason, "off for all repositories") {
+		t.Fatalf("reason: %q", j.Reason)
+	}
+	must(t, r.st.Tx(func(tx *store.Tx) error {
+		p, err := tx.Repo(1)
+		if err != nil {
+			return err
+		}
+		p.Relay, p.RelayOff = false, "minutes used up"
+		return tx.SaveRepo(p)
+	}))
+	r.settings(func(s *model.Settings) { s.RelayEnabled = true })
+	r.pass(2)
+	if j := r.job(id); !strings.Contains(j.Reason, "switched itself off") {
+		t.Fatalf("reason: %q", j.Reason)
 	}
 }

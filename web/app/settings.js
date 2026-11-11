@@ -39,8 +39,8 @@ const NUMBERS = {
   ],
 };
 
-/* relay: what GET /api/relay says; setupOpen: whether its setup steps are open; check: the result of the last Check. */
-const state = { saved: null, sizes: [], defaultSize: '', uid: 0, relay: null, setupOpen: false, check: null };
+/* relay: what GET /api/relay says; setupOpen: whether the relay workflow is shown. */
+const state = { saved: null, sizes: [], defaultSize: '', uid: 0, relay: null, setupOpen: false };
 
 function numberField([key, label, unit, scale, hint], s) {
   const value = s[key] / scale;
@@ -59,37 +59,40 @@ function textField(key, label, hint, s) {
 
 /* ── Failover to GitHub ───────────────────────────────────────────── */
 
-/** The repositories that may be the relay repository: the private ones, and the chosen one in any case. */
-function repoOptions(saved, current) {
-  const names = state.relay.repos.filter((p) => p.private).map((p) => p.fullName);
-  for (const name of [current, saved]) {
-    if (name && !names.some((n) => n.toLowerCase() === name.toLowerCase())) names.unshift(name);
-  }
-  return `<option value=""${saved ? '' : ' selected'}>Choose a repository</option>` +
-    names.map((n) => `<option value="${esc(n)}"${n === saved ? ' selected' : ''}>${esc(n)}</option>`).join('');
-}
+const RELAY_FILE = '.github/workflows/ci-plane-relay.yml';
 
-/** Why it switched itself off, and how many jobs run on GitHub now: both move by themselves. */
+/** How many jobs run on GitHub-hosted runners now: it moves by itself. */
 function relayStatusHtml() {
   const r = state.relay;
-  let html = '';
-  if (r.off) {
-    const reason = /[.!?]$/.test(r.off.reason) ? r.off.reason : `${r.off.reason}.`;
-    html += alertHtml('warning', `It switched itself off on ${day(r.off.at)} at ${clock(r.off.at)}`, esc(reason));
-  }
-  if (r.active > 0) html += `<div class="cp-row">${chip('running', `${plural(r.active, 'job')} on GitHub-hosted runners now`)}</div>`;
-  return html;
+  return r.active > 0 ? `<div class="cp-row">${chip('running', `${plural(r.active, 'job')} on GitHub-hosted runners now`)}</div>` : '';
 }
 
-function relayCheckHtml() {
-  const c = state.check;
-  if (!c) return '';
-  if (c.unsaved) return alertHtml('', '', 'Save first: the check looks at the saved repository.');
-  if (!c.problems.length) {
-    return alertHtml('success', '', `Ready: ${esc(c.repo)} has the relay workflow, and GitHub-hosted runners can reach CI-Plane.` +
-      (state.saved.relayEnabled ? '' : ' Switch the failover on and save to use it.'));
+/** The repositories with the failover on, or switched off by itself: they move by themselves too. */
+function relayReposHtml() {
+  const r = state.relay;
+  if (!r.repos.length) {
+    return '<p class="ds-muted">No repository has the failover switched on yet.</p>';
   }
-  return c.problems.map((p) => `<div class="ds-alert ds-alert--plain ds-tone-warning">${icon('alert', 20)}<span class="ds-alert__text">${esc(p)}</span></div>`).join('');
+  const rows = r.repos.map((p) => {
+    const onGitHub = r.perRepo[String(p.id)] || 0;
+    let status;
+    let meta;
+    let description = '';
+    if (p.relay) {
+      status = chip('ok', 'On', 'check');
+      if (onGitHub) meta = `${plural(onGitHub, 'job')} on GitHub-hosted runners now`;
+      else if (!state.saved.relayEnabled) meta = 'Its jobs wait for your workers until the failover is allowed above';
+      else meta = 'Waiting jobs go to GitHub when no worker has room';
+    } else {
+      status = chip('warning', 'Switched itself off', 'alert');
+      meta = `On ${day(p.relayOffAt)} at ${clock(p.relayOffAt)}`;
+      description = `<span class="ds-list__description">${esc(/[.!?]$/.test(p.relayOff) ? p.relayOff : `${p.relayOff}.`)}</span>`;
+    }
+    return `<li class="ds-list__item" data-ds-key="r${p.id}"><span class="ds-list__text">` +
+      `<span class="ds-list__title"><a class="ds-list__action" href="#/repositories?repo=${p.id}">${esc(p.fullName)}</a></span>` +
+      `${description}<span class="ds-list__meta">${meta}</span></span>${status}${icon('chevronRight', 20, 'ds-list__chevron')}</li>`;
+  }).join('');
+  return `<ul class="ds-list ds-list--interactive" aria-labelledby="relay-repos-title">${rows}</ul>`;
 }
 
 function relayHtml(s) {
@@ -98,38 +101,30 @@ function relayHtml(s) {
   const sizes = s.sizes.some((z) => z.name === s.relayMaxSize) ? s.sizes : [...s.sizes, { name: s.relayMaxSize }];
   const sizeOptions = sizes.map((z) => `<option value="${esc(z.name)}"${z.name === s.relayMaxSize ? ' selected' : ''}>` +
     `${esc(z.name)}${z.cpus ? `: ${cpus(z.cpus)} CPUs, ${Math.round(z.memMb / 102.4) / 10} GB` : ''}</option>`).join('');
-  const noPrivate = !r.repos.some((p) => p.private);
-  const file = '.github/workflows/ci-plane-relay.yml';
   return '<section class="ds-card" id="relay-card" aria-labelledby="relay-title"><h2 class="ds-card__title" id="relay-title">Failover to GitHub</h2>' +
-    '<p class="ds-muted">When no worker has had room for a job for the waiting time below, CI-Plane starts its runner on a GitHub-hosted machine, through a private relay repository. ' +
-      'This uses the GitHub Actions minutes of the repository\'s owner: switch it off when they are used up.</p>' +
+    '<p class="ds-muted">When no worker has had room for a job for the waiting time below, and its repository has the failover switched on, ' +
+      'CI-Plane starts its runner on a GitHub-hosted machine, through the relay workflow in that repository. ' +
+      'This uses the GitHub Actions minutes of the repository\'s owner.</p>' +
     `<div class="ds-stack" id="relay-status"${relayStatusHtml() ? '' : ' hidden'}>${relayStatusHtml()}</div>` +
     `<div class="ds-field"><label class="ds-check"><input type="checkbox" id="set-relayEnabled" name="relayEnabled" data-field="relayEnabled" aria-describedby="set-relayEnabled-hint"${s.relayEnabled ? ' checked' : ''}>` +
-      `<span>Send waiting jobs to GitHub-hosted runners${CHANGED}</span></label>` +
-      '<small class="ds-field__hint" id="set-relayEnabled-hint">It switches itself off after as many failed starts in a row as a worker may have, for example when the minutes are used up.</small></div>' +
-    '<div class="ds-field"><label class="ds-field__label" for="set-relayRepo">Relay repository' + CHANGED + '</label>' +
-      `<div class="ds-field__row"><select class="ds-input" id="set-relayRepo" name="relayRepo" data-field="relayRepo" aria-describedby="set-relayRepo-hint">${repoOptions(s.relayRepo, s.relayRepo)}</select>` +
-      `${busyButton('ds-btn', 'Check', 'Checking', 'Checked', 'data-act="relay-check"')}</div>` +
-      `<small class="ds-field__hint" id="set-relayRepo-hint">${noPrivate ? 'CI-Plane sees no private repository yet: follow the steps below.' : 'A private repository with the relay workflow. Check asks GitHub whether everything is in place.'}</small></div>` +
-    `<div class="ds-stack" id="relay-check"${state.check ? '' : ' hidden'}>${relayCheckHtml()}</div>` +
+      `<span>Allow the failover for repositories that have it switched on${CHANGED}</span></label>` +
+      '<small class="ds-field__hint" id="set-relayEnabled-hint">Clear it to keep every job on your workers, for example when the Actions minutes are used up. The switch of each repository stays as it is.</small></div>' +
     '<div class="ds-form-grid ds-form-grid--3">' +
       NUMBERS.relay.map((f) => numberField(f, s)).join('') +
       '<div class="ds-field"><label class="ds-field__label" for="set-relayMaxSize">Largest size' + CHANGED + '</label>' +
         `<select class="ds-input" id="set-relayMaxSize" name="relayMaxSize" data-field="relayMaxSize" aria-describedby="set-relayMaxSize-hint">${sizeOptions}</select>` +
         '<small class="ds-field__hint" id="set-relayMaxSize-hint">Larger jobs always wait for a worker. A GitHub-hosted machine of a private repository has 2 CPUs and 7 GB.</small></div>' +
     '</div>' +
-    `<details class="ds-collapsible ds-disclosure" id="relay-setup"${state.setupOpen ? ' open' : ''}><summary>Set it up${icon('chevronDown', 20, 'ds-chevron')}</summary><div class="ds-disclosure__body ds-stack">` +
-      '<div class="ds-prose ds-prose--dense"><ol>' +
-        '<li>Create a <strong>private</strong> repository in the account whose minutes the runners should use, for example <code>ci-plane-relay</code>. It holds nothing but the workflow; it must be private because its runs show the names of your runners.</li>' +
-        '<li>Install the GitHub App of that account on it: on the <a href="#/repositories">Repositories</a> page, choose <strong>Choose repositories on GitHub</strong> (or <strong>Install on GitHub</strong>) for that account.</li>' +
-        `<li>Add this workflow to the repository as <code>${file}</code> on the default branch.</li>` +
-        '<li>Choose the repository above, switch the failover on, save, and press <strong>Check</strong>. It says what is missing, if anything.</li>' +
-      '</ol></div>' +
+    '<div class="ds-card__section"><h3 class="ds-card__subtitle" id="relay-repos-title">Repositories</h3>' +
+    `<p class="ds-muted">Switch the failover on per repository on the <a href="#/repositories">Repositories</a> page. Each repository needs the workflow below as <code>${RELAY_FILE}</code> on its default branch; ` +
+      'Check there says what is missing and opens GitHub with the file filled in, ready to commit.</p>' +
+    `<div id="relay-repos">${relayReposHtml()}</div></div>` +
+    `<details class="ds-collapsible ds-disclosure" id="relay-setup"${state.setupOpen ? ' open' : ''}><summary>The relay workflow${icon('chevronDown', 20, 'ds-chevron')}</summary><div class="ds-disclosure__body ds-stack">` +
       '<figure class="ds-code"><div class="ds-code__head ds-sm">' +
-        `<span class="ds-code__title">${file}</span><span class="ds-code__actions">` +
+        `<span class="ds-code__title">${RELAY_FILE}</span><span class="ds-code__actions">` +
         `<button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" aria-label="Copy the relay workflow" data-tip="Copy" data-copy="relay-workflow">` +
         `<span class="ds-icon-swap" data-swap="a"><span class="ds-icon-swap__a">${icon('copy', 20)}</span><span class="ds-icon-swap__b">${icon('check', 20)}</span></span></button></span></div>` +
-        `<pre class="ds-code-block" id="relay-workflow" tabindex="0" aria-label="The relay workflow, ${file}"><code>${esc(r.workflow)}</code></pre></figure>` +
+        `<pre class="ds-code-block" id="relay-workflow" tabindex="0" aria-label="The relay workflow, ${RELAY_FILE}"><code>${esc(r.workflow)}</code></pre></figure>` +
     '</div></details>' +
     '</section>';
 }
@@ -244,7 +239,7 @@ function restore(input) {
   else input.value = input.defaultValue;
 }
 
-/** Renders the form anew from saved settings; the setup steps stay open or closed as they are. */
+/** Renders the form anew from saved settings; the relay workflow stays open or closed as it is. */
 function renderForm(settings) {
   const setup = $('#relay-setup');
   if (setup) state.setupOpen = setup.open;
@@ -321,9 +316,6 @@ async function save(event) {
     return;
   }
   takeSaved(r.settings);
-  // Saving switches the failover on again after it switched itself off.
-  if (r.settings.relayEnabled && state.relay) state.relay = { ...state.relay, off: null };
-  if (state.check && state.check.unsaved) state.check = null;
   renderForm(r.settings);
   // The saved values are the fields' new defaults, so Discard returns to them.
   for (const input of $$('#settings-form [name][data-field]')) settle(input);
@@ -355,9 +347,8 @@ export default {
   html(d) {
     takeSaved(d.settings);
     state.relay = d.relay;
-    state.check = null;
-    // Open while nothing is set up; later it is only in the way.
-    state.setupOpen = !d.settings.relayRepo;
+    // Open while no repository uses it; later it is only in the way.
+    state.setupOpen = !d.relay.repos.length;
     return head('Settings', 'Changes to sizes, images and limits wait in the bar at the bottom until you save them; they apply from the next job on.') +
       `<div id="settings-slot">${formHtml(d.settings)}</div>` +
       '<div class="ds-grid-2">' +
@@ -383,29 +374,13 @@ export default {
   update(d) {
     // The tunnel and the state of the failover move by themselves; the form keeps what is typed.
     DS.dom.morphHtml($('#tunnel-card'), tunnelHtml(d.cf));
-    const repos = (r) => JSON.stringify(r.repos.filter((p) => p.private).map((p) => p.fullName));
-    const reposMoved = state.relay && repos(state.relay) !== repos(d.relay);
     state.relay = d.relay;
     if (!$('#relay-card')) return;
     const status = $('#relay-status');
     DS.dom.morphHtml(status, relayStatusHtml());
     status.hidden = !status.firstElementChild;
-    const select = $('#set-relayRepo');
-    if (reposMoved && select) {
-      // A repository the app was just installed on can be chosen without a reload.
-      const value = select.value;
-      DS.dom.morphHtml(select, repoOptions(state.saved.relayRepo, value));
-      select.value = value;
-    }
-    // The failover switches itself off in the saved settings; follow it, or a save would switch it on again.
-    if (d.settings.relayEnabled !== state.saved.relayEnabled) {
-      state.saved = { ...state.saved, relayEnabled: d.settings.relayEnabled };
-      const box = $('#set-relayEnabled');
-      const untouched = box.checked === box.defaultChecked;
-      box.defaultChecked = d.settings.relayEnabled;
-      if (untouched) box.checked = d.settings.relayEnabled;
-      syncChanges();
-    }
+    const list = $('#relay-repos');
+    M.flip(list, (morph) => DS.dom.morphHtml(list, relayReposHtml(), morph), { items: '.ds-list__item', live: true });
   },
 
   leave() {
@@ -454,26 +429,7 @@ export default {
     }
     if (type !== 'click') return;
     let el;
-    if ((el = t.closest('[data-act="relay-check"]'))) {
-      const select = $('#set-relayRepo');
-      if (select.value !== state.saved.relayRepo) {
-        state.check = { unsaved: true };
-      } else {
-        try {
-          const r = await M.busy(el, () => api.post('/api/relay/check'));
-          state.check = { problems: r.problems, repo: state.saved.relayRepo };
-        } catch (error) {
-          toastError(error, 'relay-check');
-          return;
-        }
-      }
-      const slot = $('#relay-check');
-      DS.dom.morphHtml(slot, relayCheckHtml());
-      slot.hidden = false;
-      const c = state.check;
-      DS.overlay.announce(c.unsaved ? 'Save first: the check looks at the saved repository.'
-        : c.problems.length ? c.problems.join(' ') : 'Ready: everything is in place.');
-    } else if (t.closest('[data-act="add-size"]')) {
+    if (t.closest('[data-act="add-size"]')) {
       readSizes();
       state.sizes.push({ name: `size-${state.sizes.length + 1}`, cpus: 2, memMb: 4096, uid: ++state.uid });
       renderSizes();

@@ -11,13 +11,13 @@ import (
 )
 
 // The relay is the failover to GitHub-hosted runners. When no worker has had
-// room for a job for a while, CI-Plane registers the job's runner as usual
-// and asks GitHub to run the relay workflow in a private repository of the
-// person's. That workflow collects the runner's configuration from CI-Plane
-// and runs the runner on the GitHub-hosted machine. GitHub then gives the
-// job to it like to any runner with the job's labels: the workflows of the
-// repositories do not change, and nothing on GitHub is used unless a job
-// really waits.
+// room for a job for a while, and its repository has the failover switched
+// on, CI-Plane registers the job's runner as usual and asks GitHub to run
+// the relay workflow in that same repository. The workflow collects the
+// runner's configuration from CI-Plane and runs the runner on the
+// GitHub-hosted machine. GitHub then gives the job to it like to any runner
+// with the job's labels: the job's workflow does not change, and nothing on
+// GitHub is used unless a job really waits.
 //
 // To the engine the relay is one more worker, model.RelayWorkerID, with its
 // own Fleet (Engine.Relay). It is not stored with the other workers: it has
@@ -85,7 +85,17 @@ func workerOf(tx *store.Tx, id int64) (model.Worker, error) {
 // relay now. If it does not, note is added to the reason why the job waits.
 func (s *snapshot) relayChoice(j model.Job, z model.Size, active int, enabled bool) (now bool, note string) {
 	set := s.set
-	if !enabled || !set.RelayEnabled || set.RelayRepo == "" || !set.RelayFits(z) || !s.status[model.RelayWorkerID].Connected {
+	repo := s.repos[j.RepoID]
+	switch {
+	case !enabled || !set.RelayFits(z):
+		return false, ""
+	case !repo.Relay && repo.RelayOff != "":
+		return false, "; the failover of " + repo.FullName + " to GitHub switched itself off, see Repositories"
+	case !repo.Relay:
+		return false, ""
+	case !set.RelayEnabled:
+		return false, "; the failover to GitHub is off for all repositories under Settings"
+	case !s.status[model.RelayWorkerID].Connected:
 		return false, ""
 	}
 	if active >= set.RelayMax {
@@ -108,39 +118,43 @@ func span(sec int) string {
 	return fmt.Sprintf("%d seconds", sec)
 }
 
-// relayFailed counts a start on the relay that failed because of the relay:
-// the workflow did not run, or its runner did not come online. After
-// FailureThreshold of them in a row the failover switches itself off. Most
-// likely the minutes for GitHub-hosted runners are used up, and every
-// further try would fail the same way, so it waits for the person.
-func (e *Engine) relayFailed(reason string) {
+// relayFailed counts a start on the relay that failed because of the relay
+// of a repository: its workflow did not run, or its runner did not come
+// online. After FailureThreshold of them in a row the failover of that
+// repository switches itself off. Most likely the workflow is missing, or
+// the Actions minutes of its owner are used up; every further try would fail
+// the same way, so it waits for the person.
+func (e *Engine) relayFailed(repoID int64, reason string) {
+	key := "relay:" + itoa(repoID)
 	e.mu.Lock()
-	if last := e.notBefore["relay-failed"]; last != 0 && e.now()-last < relayFailGap.Milliseconds() {
+	if last := e.notBefore[key+":failed"]; last != 0 && e.now()-last < relayFailGap.Milliseconds() {
 		e.mu.Unlock()
 		return
 	}
-	e.notBefore["relay-failed"] = e.now()
-	e.fails["relay"]++
-	n := e.fails["relay"]
+	e.notBefore[key+":failed"] = e.now()
+	e.fails[key]++
+	n := e.fails[key]
 	e.mu.Unlock()
 	off := false
 	err := e.st.Tx(func(tx *store.Tx) error {
 		set, err := tx.Settings()
-		if err != nil || !set.RelayEnabled || n < set.FailureThreshold {
+		if err != nil || n < set.FailureThreshold {
 			return err
 		}
-		set.RelayEnabled = false
-		if err := tx.SaveSettings(set); err != nil {
-			return err
+		repo, err := tx.Repo(repoID)
+		if err != nil || !repo.Relay {
+			return ignoreMissing(err)
 		}
 		why := fmt.Sprintf("%d starts on GitHub-hosted runners failed in a row, the last because %s. "+
-			"Look at the latest runs of %s in %s: GitHub may refuse to run it because the Actions minutes or the "+
-			"spending limit of %s are used up, or its runs cannot reach CI-Plane. Switch the failover on again once that is fixed",
-			n, reason, model.RelayWorkflow, set.RelayRepo, ownerOf(set.RelayRepo))
-		if err := tx.SetJSON(model.RelayOffKey, model.RelayOff{At: e.now(), Reason: why}); err != nil {
+			"Look at the latest runs of %s in %s: the workflow may be missing or disabled, GitHub may refuse to run it "+
+			"because the Actions minutes or the spending limit of %s are used up, or its runs cannot reach CI-Plane. "+
+			"Switch the failover of the repository on again once that is fixed",
+			n, reason, model.RelayWorkflow, repo.FullName, ownerOf(repo.FullName))
+		repo.Relay, repo.RelayOff, repo.RelayOffAt = false, why, e.now()
+		if err := tx.SaveRepo(repo); err != nil {
 			return err
 		}
-		event(tx, model.LevelError, "relay.off", "The failover to GitHub-hosted runners switched itself off: "+why, 0, "", model.RelayWorkerID)
+		event(tx, model.LevelError, "relay.off", "The failover of "+repo.FullName+" to GitHub-hosted runners switched itself off: "+why, 0, "", model.RelayWorkerID)
 		off = true
 		return nil
 	})
@@ -148,16 +162,17 @@ func (e *Engine) relayFailed(reason string) {
 		e.logf("engine: relay failure: %v", err)
 	}
 	if off {
-		e.relayWorks()
+		e.relayWorks(repoID)
 		e.changed()
 	}
 }
 
-// relayWorks resets the count of failed starts on the relay.
-func (e *Engine) relayWorks() {
+// relayWorks resets the count of failed starts on the relay of a repository.
+func (e *Engine) relayWorks(repoID int64) {
+	key := "relay:" + itoa(repoID)
 	e.mu.Lock()
-	delete(e.fails, "relay")
-	delete(e.notBefore, "relay-failed")
+	delete(e.fails, key)
+	delete(e.notBefore, key+":failed")
 	e.mu.Unlock()
 }
 
@@ -184,8 +199,8 @@ func (noRelay) List(context.Context, model.Worker) ([]Container, error) {
 func (noRelay) Status(int64) WorkerStatus { return WorkerStatus{Error: errNoRelay.Error()} }
 
 // watchRelay lists the runs of the relay workflow, like the containers of a
-// worker: a runner whose run ended has ended. While no runner is on the
-// relay it looks only once a minute, for runs nobody knows.
+// worker: a runner whose run ended has ended. Only while runners are on the
+// relay: each listing is a request to GitHub per repository.
 func (e *Engine) watchRelay(ctx context.Context, s *snapshot) {
 	if e.Relay == nil {
 		return
@@ -200,8 +215,8 @@ func (e *Engine) watchRelay(ctx context.Context, s *snapshot) {
 			busy = true
 		}
 	}
-	if !busy && (!s.set.RelayEnabled || s.set.RelayRepo == "") {
-		return // nothing runs there, and nothing will
+	if !busy {
+		return // nothing runs there
 	}
 	e.spawn(ctx, "list:relay", time.Minute, func(ctx context.Context) time.Duration {
 		started := e.now()
@@ -210,19 +225,31 @@ func (e *Engine) watchRelay(ctx context.Context, s *snapshot) {
 			return 15 * time.Second
 		}
 		e.compareContainers(ctx, w, list, started)
-		busy = false
-		_ = e.st.View(func(tx *store.Tx) error {
-			runners, err := tx.ActiveRunners()
-			for _, r := range runners {
-				if r.WorkerID == model.RelayWorkerID {
-					busy = true
-				}
-			}
-			return err
-		})
-		if busy {
-			return 5 * time.Second
-		}
-		return time.Minute
+		return 10 * time.Second
 	})
+}
+
+// relayPerRepository moves a database from the time of one relay repository
+// for all jobs to the failover per repository, through a workflow in each:
+// the old repository is forgotten, and an event says what to do now.
+func relayPerRepository(tx *store.Tx) error {
+	var old struct {
+		RelayRepo string `json:"relayRepo"`
+	}
+	if err := tx.GetJSON("settings", &old); err != nil || old.RelayRepo == "" {
+		return nil
+	}
+	set, err := tx.Settings()
+	if err != nil {
+		return err
+	}
+	if err := tx.SaveSettings(set); err != nil { // without relayRepo
+		return err
+	}
+	if err := tx.Delete("relay.off"); err != nil {
+		return err
+	}
+	event(tx, model.LevelWarn, "relay.moved", "The failover to GitHub now works per repository, through the relay workflow in each "+
+		"repository; "+old.RelayRepo+" is no longer used. Switch it on under Repositories for the repositories that should use it", 0, "", model.RelayWorkerID)
+	return nil
 }

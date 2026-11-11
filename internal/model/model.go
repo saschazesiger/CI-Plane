@@ -109,6 +109,11 @@ type Repo struct {
 	Enabled     bool   `json:"enabled"`
 	MaxParallel int    `json:"maxParallel"` // 0 = unlimited
 	LastJobAt   int64  `json:"lastJobAt"`
+	// Relay: its jobs may go to GitHub-hosted runners when no worker has
+	// room, through the relay workflow in the repository itself.
+	Relay      bool   `json:"relay"`
+	RelayOff   string `json:"relayOff"`   // why the failover switched itself off, if it did
+	RelayOffAt int64  `json:"relayOffAt"` // when
 }
 
 // NewRepo is a repository seen for the first time. A private one takes jobs
@@ -248,9 +253,9 @@ type Settings struct {
 	NoOvertakeSec    int    `json:"noOvertakeSec"`    // a job waiting this long is not overtaken
 	HistoryDays      int    `json:"historyDays"`      // finished jobs and events are kept for
 
-	// Failover to GitHub-hosted runners, through a relay repository.
-	RelayEnabled  bool   `json:"relayEnabled"`
-	RelayRepo     string `json:"relayRepo"`     // owner/name of the private repository with the relay workflow
+	// Failover to GitHub-hosted runners, for the repositories that have it
+	// switched on (Repo.Relay).
+	RelayEnabled  bool   `json:"relayEnabled"`  // for all of them at once
 	RelayAfterSec int    `json:"relayAfterSec"` // a job waits this long for room before it goes to GitHub
 	RelayMax      int    `json:"relayMax"`      // GitHub-hosted runners at the same time
 	RelayMaxSize  string `json:"relayMaxSize"`  // the largest size that goes to GitHub
@@ -289,7 +294,7 @@ func DefaultSettings() Settings {
 }
 
 // RelayWorkerID is the worker of the runners that run on GitHub-hosted
-// machines, started through the relay repository. It is no row of the
+// machines, started through the relay workflow of their job's repository. It is no row of the
 // workers table: GitHub runs those machines, CI-Plane only asks for them.
 const RelayWorkerID int64 = -1
 
@@ -297,22 +302,8 @@ const RelayWorkerID int64 = -1
 const RelayWorkerName = "GitHub-hosted"
 
 // RelayWorkflow is the file name of the relay workflow, in .github/workflows
-// of the relay repository.
+// of each repository that has the failover switched on.
 const RelayWorkflow = "ci-plane-relay.yml"
-
-// RelayAudience is the audience of the OIDC token the relay workflow shows
-// CI-Plane to collect the configuration of its runner.
-const RelayAudience = "ci-plane-relay"
-
-// RelayOffKey is where the store keeps why the failover switched itself
-// off (a RelayOff).
-const RelayOffKey = "relay.off"
-
-// RelayOff says when and why the failover switched itself off.
-type RelayOff struct {
-	At     int64  `json:"at"`
-	Reason string `json:"reason"`
-}
 
 // RelayFits reports whether a job of size z may go to a GitHub-hosted
 // runner: it asks for no more CPUs and memory than the largest size that

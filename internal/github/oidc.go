@@ -30,9 +30,13 @@ type oidcClaims struct {
 	Repository   string          `json:"repository"`
 	RepositoryID string          `json:"repository_id"`
 	RunID        string          `json:"run_id"`
+	RunAttempt   string          `json:"run_attempt"`
 	WorkflowRef  string          `json:"workflow_ref"`
-	EventName    string          `json:"event_name"`
-	Actor        string          `json:"actor"`
+	// JobWorkflowRef is the workflow file the job comes from: for a job of
+	// a reusable workflow, that workflow, not the one that called it.
+	JobWorkflowRef string `json:"job_workflow_ref"`
+	EventName      string `json:"event_name"`
+	Actor          string `json:"actor"`
 }
 
 func (c oidcClaims) hasAudience(want string) bool {
