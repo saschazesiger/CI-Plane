@@ -21,8 +21,11 @@ func (f *fakeRelay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.hits++
 	io.WriteString(w, `{"jitconfig":"x"}`)
 }
-func (f *fakeRelay) Check(_ context.Context, repo string) RelayCheck { f.asked = repo; return f.check }
-func (f *fakeRelay) Workflow() string                                { return "name: CI-Plane relay\n" }
+func (f *fakeRelay) Check(_ context.Context, _ int64, repo string) RelayCheck {
+	f.asked = repo
+	return f.check
+}
+func (f *fakeRelay) Workflow() string { return "name: CI-Plane relay\n" }
 
 func TestRelayPathPassesTheTunnelWithoutAccess(t *testing.T) {
 	r := newRig(t, false)

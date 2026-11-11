@@ -284,6 +284,10 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/accounts/{id}", s.private(s.editAccount))
 	mux.HandleFunc("DELETE /api/accounts/{id}", s.private(s.removeAccount))
 	mux.HandleFunc("POST /api/accounts/{id}/sync", s.private(s.syncAccount))
+	mux.HandleFunc("GET /api/runner-accounts", s.private(s.listRunnerAccounts))
+	mux.HandleFunc("POST /api/runner-accounts/manifest", s.private(s.runnerManifest))
+	mux.HandleFunc("DELETE /api/runner-accounts/{id}", s.private(s.removeRunnerAccount))
+	mux.HandleFunc("POST /api/runner-accounts/{id}/sync", s.private(s.syncRunnerAccount))
 	mux.HandleFunc("PATCH /api/repos/{id}", s.private(s.editRepo))
 	mux.HandleFunc("DELETE /api/repos/{id}", s.private(s.removeRepo))
 

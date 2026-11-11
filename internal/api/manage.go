@@ -196,6 +196,109 @@ func (s *Server) syncAccount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Repositories read from GitHub."})
 }
 
+// --- runner accounts -----------------------------------------------------------
+
+// runnerAccountView is a runner account with what the Pools page shows.
+type runnerAccountView struct {
+	model.Account
+	Health     AccountHealth   `json:"health"`
+	InstallURL string          `json:"installUrl"`
+	Repos      []relayRepoView `json:"repos"`
+	Pools      []string        `json:"pools"` // names of the pools whose runs it starts
+}
+
+func (s *Server) listRunnerAccounts(w http.ResponseWriter, r *http.Request) {
+	out := []runnerAccountView{}
+	err := s.d.Store.View(func(tx *store.Tx) error {
+		accs, err := tx.RunnerAccounts()
+		if err != nil {
+			return err
+		}
+		pools, err := tx.Pools()
+		if err != nil {
+			return err
+		}
+		for _, a := range accs {
+			v := runnerAccountView{Account: a, Health: AccountHealth{RateRemaining: -1}, Repos: []relayRepoView{}, Pools: []string{}}
+			if s.d.GitHub != nil {
+				v.Health = s.d.GitHub.Health(a.ID)
+				v.InstallURL = s.d.GitHub.InstallURL(a)
+			}
+			repos, err := tx.RunnerRepos(a.ID)
+			if err != nil {
+				return err
+			}
+			for _, p := range repos {
+				v.Repos = append(v.Repos, relayRepoView{AccountID: a.ID, Owner: a.Owner, Runners: true, FullName: p.FullName, Private: p.Private})
+			}
+			for _, p := range pools {
+				if p.AccountID == a.ID {
+					v.Pools = append(v.Pools, p.Name)
+				}
+			}
+			out = append(out, v)
+		}
+		return nil
+	})
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"accounts": out})
+}
+
+func (s *Server) runnerManifest(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Org string `json:"org"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	req.Org = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(req.Org), "@"))
+	if req.Org != "" && !orgRe.MatchString(req.Org) {
+		msg := "This is not an organisation name on GitHub: letters, digits and single dashes, as in github.com/your-org."
+		writeJSON(w, http.StatusBadRequest, apiError{Error: msg, Fields: map[string]string{"org": msg}})
+		return
+	}
+	form, err := s.d.GitHub.RunnerManifest(req.Org, origin(r)+"/github/return")
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, form)
+}
+
+// removeRunnerAccount forgets a runner account that no pool uses.
+func (s *Server) removeRunnerAccount(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.d.Store.View(func(tx *store.Tx) error {
+		_, err := tx.RunnerAccount(id)
+		return err
+	}); err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.removeAccount(w, r)
+}
+
+func (s *Server) syncRunnerAccount(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.d.Store.View(func(tx *store.Tx) error {
+		_, err := tx.RunnerAccount(id)
+		return err
+	}); err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.syncAccount(w, r)
+}
+
 // --- settings ----------------------------------------------------------------
 
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
@@ -610,7 +713,11 @@ func (s *Server) syncAll(ctx context.Context) error {
 	var accs []model.Account
 	if err := s.d.Store.View(func(tx *store.Tx) error {
 		var err error
-		accs, err = tx.Accounts()
+		if accs, err = tx.Accounts(); err != nil {
+			return err
+		}
+		more, err := tx.RunnerAccounts()
+		accs = append(accs, more...)
 		return err
 	}); err != nil {
 		return err

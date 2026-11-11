@@ -2,6 +2,7 @@ package demo
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -82,12 +83,17 @@ func (d *Demo) pages() http.Handler {
 		back, _ := url.Parse(ms.returnURL)
 		q := url.Values{"code": {ms.code}, "state": {state}}
 		back.RawQuery = q.Encode()
+		facts := []kv{{"Name", manifest.Name}, {"Webhook", manifest.Hooks.URL}, {"Events", "Workflow job"},
+			{"Access", "Actions: read and write · Metadata: read · Self-hosted runners: write"}}
+		if ms.runners {
+			facts = []kv{{"Name", manifest.Name}, {"Webhook", "none"}, {"Events", "none"},
+				{"Access", "Actions: read and write · Metadata: read"}}
+		}
 		render(w, pageData{
 			Title: "Create GitHub App for " + orElse(ms.org, "demo-user"),
 			Lead:  "GitHub shows the app CI-Plane asks for. It will belong to " + owner + ".",
-			Facts: []kv{{"Name", manifest.Name}, {"Webhook", manifest.Hooks.URL}, {"Events", "Workflow job"},
-				{"Access", "Actions: read · Metadata: read · Self-hosted runners: write"}},
-			Go: back.String(), GoLabel: "Create GitHub App for " + orElse(ms.org, "demo-user"),
+			Facts: facts,
+			Go:    back.String(), GoLabel: "Create GitHub App for " + orElse(ms.org, "demo-user"),
 		})
 	})
 
@@ -95,13 +101,23 @@ func (d *Demo) pages() http.Handler {
 	mux.HandleFunc("GET /demo/github/install", func(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.ParseInt(r.URL.Query().Get("app"), 10, 64)
 		var a model.Account
-		if err := d.Store.View(func(tx *store.Tx) error { var err error; a, err = tx.Account(id); return err }); err != nil {
+		if err := d.Store.View(func(tx *store.Tx) error {
+			var err error
+			if a, err = tx.Account(id); errors.Is(err, store.ErrNotFound) {
+				a, err = tx.RunnerAccount(id)
+			}
+			return err
+		}); err != nil {
 			http.Error(w, "This app does not exist in the demo.", http.StatusNotFound)
 			return
 		}
+		lead := "GitHub asks where the app may be used. Choose the repositories whose jobs CI-Plane should run."
+		if a.Runners {
+			lead = "GitHub asks where the app may be used. Choose the private repository with the relay workflow."
+		}
 		render(w, pageData{
 			Title:   "Install " + a.Slug,
-			Lead:    "GitHub asks where the app may be used. Choose the repositories whose jobs CI-Plane should run.",
+			Lead:    lead,
 			Choices: []kv{{"All repositories", "This applies to current and future repositories of " + a.Owner + "."}, {"Only select repositories", "Pick them from a list on GitHub."}},
 			Go:      fmt.Sprintf("/demo/github/install/done?app=%d", a.ID), GoLabel: "Install",
 		})

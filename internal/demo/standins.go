@@ -147,6 +147,7 @@ type GitHub struct {
 type manifestState struct {
 	org, returnURL, publicURL string
 	code                      string
+	runners                   bool // the app of a runner account
 }
 
 func randomHex(n int) string {
@@ -176,6 +177,23 @@ func (g *GitHub) Manifest(org, publicURL, returnURL string) (api.ManifestForm, e
 	return api.ManifestForm{Action: "/demo/github/new?state=" + state, Manifest: string(manifest), State: state}, nil
 }
 
+// RunnerManifest implements api.GitHub.
+func (g *GitHub) RunnerManifest(org, returnURL string) (api.ManifestForm, error) {
+	state := randomHex(12)
+	name := "CI-Plane runners"
+	if org != "" {
+		name += " (" + org + ")"
+	}
+	manifest, _ := json.Marshal(map[string]any{
+		"name": name, "public": false, "redirect_url": returnURL, "setup_url": returnURL,
+		"default_permissions": map[string]string{"actions": "write", "metadata": "read"},
+	})
+	g.mu.Lock()
+	g.states[state] = manifestState{org: org, returnURL: returnURL, code: "demo-" + randomHex(8), runners: true}
+	g.mu.Unlock()
+	return api.ManifestForm{Action: "/demo/github/new?state=" + state, Manifest: string(manifest), State: state}, nil
+}
+
 // Complete implements api.GitHub.
 func (g *GitHub) Complete(ctx context.Context, code, state string) (model.Account, error) {
 	g.mu.Lock()
@@ -201,6 +219,10 @@ func (g *GitHub) Complete(ctx context.Context, code, state string) (model.Accoun
 	}
 	a := model.Account{ID: id, Slug: "ci-plane-" + strings.ToLower(owner), Owner: owner, OwnerType: kind,
 		HTMLURL: "https://github.com/apps/ci-plane-" + strings.ToLower(owner), Enabled: true, CreatedAt: time.Now().UnixMilli()}
+	if ms.runners {
+		a.Runners, a.Slug, a.HTMLURL = true, "ci-plane-runners-"+strings.ToLower(owner), "https://github.com/apps/ci-plane-runners-"+strings.ToLower(owner)
+		return a, g.d.Store.Tx(func(tx *store.Tx) error { return tx.SaveRunnerAccount(a) })
+	}
 	err := g.d.Store.Tx(func(tx *store.Tx) error { return tx.SaveAccount(a) })
 	return a, err
 }
@@ -226,6 +248,17 @@ func (g *GitHub) Sync(ctx context.Context, accountID int64) error {
 	installed := g.installed[accountID]
 	g.mu.Unlock()
 	return g.d.Store.Tx(func(tx *store.Tx) error {
+		if a, err := tx.RunnerAccount(accountID); err == nil {
+			// A runner account gets a private relay repository.
+			if a.InstallationID != 0 || !installed {
+				return nil
+			}
+			a.InstallationID = 61_000_000 + accountID%1000
+			if err := tx.SaveRunnerAccount(a); err != nil {
+				return err
+			}
+			return tx.SetRunnerRepos(accountID, []model.Repo{{ID: accountID * 10, FullName: a.Owner + "/ci-plane-relay", Private: true}})
+		}
 		a, err := tx.Account(accountID)
 		if err != nil {
 			return err
@@ -250,12 +283,26 @@ func (g *GitHub) Sync(ctx context.Context, accountID int64) error {
 func (g *GitHub) Remove(ctx context.Context, accountID int64) (string, error) {
 	var slug string
 	err := g.d.Store.Tx(func(tx *store.Tx) error {
+		del := tx.DeleteAccount
 		a, err := tx.Account(accountID)
+		if errors.Is(err, store.ErrNotFound) {
+			a, err = tx.RunnerAccount(accountID)
+			del = tx.DeleteRunnerAccount
+		}
 		if err != nil {
 			return err
 		}
+		pools, err := tx.Pools()
+		if err != nil {
+			return err
+		}
+		for _, p := range pools {
+			if p.AccountID == accountID {
+				return fmt.Errorf("the pool %s starts its runners through the app of %s; choose another account for it on the Pools page or remove it first", p.Name, a.Owner)
+			}
+		}
 		slug = a.Slug
-		return tx.DeleteAccount(accountID)
+		return del(accountID)
 	})
 	if err != nil {
 		return "", err
@@ -405,7 +452,7 @@ func (*Relay) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 }
 
 // Check implements api.Relay.
-func (*Relay) Check(context.Context, string) api.RelayCheck {
+func (*Relay) Check(context.Context, int64, string) api.RelayCheck {
 	return api.RelayCheck{Problems: []string{}}
 }
 

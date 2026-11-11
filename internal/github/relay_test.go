@@ -455,7 +455,7 @@ func TestRelayErrorsSayWhatToDo(t *testing.T) {
 	if err := re.relay.Start(ctx, model.Worker{}, spec); err == nil || !strings.Contains(err.Error(), "ci-plane-relay.yml") {
 		t.Errorf("no workflow: %v", err)
 	}
-	if c := re.relay.Check(ctx, "acme/relay"); len(c.Problems) != 1 || !strings.Contains(c.Problems[0], "not in acme/relay") ||
+	if c := re.relay.Check(ctx, 0, "acme/relay"); len(c.Problems) != 1 || !strings.Contains(c.Problems[0], "not in acme/relay") ||
 		!strings.Contains(c.AddURL, "/acme/relay/new/main?filename=.github%2Fworkflows%2Fci-plane-relay.yml&value=name%3A+CI-Plane+relay") ||
 		len(c.AddURL) > 7500 {
 		t.Errorf("check without workflow: %d %+v", len(c.AddURL), c)
@@ -478,17 +478,17 @@ func TestRelayErrorsSayWhatToDo(t *testing.T) {
 		!strings.Contains(err.Error(), "github.com/organizations/acme/settings/apps/ci-plane-acme/permissions") {
 		t.Errorf("app without Actions write: %v", err)
 	}
-	if p := re.relay.Check(ctx, "acme/relay").Problems; len(p) != 1 || !strings.Contains(p[0], "may not start workflows") {
+	if p := re.relay.Check(ctx, 0, "acme/relay").Problems; len(p) != 1 || !strings.Contains(p[0], "may not start workflows") {
 		t.Errorf("check of an app without Actions write: %v", p)
 	}
 	re.fake.readOnly = false
 
 	re.fake.disabled = true
-	if p := re.relay.Check(ctx, "acme/relay").Problems; len(p) != 1 || !strings.Contains(p[0], "disabled") {
+	if p := re.relay.Check(ctx, 0, "acme/relay").Problems; len(p) != 1 || !strings.Contains(p[0], "disabled") {
 		t.Errorf("check of a disabled workflow: %v", p)
 	}
 	re.fake.disabled = false
-	if p := re.relay.Check(ctx, "acme/relay").Problems; len(p) != 0 {
+	if p := re.relay.Check(ctx, 0, "acme/relay").Problems; len(p) != 0 {
 		t.Errorf("check when ready: %v", p)
 	}
 
@@ -496,7 +496,7 @@ func TestRelayErrorsSayWhatToDo(t *testing.T) {
 	if err := public.relay.Start(ctx, model.Worker{}, spec); err == nil || !strings.Contains(err.Error(), "public") {
 		t.Errorf("public repository: %v", err)
 	}
-	if p := re.relay.Check(ctx, "acme/unknown").Problems; len(p) != 1 || !strings.Contains(p[0], "install the GitHub App of acme") {
+	if p := re.relay.Check(ctx, 0, "acme/unknown").Problems; len(p) != 1 || !strings.Contains(p[0], "install the GitHub App of acme") {
 		t.Errorf("check of an unknown repository: %v", p)
 	}
 	noMachine := spec

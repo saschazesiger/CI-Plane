@@ -145,12 +145,15 @@ func (s *Service) noteHook(id int64, problem string) {
 	h.hookErr = problem
 }
 
-// account reads one account from the store.
+// account reads one account from the store: of the repository
+// integration, or a runner account.
 func (s *Service) account(id int64) (model.Account, error) {
 	var a model.Account
 	err := s.st.View(func(tx *store.Tx) error {
 		var err error
-		a, err = tx.Account(id)
+		if a, err = tx.Account(id); errors.Is(err, store.ErrNotFound) {
+			a, err = tx.RunnerAccount(id)
+		}
 		return err
 	})
 	if errors.Is(err, store.ErrNotFound) {

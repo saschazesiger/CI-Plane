@@ -101,42 +101,111 @@ type relayPending struct {
 	DindImage   string `json:"dindImage"` // of its Docker daemon
 	RepoID      int64  `json:"repoId"`    // the repository of the pool it was dispatched in
 	Repo        string `json:"repo"`
+	AccountID   int64  `json:"accountId"`   // the app that dispatched it; 0 before runner accounts
 	CollectedBy string `json:"collectedBy"` // run id that collected it
 	CollectedAt int64  `json:"collectedAt"`
 }
 
-// relayRepo is a repository with its account, as CI-Plane knows them.
+// relayRepo is a repository with the app that starts runs in it.
 type relayRepo struct {
 	model.Repo
 	account model.Account
 }
 
-// find looks a repository up among those the apps are installed on: by
-// id, or by name if id is 0. Its errors say what the person has to do.
-func (r *Relay) find(id int64, name string) (relayRepo, error) {
+// apps lists the apps that may start the relay workflow with the
+// repositories each one sees: the runner accounts first, then the accounts
+// of the repository integration.
+func apps(tx *store.Tx) ([]relayRepo, error) {
+	var out []relayRepo
+	runnerAccs, err := tx.RunnerAccounts()
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range runnerAccs {
+		repos, err := tx.RunnerRepos(a.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range repos {
+			out = append(out, relayRepo{Repo: p, account: a})
+		}
+	}
+	accs, err := tx.Accounts()
+	if err != nil {
+		return nil, err
+	}
+	byID := map[int64]model.Account{}
+	for _, a := range accs {
+		byID[a.ID] = a
+	}
+	repos, err := tx.Repos(0)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range repos {
+		if a, ok := byID[p.AccountID]; ok {
+			out = append(out, relayRepo{Repo: p, account: a})
+		}
+	}
+	return out, nil
+}
+
+// find looks a repository up among those the app of an account sees: by
+// id, or by name if id is 0. A pool of an earlier version has no account
+// (0): then any app that sees the repository will do, those of the
+// repository integration first, as before. Its errors say what the person
+// has to do.
+func (r *Relay) find(accountID, id int64, name string) (relayRepo, error) {
 	var out relayRepo
 	err := r.s.st.View(func(tx *store.Tx) error {
-		repos, err := tx.Repos(0)
+		all, err := apps(tx)
 		if err != nil {
 			return err
 		}
-		for _, p := range repos {
-			if (id != 0 && p.ID == id) || (id == 0 && strings.EqualFold(p.FullName, name)) {
-				out.Repo = p
-				break
+		match := func(p relayRepo) bool {
+			return (id != 0 && p.ID == id) || (id == 0 && strings.EqualFold(p.FullName, name))
+		}
+		if accountID == 0 {
+			// The integration first: before runner accounts existed, its
+			// apps started the runs of every pool.
+			for i := len(all) - 1; i >= 0; i-- {
+				if match(all[i]) {
+					out = all[i]
+					break
+				}
+			}
+		} else {
+			for _, p := range all {
+				if p.account.ID == accountID && match(p) {
+					out = p
+					break
+				}
 			}
 		}
 		if out.ID == 0 {
-			if name == "" {
+			var acc model.Account
+			if accountID != 0 {
+				if acc, err = tx.RunnerAccount(accountID); errors.Is(err, store.ErrNotFound) {
+					acc, err = tx.Account(accountID)
+				}
+				if err != nil {
+					return errors.New("the account that starts the runners of this pool is not connected any more; choose another one for the pool on the Pools page")
+				}
+			}
+			switch {
+			case acc.ID != 0 && acc.InstallationID == 0:
+				return fmt.Errorf("the GitHub App %s is not installed; install it on %s under Pools", acc.Slug, acc.Owner)
+			case acc.ID != 0 && name != "":
+				return fmt.Errorf("the GitHub App %s does not see the repository %s; choose it for the app with \"Choose repositories on GitHub\" on the Pools page", acc.Slug, name)
+			case acc.ID != 0:
+				return fmt.Errorf("the GitHub App %s does not see this repository any more; choose it for the app again with \"Choose repositories on GitHub\" on the Pools page", acc.Slug)
+			case name == "":
 				return errors.New("CI-Plane does not see this repository any more: install the GitHub App on it again")
 			}
 			return fmt.Errorf("CI-Plane does not see the repository %s any more: install the GitHub App of %s on it", name, ownerOf(name))
 		}
-		if out.account, err = tx.Account(out.AccountID); err != nil {
-			return fmt.Errorf("the account of %s is not connected: %w", out.FullName, err)
-		}
 		if out.account.InstallationID == 0 {
-			return fmt.Errorf("the GitHub App of %s is not installed any more; install it again under Repositories", out.account.Owner)
+			return fmt.Errorf("the GitHub App of %s is not installed any more; install it again", out.account.Owner)
 		}
 		return nil
 	})
@@ -144,11 +213,11 @@ func (r *Relay) find(id int64, name string) (relayRepo, error) {
 }
 
 // repo is the repository of a pool, checked for starting runners in it.
-func (r *Relay) repo(name string) (relayRepo, error) {
+func (r *Relay) repo(accountID int64, name string) (relayRepo, error) {
 	if name == "" {
-		return relayRepo{}, errors.New("the pool has no repository; choose one on the Workers page")
+		return relayRepo{}, errors.New("the pool has no repository; choose one on the Pools page")
 	}
-	rr, err := r.find(0, name)
+	rr, err := r.find(accountID, 0, name)
 	if err != nil {
 		return rr, err
 	}
@@ -224,12 +293,12 @@ func passing(err error) error {
 // runner. A run left of an earlier start under the same name is stopped
 // first, so it can be repeated.
 func (r *Relay) Start(ctx context.Context, _ model.Worker, spec engine.RunnerSpec) error {
-	rr, err := r.repo(spec.Repo)
+	rr, err := r.repo(spec.RelayAccount, spec.Repo)
 	if err != nil {
 		return err
 	}
 	if spec.Machine == "" {
-		return errors.New("the pool has no machine for a job of this size; enter one on the Workers page")
+		return errors.New("the pool has no machine for a job of this size; enter one on the Pools page")
 	}
 	base := ""
 	if r.PublicURL != nil {
@@ -250,7 +319,7 @@ func (r *Relay) Start(ctx context.Context, _ model.Worker, spec engine.RunnerSpe
 	}
 	now := r.s.now()
 	b, _ := json.Marshal(relayPending{JITConfig: spec.JITConfig, At: now.UnixMilli(), Machine: spec.Machine, Hosted: spec.GitHubHosted,
-		Image: spec.Image, DindImage: spec.DindImage, RepoID: rr.ID, Repo: rr.FullName})
+		Image: spec.Image, DindImage: spec.DindImage, RepoID: rr.ID, Repo: rr.FullName, AccountID: rr.account.ID})
 	if err := r.s.st.Tx(func(tx *store.Tx) error { return r.s.box.Put(tx, pendingName(spec.Name), b) }); err != nil {
 		return err
 	}
@@ -312,7 +381,7 @@ func (r *Relay) Remove(ctx context.Context, _ model.Worker, name string) error {
 		// for it where the pools run theirs.
 		return r.stopAnywhere(ctx, name)
 	}
-	rr, err := r.find(p.RepoID, p.Repo)
+	rr, err := r.find(p.AccountID, p.RepoID, p.Repo)
 	if err != nil {
 		// Neither repository is known any more: there is no run CI-Plane
 		// could stop. The runner's registration is gone, so a run that
@@ -342,12 +411,12 @@ func (r *Relay) stopAnywhere(ctx context.Context, name string) error {
 	}
 	seen := map[string]bool{}
 	for _, p := range pools {
-		key := strings.ToLower(p.Repo)
+		key := strconv.FormatInt(p.AccountID, 10) + "/" + strings.ToLower(p.Repo)
 		if p.Repo == "" || seen[key] {
 			continue
 		}
 		seen[key] = true
-		rr, err := r.find(0, p.Repo)
+		rr, err := r.find(p.AccountID, 0, p.Repo)
 		if err != nil {
 			continue
 		}
@@ -458,10 +527,11 @@ func (r *Relay) List(ctx context.Context, _ model.Worker) ([]engine.Container, e
 	// The repositories with runners of the relay: those of the runners
 	// that were dispatched and not removed yet.
 	type group struct {
-		id     int64
-		name   string
-		oldest int64 // the earliest dispatch, Unix ms
-		names  []string
+		account int64
+		id      int64
+		name    string
+		oldest  int64 // the earliest dispatch, Unix ms
+		names   []string
 	}
 	groups := map[string]*group{}
 	var keys []string
@@ -482,9 +552,10 @@ func (r *Relay) List(ctx context.Context, _ model.Worker) ([]engine.Container, e
 		if p.RepoID != 0 {
 			key = strconv.FormatInt(p.RepoID, 10)
 		}
+		key = strconv.FormatInt(p.AccountID, 10) + "/" + key
 		g := groups[key]
 		if g == nil {
-			g = &group{id: p.RepoID, name: p.Repo, oldest: p.At}
+			g = &group{account: p.AccountID, id: p.RepoID, name: p.Repo, oldest: p.At}
 			groups[key] = g
 		}
 		g.oldest = min(g.oldest, p.At)
@@ -493,7 +564,7 @@ func (r *Relay) List(ctx context.Context, _ model.Worker) ([]engine.Container, e
 	var runs []relayRun
 	unknown := map[string]bool{} // runners whose runs cannot be seen right now
 	for _, g := range groups {
-		rr, err := r.find(g.id, g.name)
+		rr, err := r.find(g.account, g.id, g.name)
 		var more []relayRun
 		if err == nil {
 			more, err = r.runs(ctx, rr, time.UnixMilli(g.oldest))
@@ -573,12 +644,12 @@ func (r *Relay) Status(int64) engine.WorkerStatus {
 // Check says what keeps a pool with that repository from working, in words
 // for the person, and where the relay workflow can be added if it is
 // missing.
-func (r *Relay) Check(ctx context.Context, repo string) api.RelayCheck {
+func (r *Relay) Check(ctx context.Context, accountID int64, repo string) api.RelayCheck {
 	out := api.RelayCheck{Problems: []string{}}
 	if r.PublicURL == nil || !strings.HasPrefix(r.PublicURL(), "https://") {
 		out.Problems = append(out.Problems, "The Cloudflare tunnel is not set up or not connected, so the relay workflow could not reach CI-Plane. Check it under Settings.")
 	}
-	rr, err := r.repo(repo)
+	rr, err := r.repo(accountID, repo)
 	if err != nil {
 		out.Problems = append(out.Problems, upper(err.Error())+".")
 		return out
@@ -697,10 +768,24 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	// Anybody can show a token of some repository: say nothing about ours.
+	// The run was started by the app that dispatched it, which the token
+	// names as its actor; more than one app may see the repository.
 	repoID, _ := strconv.ParseInt(claims.RepositoryID, 10, 64)
-	rr, err := r.find(repoID, "")
-	if repoID == 0 || err != nil {
-		r.s.logf("relay: run %s of %s (%s) asked for a runner: %v", claims.RunID, claims.Repository, claims.RepositoryID, err)
+	var rr relayRepo
+	if repoID != 0 {
+		_ = r.s.st.View(func(tx *store.Tx) error {
+			all, err := apps(tx)
+			for _, p := range all {
+				if p.ID == repoID && p.account.InstallationID != 0 && strings.EqualFold(claims.Actor, p.account.Slug+"[bot]") {
+					rr = p
+					break
+				}
+			}
+			return err
+		})
+	}
+	if rr.ID == 0 {
+		r.s.logf("relay: run %s of %s (%s) by %s asked for a runner of no app CI-Plane knows", claims.RunID, claims.Repository, claims.RepositoryID, claims.Actor)
 		fail(http.StatusForbidden, "CI-Plane hands out no runners to this repository")
 		return
 	}
@@ -773,6 +858,8 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		switch {
 		case cfg.RepoID != rr.ID && !(cfg.RepoID == 0 && strings.EqualFold(cfg.Repo, rr.FullName)):
 			return store.ErrNotFound // a runner of another repository
+		case cfg.AccountID != 0 && cfg.AccountID != rr.account.ID:
+			return store.ErrNotFound // dispatched by another app
 		case !onMachine(jobs.Jobs, cfg.Machine) || (cfg.Hosted && claims.RunnerEnvironment != "github-hosted"):
 			return errMachine
 		case cfg.CollectedBy == by && now.UnixMilli()-cfg.CollectedAt < relayRecollect.Milliseconds():

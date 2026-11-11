@@ -85,6 +85,14 @@ CREATE TABLE IF NOT EXISTS pools (
   month TEXT NOT NULL DEFAULT '', used_sec INTEGER NOT NULL DEFAULT 0, fails INTEGER NOT NULL DEFAULT 0,
   paused_until INTEGER NOT NULL DEFAULT 0, pause_reason TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS runner_accounts (
+  id INTEGER PRIMARY KEY, slug TEXT NOT NULL, owner TEXT NOT NULL, owner_type TEXT NOT NULL,
+  html_url TEXT NOT NULL DEFAULT '', installation_id INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS runner_repos (
+  id INTEGER NOT NULL, account_id INTEGER NOT NULL, full_name TEXT NOT NULL, private INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (account_id, id)
+);
 CREATE INDEX IF NOT EXISTS events_job ON events(job_id);
 CREATE INDEX IF NOT EXISTS events_worker ON events(worker_id);
 `
@@ -112,6 +120,7 @@ func Open(dir string) (*Store, error) {
 		{"workers", "cpu_priority", "TEXT NOT NULL DEFAULT 'normal'"},
 		{"jobs", "run_attempt", "INTEGER NOT NULL DEFAULT 0"},
 		{"jobs", "rerun", "TEXT NOT NULL DEFAULT ''"},
+		{"pools", "account_id", "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		if err := addColumn(db, c.table, c.column, c.def); err != nil {
 			db.Close()
@@ -412,6 +421,100 @@ func (t *Tx) DeleteRepo(id int64) error {
 	return err
 }
 
+// --- runner accounts ---------------------------------------------------------
+
+// Runner accounts are GitHub Apps that only start the runners of pools in
+// their relay repositories. They are kept apart from the accounts that
+// receive jobs, so the engine and the Repositories page never see them.
+
+const runnerAccountCols = `id, slug, owner, owner_type, html_url, installation_id, created_at`
+
+func scanRunnerAccount(r interface{ Scan(...any) error }) (model.Account, error) {
+	a := model.Account{Runners: true}
+	err := r.Scan(&a.ID, &a.Slug, &a.Owner, &a.OwnerType, &a.HTMLURL, &a.InstallationID, &a.CreatedAt)
+	return a, err
+}
+
+// SaveRunnerAccount inserts or replaces a runner account.
+func (t *Tx) SaveRunnerAccount(a model.Account) error {
+	_, err := t.q.Exec(`INSERT INTO runner_accounts(`+runnerAccountCols+`) VALUES(?,?,?,?,?,?,?)
+	  ON CONFLICT(id) DO UPDATE SET slug=excluded.slug, owner=excluded.owner, owner_type=excluded.owner_type,
+	  html_url=excluded.html_url, installation_id=excluded.installation_id`,
+		a.ID, a.Slug, a.Owner, a.OwnerType, a.HTMLURL, a.InstallationID, a.CreatedAt)
+	return err
+}
+
+// RunnerAccount returns one runner account.
+func (t *Tx) RunnerAccount(id int64) (model.Account, error) {
+	a, err := scanRunnerAccount(t.q.QueryRow(`SELECT `+runnerAccountCols+` FROM runner_accounts WHERE id=?`, id))
+	return a, notFound(err)
+}
+
+// RunnerAccounts lists all runner accounts.
+func (t *Tx) RunnerAccounts() ([]model.Account, error) {
+	rows, err := t.q.Query(`SELECT ` + runnerAccountCols + ` FROM runner_accounts ORDER BY owner COLLATE NOCASE, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []model.Account{}
+	for rows.Next() {
+		a, err := scanRunnerAccount(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// DeleteRunnerAccount removes a runner account and its repositories.
+func (t *Tx) DeleteRunnerAccount(id int64) error {
+	if _, err := t.q.Exec(`DELETE FROM runner_repos WHERE account_id=?`, id); err != nil {
+		return err
+	}
+	_, err := t.q.Exec(`DELETE FROM runner_accounts WHERE id=?`, id)
+	return err
+}
+
+// SetRunnerRepos replaces the repositories of a runner account.
+func (t *Tx) SetRunnerRepos(accountID int64, repos []model.Repo) error {
+	if _, err := t.q.Exec(`DELETE FROM runner_repos WHERE account_id=?`, accountID); err != nil {
+		return err
+	}
+	for _, p := range repos {
+		if _, err := t.q.Exec(`INSERT OR REPLACE INTO runner_repos(id, account_id, full_name, private) VALUES(?,?,?,?)`,
+			p.ID, accountID, p.FullName, b2i(p.Private)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RunnerRepos lists the repositories of a runner account, or (0) of all.
+func (t *Tx) RunnerRepos(accountID int64) ([]model.Repo, error) {
+	q := `SELECT id, account_id, full_name, private FROM runner_repos`
+	args := []any{}
+	if accountID != 0 {
+		q += ` WHERE account_id=?`
+		args = append(args, accountID)
+	}
+	rows, err := t.q.Query(q+` ORDER BY full_name COLLATE NOCASE`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []model.Repo{}
+	for rows.Next() {
+		var p model.Repo
+		if err := rows.Scan(&p.ID, &p.AccountID, &p.FullName, &p.Private); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 // --- workers ---------------------------------------------------------------
 
 const workerCols = `id, name, host, port, user, host_key, tier, position, enabled, draining, state, state_reason,
@@ -487,12 +590,12 @@ func (t *Tx) DeleteWorker(id int64) error {
 
 // --- pools -----------------------------------------------------------------
 
-const poolCols = `id, name, kind, repo, tier, position, enabled, after_sec, max, standard, large, budget_min,
+const poolCols = `id, name, kind, account_id, repo, tier, position, enabled, after_sec, max, standard, large, budget_min,
  month, used_sec, fails, paused_until, pause_reason, created_at`
 
 func scanPool(r interface{ Scan(...any) error }) (model.Pool, error) {
 	var p model.Pool
-	err := r.Scan(&p.ID, &p.Name, &p.Kind, &p.Repo, &p.Tier, &p.Position, &p.Enabled, &p.AfterSec, &p.Max, &p.Standard, &p.Large,
+	err := r.Scan(&p.ID, &p.Name, &p.Kind, &p.AccountID, &p.Repo, &p.Tier, &p.Position, &p.Enabled, &p.AfterSec, &p.Max, &p.Standard, &p.Large,
 		&p.BudgetMin, &p.Month, &p.UsedSec, &p.Fails, &p.PausedUntil, &p.PauseReason, &p.CreatedAt)
 	return p, err
 }
@@ -502,9 +605,9 @@ func (t *Tx) AddPool(p model.Pool) (model.Pool, error) {
 	if p.CreatedAt == 0 {
 		p.CreatedAt = t.now()
 	}
-	res, err := t.q.Exec(`INSERT INTO pools(name, kind, repo, tier, position, enabled, after_sec, max, standard, large, budget_min,
-	  month, used_sec, fails, paused_until, pause_reason, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		p.Name, p.Kind, p.Repo, p.Tier, p.Position, b2i(p.Enabled), p.AfterSec, p.Max, p.Standard, p.Large, p.BudgetMin,
+	res, err := t.q.Exec(`INSERT INTO pools(name, kind, account_id, repo, tier, position, enabled, after_sec, max, standard, large, budget_min,
+	  month, used_sec, fails, paused_until, pause_reason, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		p.Name, p.Kind, p.AccountID, p.Repo, p.Tier, p.Position, b2i(p.Enabled), p.AfterSec, p.Max, p.Standard, p.Large, p.BudgetMin,
 		p.Month, p.UsedSec, p.Fails, p.PausedUntil, p.PauseReason, p.CreatedAt)
 	if err != nil {
 		return p, err
@@ -515,9 +618,9 @@ func (t *Tx) AddPool(p model.Pool) (model.Pool, error) {
 
 // SavePool stores a pool.
 func (t *Tx) SavePool(p model.Pool) error {
-	_, err := t.q.Exec(`UPDATE pools SET name=?, kind=?, repo=?, tier=?, position=?, enabled=?, after_sec=?, max=?, standard=?, large=?,
+	_, err := t.q.Exec(`UPDATE pools SET name=?, kind=?, account_id=?, repo=?, tier=?, position=?, enabled=?, after_sec=?, max=?, standard=?, large=?,
 	  budget_min=?, month=?, used_sec=?, fails=?, paused_until=?, pause_reason=? WHERE id=?`,
-		p.Name, p.Kind, p.Repo, p.Tier, p.Position, b2i(p.Enabled), p.AfterSec, p.Max, p.Standard, p.Large, p.BudgetMin,
+		p.Name, p.Kind, p.AccountID, p.Repo, p.Tier, p.Position, b2i(p.Enabled), p.AfterSec, p.Max, p.Standard, p.Large, p.BudgetMin,
 		p.Month, p.UsedSec, p.Fails, p.PausedUntil, p.PauseReason, p.ID)
 	return err
 }

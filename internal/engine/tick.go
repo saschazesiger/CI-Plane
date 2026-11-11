@@ -399,7 +399,7 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 	if model.IsPool(w.ID) {
 		// The machine is all the job gets there: nothing to limit or rank.
 		spec.MemMB, spec.CPUPriority = 0, ""
-		spec.Machine, spec.Repo = pool.Machine(sizeName(set, r.Size)), pool.Repo
+		spec.Machine, spec.Repo, spec.RelayAccount = pool.Machine(sizeName(set, r.Size)), pool.Repo, pool.AccountID
 		spec.GitHubHosted = pool.Kind == model.PoolGitHub
 	}
 	if err := fleet.Start(ctx, w, spec); err != nil {

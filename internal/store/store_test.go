@@ -273,3 +273,65 @@ func TestRepoThatBecomesPublicIsSwitchedOff(t *testing.T) {
 }
 
 func get2(tx *Tx) model.Repo { p, _ := tx.Repo(1); return p }
+
+func TestRunnerAccountsAreApart(t *testing.T) {
+	s := open(t, "")
+	err := s.Tx(func(tx *Tx) error {
+		if err := tx.SaveAccount(model.Account{ID: 1, Slug: "jobs", Owner: "acme", OwnerType: "Organization", Enabled: true, CreatedAt: 1}); err != nil {
+			return err
+		}
+		if err := tx.SaveRunnerAccount(model.Account{ID: 2, Slug: "minutes", Owner: "jane", OwnerType: "User", CreatedAt: 2}); err != nil {
+			return err
+		}
+		// The same repository may be seen by both apps.
+		if err := tx.UpsertRepo(model.NewRepo(10, 1, "acme/relay", true)); err != nil {
+			return err
+		}
+		if err := tx.SetRunnerRepos(2, []model.Repo{{ID: 10, FullName: "acme/relay", Private: true}, {ID: 11, FullName: "jane/relay", Private: true}}); err != nil {
+			return err
+		}
+		_, err := tx.AddPool(model.Pool{Name: "GitHub", Kind: model.PoolGitHub, AccountID: 2, Repo: "jane/relay", Tier: 9, Max: 1, Standard: "ubuntu-latest", Enabled: true})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.View(func(tx *Tx) error {
+		accs, _ := tx.Accounts()
+		if len(accs) != 1 || accs[0].ID != 1 || accs[0].Runners {
+			t.Errorf("accounts: %+v", accs)
+		}
+		repos, _ := tx.Repos(0)
+		if len(repos) != 1 {
+			t.Errorf("repos: %+v", repos)
+		}
+		ra, err := tx.RunnerAccount(2)
+		if err != nil || !ra.Runners || ra.Owner != "jane" {
+			t.Errorf("runner account: %+v %v", ra, err)
+		}
+		if _, err := tx.RunnerAccount(1); !errors.Is(err, ErrNotFound) {
+			t.Errorf("an account of the integration is no runner account: %v", err)
+		}
+		rr, _ := tx.RunnerRepos(2)
+		if len(rr) != 2 || rr[0].AccountID != 2 {
+			t.Errorf("runner repos: %+v", rr)
+		}
+		pools, _ := tx.Pools()
+		if len(pools) != 1 || pools[0].AccountID != 2 {
+			t.Errorf("pools: %+v", pools)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Tx(func(tx *Tx) error { return tx.DeleteRunnerAccount(2) }); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.View(func(tx *Tx) error {
+		if rr, _ := tx.RunnerRepos(0); len(rr) != 0 {
+			t.Errorf("repos of a removed runner account stay: %+v", rr)
+		}
+		return nil
+	})
+}

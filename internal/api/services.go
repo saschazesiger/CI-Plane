@@ -70,6 +70,10 @@ type GitHub interface {
 	// CI-Plane (the webhook is publicURL + "/webhook"); returnURL is where
 	// the browser comes back to with ?code=...&state=...
 	Manifest(org, publicURL, returnURL string) (ManifestForm, error)
+	// RunnerManifest prepares the creation of the app of a runner account:
+	// one that only starts the relay workflow of pools in repositories of
+	// its owner, receives no jobs and registers no runners.
+	RunnerManifest(org, returnURL string) (ManifestForm, error)
 	// Complete finishes the creation with the code GitHub passed back and
 	// stores the account.
 	Complete(ctx context.Context, code, state string) (model.Account, error)
@@ -145,9 +149,9 @@ type Relay interface {
 	// ServeHTTP hands runs of the relay workflow their runner
 	// (/webhook/relay on the tunnel).
 	http.Handler
-	// Check says what keeps a pool with that repository (owner/name) from
-	// working.
-	Check(ctx context.Context, repo string) RelayCheck
+	// Check says what keeps a pool from working whose runs the app of
+	// accountID (0: any app that sees it) starts in repo (owner/name).
+	Check(ctx context.Context, accountID int64, repo string) RelayCheck
 	// Workflow is the relay workflow to add to the repository of a pool.
 	Workflow() string
 }

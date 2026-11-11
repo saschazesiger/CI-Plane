@@ -54,34 +54,58 @@ func (s *Service) sync(ctx context.Context, accountID int64) error {
 		}
 	}
 
-	if inst == nil {
-		s.dropToken(accountID)
-		return s.st.Tx(func(tx *store.Tx) error {
-			cur, err := tx.Account(accountID)
+	// setInstallation stores the installation and the repositories it
+	// covers, where the kind of account keeps them.
+	setInstallation := func(tx *store.Tx, id int64, repos []ghRepo, all bool) error {
+		if acc.Runners {
+			cur, err := tx.RunnerAccount(accountID)
 			if err != nil {
-				return ignoreNotFound(err)
+				return ignoreNotFound(err) // removed meanwhile
 			}
-			cur.InstallationID = 0
-			if err := tx.SaveAccount(cur); err != nil {
+			cur.InstallationID = id
+			if err := tx.SaveRunnerAccount(cur); err != nil {
 				return err
 			}
-			return keepRepos(tx, accountID, nil)
-		})
+			if !all {
+				return nil
+			}
+			keep := make([]model.Repo, 0, len(repos))
+			for _, r := range repos {
+				keep = append(keep, model.Repo{ID: r.ID, AccountID: accountID, FullName: r.FullName, Private: r.Private})
+			}
+			return tx.SetRunnerRepos(accountID, keep)
+		}
+		cur, err := tx.Account(accountID)
+		if err != nil {
+			return ignoreNotFound(err) // removed meanwhile
+		}
+		cur.InstallationID = id
+		if err := tx.SaveAccount(cur); err != nil {
+			return err
+		}
+		if !all {
+			return nil
+		}
+		if err := upsertRepos(tx, accountID, repos); err != nil {
+			return err
+		}
+		return keepRepos(tx, accountID, repos)
+	}
+
+	if inst == nil {
+		s.dropToken(accountID)
+		return s.st.Tx(func(tx *store.Tx) error { return setInstallation(tx, 0, nil, true) })
 	}
 	if acc.InstallationID != inst.ID {
 		s.dropToken(accountID)
-		if err := s.st.Tx(func(tx *store.Tx) error {
-			cur, err := tx.Account(accountID)
-			if err != nil {
-				return err
-			}
-			cur.InstallationID = inst.ID
-			return tx.SaveAccount(cur)
-		}); err != nil {
+		if err := s.st.Tx(func(tx *store.Tx) error { return setInstallation(tx, inst.ID, nil, false) }); err != nil {
 			return err
 		}
 	}
 	if suspended {
+		if acc.Runners {
+			return fmt.Errorf("the app %s is suspended on GitHub; unsuspend its installation so that its pools can start runners again", acc.Slug)
+		}
 		return fmt.Errorf("the app %s is suspended on GitHub; unsuspend its installation to get jobs again", acc.Slug)
 	}
 
@@ -102,15 +126,7 @@ func (s *Service) sync(ctx context.Context, accountID int64) error {
 			break
 		}
 	}
-	return s.st.Tx(func(tx *store.Tx) error {
-		if _, err := tx.Account(accountID); err != nil {
-			return ignoreNotFound(err) // removed meanwhile
-		}
-		if err := upsertRepos(tx, accountID, repos); err != nil {
-			return err
-		}
-		return keepRepos(tx, accountID, repos)
-	})
+	return s.st.Tx(func(tx *store.Tx) error { return setInstallation(tx, inst.ID, repos, true) })
 }
 
 // keepRepos deletes the repositories of an account that are not in keep.
@@ -147,15 +163,20 @@ func (s *Service) Run(ctx context.Context) {
 	defer t.Stop()
 	lastSync := map[int64]time.Time{}
 	for {
-		var accs []model.Account
+		var accs, runnerAccs []model.Account
 		if err := s.st.View(func(tx *store.Tx) error {
 			var err error
-			accs, err = tx.Accounts()
+			if accs, err = tx.Accounts(); err != nil {
+				return err
+			}
+			runnerAccs, err = tx.RunnerAccounts()
 			return err
 		}); err != nil {
 			s.logf("github: list accounts: %v", err)
 		}
-		for _, a := range accs {
+		// Runner accounts have no webhook, so reading them again is the
+		// only way to hear of repositories added to their installation.
+		for _, a := range append(accs, runnerAccs...) {
 			if ctx.Err() != nil {
 				return
 			}
@@ -164,6 +185,9 @@ func (s *Service) Run(ctx context.Context) {
 				if err := s.Sync(ctx, a.ID); err != nil && ctx.Err() == nil {
 					s.logf("github: sync %s: %v", a.Slug, err)
 				}
+			}
+			if a.Runners {
+				continue // no webhooks to redeliver
 			}
 			s.mu.Lock()
 			due := s.now().Sub(s.lastScan[a.ID]) >= redeliverScan

@@ -29,6 +29,7 @@ const pendingKey = "github:manifests"
 // is kept in the store so a restart in between does not break the flow.
 type pending struct {
 	Org       string `json:"org"`
+	Runners   bool   `json:"runners,omitempty"` // a runner account (RunnerManifest)
 	PublicURL string `json:"publicUrl"`
 	ReturnURL string `json:"returnUrl"`
 	Expires   int64  `json:"expires"` // Unix ms
@@ -39,12 +40,12 @@ type manifest struct {
 	Name               string            `json:"name"`
 	URL                string            `json:"url"`
 	Description        string            `json:"description"`
-	HookAttributes     hookAttributes    `json:"hook_attributes"`
+	HookAttributes     *hookAttributes   `json:"hook_attributes,omitempty"`
 	RedirectURL        string            `json:"redirect_url"`
 	SetupURL           string            `json:"setup_url"`
 	SetupOnUpdate      bool              `json:"setup_on_update"`
 	Public             bool              `json:"public"`
-	DefaultEvents      []string          `json:"default_events"`
+	DefaultEvents      []string          `json:"default_events,omitempty"`
 	DefaultPermissions map[string]string `json:"default_permissions"`
 }
 
@@ -72,13 +73,11 @@ func (s *Service) Manifest(org, publicURL, returnURL string) (api.ManifestForm, 
 		return api.ManifestForm{}, fmt.Errorf("%q is not an address the browser can return to", returnURL)
 	}
 
-	state := randomHex(16)
-	suffix := randomHex(3)
 	m := manifest{
-		Name:               appName(org, suffix),
+		Name:               appName(org, randomHex(3)),
 		URL:                s.Homepage,
 		Description:        "Starts ephemeral GitHub Actions runners on your own servers.",
-		HookAttributes:     hookAttributes{URL: publicURL + "/webhook", Active: true},
+		HookAttributes:     &hookAttributes{URL: publicURL + "/webhook", Active: true},
 		RedirectURL:        returnURL,
 		SetupURL:           returnURL,
 		SetupOnUpdate:      true,
@@ -86,12 +85,45 @@ func (s *Service) Manifest(org, publicURL, returnURL string) (api.ManifestForm, 
 		DefaultEvents:      []string{"workflow_job"},
 		DefaultPermissions: permissions(org != ""),
 	}
+	return s.startManifest(org, m, pending{Org: org, PublicURL: publicURL, ReturnURL: returnURL})
+}
+
+// RunnerManifest implements api.GitHub: it prepares the app of a runner
+// account. That app only starts the relay workflow in repositories of its
+// owner, so that a pool can use the minutes of an account whose jobs
+// CI-Plane does not run. It may read and start workflows and nothing else:
+// no webhook, no runners, no administration.
+func (s *Service) RunnerManifest(org, returnURL string) (api.ManifestForm, error) {
+	org = strings.TrimSpace(org)
+	if org != "" && !orgName.MatchString(org) {
+		return api.ManifestForm{}, fmt.Errorf("%q is not a valid organisation name on GitHub", org)
+	}
+	if u, err := url.Parse(returnURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return api.ManifestForm{}, fmt.Errorf("%q is not an address the browser can return to", returnURL)
+	}
+	m := manifest{
+		Name:               runnerAppName(org, randomHex(3)),
+		URL:                s.Homepage,
+		Description:        "Starts runners of CI-Plane on the machines of this account's GitHub Actions minutes.",
+		RedirectURL:        returnURL,
+		SetupURL:           returnURL,
+		SetupOnUpdate:      true,
+		Public:             false,
+		DefaultPermissions: map[string]string{"actions": "write", "metadata": "read"},
+	}
+	return s.startManifest(org, m, pending{Org: org, ReturnURL: returnURL, Runners: true})
+}
+
+// startManifest stores a pending creation and returns the form that sends
+// the manifest to GitHub.
+func (s *Service) startManifest(org string, m manifest, p pending) (api.ManifestForm, error) {
+	state := randomHex(16)
 	body, err := json.Marshal(m)
 	if err != nil {
 		return api.ManifestForm{}, err
 	}
 
-	p := pending{Org: org, PublicURL: publicURL, ReturnURL: returnURL, Expires: s.now().Add(manifestTTL).UnixMilli()}
+	p.Expires = s.now().Add(manifestTTL).UnixMilli()
 	if err := s.st.Tx(func(tx *store.Tx) error {
 		all, err := loadPending(tx)
 		if err != nil {
@@ -141,6 +173,18 @@ func appName(org, suffix string) string {
 		org = org[:room]
 	}
 	return "CI-Plane " + org + " " + suffix
+}
+
+// runnerAppName is the name of the app of a runner account.
+func runnerAppName(org, suffix string) string {
+	if org == "" {
+		return "CI-Plane runners " + suffix
+	}
+	room := maxAppName - len("CI-Plane runners  ") - len(suffix)
+	if len(org) > room {
+		org = org[:room]
+	}
+	return "CI-Plane runners " + org + " " + suffix
 }
 
 func randomHex(n int) string {
@@ -218,7 +262,7 @@ func (s *Service) Complete(ctx context.Context, code, state string) (model.Accou
 	if err != nil {
 		return model.Account{}, err
 	}
-	if out.ID == 0 || out.PEM == "" || out.WebhookSecret == "" {
+	if out.ID == 0 || out.PEM == "" || (out.WebhookSecret == "" && !p.Runners) {
 		return model.Account{}, errors.New("GitHub created the app but did not return its keys; delete the app on GitHub and start again")
 	}
 	if _, err := parseKey([]byte(out.PEM)); err != nil {
@@ -230,17 +274,24 @@ func (s *Service) Complete(ctx context.Context, code, state string) (model.Accou
 	}
 	acc := model.Account{
 		ID: out.ID, Slug: out.Slug, Owner: out.Owner.Login, OwnerType: ownerType, HTMLURL: out.HTMLURL,
-		Enabled: true, CreatedAt: s.now().UnixMilli(),
+		Enabled: true, CreatedAt: s.now().UnixMilli(), Runners: p.Runners,
 	}
 	err = s.st.Tx(func(tx *store.Tx) error {
-		if err := tx.SaveAccount(acc); err != nil {
+		save := tx.SaveAccount
+		if acc.Runners {
+			save = tx.SaveRunnerAccount
+		}
+		if err := save(acc); err != nil {
 			return err
 		}
 		if err := s.box.Put(tx, keyName(acc.ID), []byte(out.PEM)); err != nil {
 			return err
 		}
-		if err := s.box.Put(tx, hookName(acc.ID), []byte(out.WebhookSecret)); err != nil {
-			return err
+		// A runner account has no webhook: nothing it sends is accepted.
+		if out.WebhookSecret != "" && !acc.Runners {
+			if err := s.box.Put(tx, hookName(acc.ID), []byte(out.WebhookSecret)); err != nil {
+				return err
+			}
 		}
 		if out.ClientSecret != "" {
 			if err := s.box.Put(tx, clientName(acc.ID), []byte(out.ClientSecret)); err != nil {
@@ -275,10 +326,30 @@ func (s *Service) Remove(_ context.Context, accountID int64) (string, error) {
 	var a model.Account
 	err := s.st.Tx(func(tx *store.Tx) error {
 		var err error
-		if a, err = tx.Account(accountID); err != nil {
+		del := tx.DeleteAccount
+		if a, err = tx.Account(accountID); errors.Is(err, store.ErrNotFound) {
+			a, err = tx.RunnerAccount(accountID)
+			del = tx.DeleteRunnerAccount
+		}
+		if err != nil {
 			return err
 		}
-		if err := tx.DeleteAccount(accountID); err != nil {
+		// Its pools would fail at every start: they are changed to another
+		// account or removed first, by the person.
+		pools, err := tx.Pools()
+		if err != nil {
+			return err
+		}
+		var used []string
+		for _, p := range pools {
+			if p.AccountID == accountID {
+				used = append(used, p.Name)
+			}
+		}
+		if len(used) > 0 {
+			return fmt.Errorf("the pools %s start their runners through the app of %s; choose another account for them on the Pools page or remove them first", strings.Join(used, ", "), a.Owner)
+		}
+		if err := del(accountID); err != nil {
 			return err
 		}
 		for _, n := range []string{keyName(accountID), hookName(accountID), clientName(accountID)} {

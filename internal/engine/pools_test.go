@@ -27,7 +27,7 @@ func newPoolRig(t *testing.T) *rig {
 // pool adds a pool of GitHub-hosted runners in the given tier.
 func (r *rig) pool(name string, tier int, change ...func(*model.Pool)) model.Pool {
 	r.t.Helper()
-	p := model.Pool{Name: name, Kind: model.PoolGitHub, Repo: "acme/relay", Tier: tier, Enabled: true, Max: 5, Standard: "ubuntu-latest"}
+	p := model.Pool{Name: name, Kind: model.PoolGitHub, AccountID: 77, Repo: "acme/relay", Tier: tier, Enabled: true, Max: 5, Standard: "ubuntu-latest"}
 	for _, c := range change {
 		c(&p)
 	}
@@ -123,7 +123,7 @@ func TestPoolTakesAJobThatWaitedLongEnough(t *testing.T) {
 		t.Fatalf("labels: %s", got)
 	}
 	r.pass(1)
-	if spec := r.world.Specs[x.Name]; spec.Machine != "ubuntu-latest" || spec.Repo != "acme/relay" || spec.MemMB != 0 {
+	if spec := r.world.Specs[x.Name]; spec.Machine != "ubuntu-latest" || spec.Repo != "acme/relay" || spec.RelayAccount != 77 || spec.MemMB != 0 {
 		t.Fatalf("spec: %+v", spec)
 	}
 

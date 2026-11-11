@@ -86,9 +86,51 @@ func (s *Server) poolViews(tx *store.Tx, now int64) ([]poolView, error) {
 	return out, nil
 }
 
+// relayRepoView is a repository a pool can use, with the app that would
+// start the runs in it.
 type relayRepoView struct {
-	FullName string `json:"fullName"`
-	Private  bool   `json:"private"`
+	AccountID int64  `json:"accountId"`
+	Owner     string `json:"owner"`   // of the app
+	Runners   bool   `json:"runners"` // the app is a runner account
+	FullName  string `json:"fullName"`
+	Private   bool   `json:"private"`
+}
+
+// relayRepos are the repositories pools can use: those of the runner
+// accounts first, then those of the repository integration.
+func relayRepos(tx *store.Tx) ([]relayRepoView, error) {
+	out := []relayRepoView{}
+	runnerAccs, err := tx.RunnerAccounts()
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range runnerAccs {
+		repos, err := tx.RunnerRepos(a.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range repos {
+			out = append(out, relayRepoView{AccountID: a.ID, Owner: a.Owner, Runners: true, FullName: p.FullName, Private: p.Private})
+		}
+	}
+	accs, err := tx.Accounts()
+	if err != nil {
+		return nil, err
+	}
+	owner := map[int64]string{}
+	for _, a := range accs {
+		owner[a.ID] = a.Owner
+	}
+	repos, err := tx.Repos(0)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range repos {
+		if o, ok := owner[p.AccountID]; ok {
+			out = append(out, relayRepoView{AccountID: p.AccountID, Owner: o, FullName: p.FullName, Private: p.Private})
+		}
+	}
+	return out, nil
 }
 
 func (s *Server) listPools(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +139,7 @@ func (s *Server) listPools(w http.ResponseWriter, r *http.Request) {
 		Workflow  string          `json:"workflow"`  // the file to add to the repository of a pool
 		PublicURL string          `json:"publicUrl"` // empty: runs could not reach CI-Plane
 		Presets   []poolPreset    `json:"presets"`
-		Repos     []relayRepoView `json:"repos"` // repositories CI-Plane sees
+		Repos     []relayRepoView `json:"repos"` // repositories pools can use
 		Pools     []poolView      `json:"pools"`
 	}
 	resp.Available = s.d.Relay != nil
@@ -110,10 +152,7 @@ func (s *Server) listPools(w http.ResponseWriter, r *http.Request) {
 		if resp.Pools, err = s.poolViews(tx, time.Now().UnixMilli()); err != nil {
 			return err
 		}
-		repos, err := tx.Repos(0)
-		for _, p := range repos {
-			resp.Repos = append(resp.Repos, relayRepoView{FullName: p.FullName, Private: p.Private})
-		}
+		resp.Repos, err = relayRepos(tx)
 		return err
 	})
 	if err != nil {
@@ -128,6 +167,7 @@ func (s *Server) listPools(w http.ResponseWriter, r *http.Request) {
 type poolReq struct {
 	Name      *string `json:"name"`
 	Kind      *string `json:"kind"`
+	AccountID *int64  `json:"accountId"`
 	Repo      *string `json:"repo"`
 	Tier      *int    `json:"tier"`
 	Enabled   *bool   `json:"enabled"`
@@ -160,6 +200,9 @@ func (q poolReq) apply(p *model.Pool) {
 	num(&p.BudgetMin, q.BudgetMin)
 	if q.Enabled != nil {
 		p.Enabled = *q.Enabled
+	}
+	if q.AccountID != nil {
+		p.AccountID = *q.AccountID
 	}
 	p.Repo = strings.Trim(p.Repo, "/")
 }
@@ -214,20 +257,36 @@ func checkPool(tx *store.Tx, p model.Pool) (map[string]string, error) {
 	case !validRepoName(p.Repo):
 		errs["repo"] = "Enter the repository as owner/name, like acme/ci-plane-relay."
 	default:
-		repos, err := tx.Repos(0)
+		repos, err := relayRepos(tx)
 		if err != nil {
 			return nil, err
 		}
-		owner, _, _ := strings.Cut(p.Repo, "/")
-		errs["repo"] = fmt.Sprintf("CI-Plane does not see this repository. Install the GitHub App of %s on it, then try again.", owner)
+		var app string
 		for _, o := range repos {
-			if !strings.EqualFold(o.FullName, p.Repo) {
+			if o.AccountID == p.AccountID {
+				app = o.Owner
+			}
+		}
+		owner, _, _ := strings.Cut(p.Repo, "/")
+		switch {
+		case p.AccountID == 0:
+			errs["repo"] = fmt.Sprintf("CI-Plane does not see this repository. Install the GitHub App of %s on it, then try again.", owner)
+		case app == "":
+			errs["repo"] = "Connect the GitHub account that owns the repository under Accounts, and choose the repository for its app."
+		default:
+			errs["repo"] = fmt.Sprintf("The app of %s does not see this repository. Choose it for the app with \"Choose repositories on GitHub\", then try again.", app)
+		}
+		for _, o := range repos {
+			// A pool of an earlier version has no account: any app of the
+			// repository integration that sees the repository starts it.
+			if !strings.EqualFold(o.FullName, p.Repo) || (o.AccountID != p.AccountID && (p.AccountID != 0 || o.Runners)) {
 				continue
 			}
 			delete(errs, "repo")
 			if !o.Private {
 				errs["repo"] = "This repository is public. Use a private one: its runs show the names of your runners."
 			}
+			break
 		}
 	}
 	if p.Tier < 1 || p.Tier > maxTier {
@@ -407,7 +466,7 @@ func (s *Server) checkPool(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	writeJSON(w, http.StatusOK, s.d.Relay.Check(ctx, p.Repo))
+	writeJSON(w, http.StatusOK, s.d.Relay.Check(ctx, p.AccountID, p.Repo))
 }
 
 // resumePool ends the pause of a pool, so that it is tried at once.

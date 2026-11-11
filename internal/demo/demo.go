@@ -202,6 +202,9 @@ type seedRepo struct {
 	jobs     []string
 }
 
+// demoRunnerAccount is the app of the runner account of the demo.
+const demoRunnerAccount = 1_012_399
+
 type seedAccount struct {
 	id      int64
 	slug    string
@@ -284,8 +287,16 @@ func (d *Demo) seed() error {
 				return err
 			}
 		}
-		// A pool for the hours when the workers are full.
-		if _, err := tx.AddPool(model.Pool{Name: "GitHub", Kind: model.PoolGitHub, Repo: "acme-labs/infra", Tier: 9, Enabled: true,
+		// A runner account, whose minutes a pool uses for the hours when
+		// the workers are full.
+		if err := tx.SaveRunnerAccount(model.Account{ID: demoRunnerAccount, Slug: "ci-plane-runners-mia", Owner: "mia-dev", OwnerType: "User",
+			HTMLURL: "https://github.com/apps/ci-plane-runners-mia", InstallationID: 61_000_999, CreatedAt: nowMs - 12*24*3600*1000}); err != nil {
+			return err
+		}
+		if err := tx.SetRunnerRepos(demoRunnerAccount, []model.Repo{{ID: 9_400_001, FullName: "mia-dev/ci-plane-relay", Private: true}}); err != nil {
+			return err
+		}
+		if _, err := tx.AddPool(model.Pool{Name: "GitHub", Kind: model.PoolGitHub, AccountID: demoRunnerAccount, Repo: "mia-dev/ci-plane-relay", Tier: 9, Enabled: true,
 			AfterSec: 180, Max: 5, Standard: "ubuntu-latest", BudgetMin: 2000, Month: now.UTC().Format("2006-01"), UsedSec: 412 * 60,
 			CreatedAt: nowMs - 12*24*3600*1000}); err != nil {
 			return err

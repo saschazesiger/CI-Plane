@@ -95,6 +95,10 @@ type Account struct {
 	Enabled        bool   `json:"enabled"`
 	MaxParallel    int    `json:"maxParallel"` // 0 = unlimited
 	CreatedAt      int64  `json:"createdAt"`
+	// Runners marks a runner account: an app that only starts the runners
+	// of pools in its relay repositories. It receives no jobs, registers
+	// no runners, and its repositories are not CI-Plane's repositories.
+	Runners bool `json:"runners"`
 }
 
 // IsOrg reports whether runners are registered on the organisation.
@@ -450,17 +454,21 @@ func ValidPoolKind(k string) bool { return k == PoolGitHub || k == PoolBlacksmit
 // machine of the pool. To the scheduler a pool is one more worker with a
 // tier: it is used when no worker or pool of a lower tier has room.
 type Pool struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	Kind     string `json:"kind"`     // one of the pool kinds
-	Repo     string `json:"repo"`     // owner/name of the private repository with the relay workflow
-	Tier     int    `json:"tier"`     // 1 is used first; workers of the same tier go first
-	Position int    `json:"position"` // order inside a tier
-	Enabled  bool   `json:"enabled"`
-	AfterSec int    `json:"afterSec"` // only for jobs that have waited this long; 0 = at once
-	Max      int    `json:"max"`      // runners at the same time
-	Standard string `json:"standard"` // runs-on label of the machine for standard jobs
-	Large    string `json:"large"`    // the same for large jobs; empty = they do not go here
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	Kind string `json:"kind"` // one of the pool kinds
+	// AccountID is the app that starts the relay workflow: a runner account
+	// as a rule, or an account of the repository integration. 0 (pools of
+	// earlier versions): the integration account that sees Repo.
+	AccountID int64  `json:"accountId"`
+	Repo      string `json:"repo"`     // owner/name of the private repository with the relay workflow
+	Tier      int    `json:"tier"`     // 1 is used first; workers of the same tier go first
+	Position  int    `json:"position"` // order inside a tier
+	Enabled   bool   `json:"enabled"`
+	AfterSec  int    `json:"afterSec"` // only for jobs that have waited this long; 0 = at once
+	Max       int    `json:"max"`      // runners at the same time
+	Standard  string `json:"standard"` // runs-on label of the machine for standard jobs
+	Large     string `json:"large"`    // the same for large jobs; empty = they do not go here
 	// BudgetMin is how many minutes of runner time the pool may use per
 	// calendar month (UTC); 0 = no limit. CI-Plane counts them itself.
 	BudgetMin int `json:"budgetMin"`

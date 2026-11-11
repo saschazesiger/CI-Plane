@@ -92,6 +92,12 @@ func (g *fakeGitHub) Manifest(org, publicURL, returnURL string) (ManifestForm, e
 	g.mu.Unlock()
 	return ManifestForm{Action: "https://github.com/settings/apps/new", Manifest: `{"name":"CI-Plane"}`, State: "st-1"}, nil
 }
+func (g *fakeGitHub) RunnerManifest(org, returnURL string) (ManifestForm, error) {
+	g.mu.Lock()
+	g.returnURL = returnURL
+	g.mu.Unlock()
+	return ManifestForm{Action: "https://github.com/settings/apps/new", Manifest: `{"name":"CI-Plane runners"}`, State: "st-r"}, nil
+}
 func (g *fakeGitHub) Complete(ctx context.Context, code, state string) (model.Account, error) {
 	if state != "st-1" {
 		return model.Account{}, errors.New("unknown state")

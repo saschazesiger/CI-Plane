@@ -136,10 +136,12 @@ type RunnerSpec struct {
 	// never limited: a job may use every CPU nobody else wants, and the
 	// priority decides who gets it when the CPUs are contended.
 	CPUPriority string
-	// On a pool: the runs-on label of the machine the runner runs on, and
-	// the pool's repository, whose relay workflow starts it there.
-	Machine string
-	Repo    string
+	// On a pool: the runs-on label of the machine the runner runs on, the
+	// pool's repository, whose relay workflow starts it there, and the app
+	// that starts that workflow (model.Pool.AccountID).
+	Machine      string
+	Repo         string
+	RelayAccount int64
 	// GitHubHosted says that the machine must be one of GitHub's own.
 	GitHubHosted bool
 }
