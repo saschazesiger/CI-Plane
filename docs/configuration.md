@@ -102,8 +102,8 @@ runners. If you bind-mount a directory instead of a volume, it must be writable 
 
 ## ⬆️ Updating
 
-Images are tagged `latest`, `X.Y.Z`, `X.Y`, and `edge` (the latest `main`). Data and sessions survive an update, and
-jobs that run meanwhile finish on their workers.
+Images are tagged `latest` (always the latest `main`; `edge` is the same image), and `X.Y.Z` and `X.Y` for a
+release. Data and sessions survive an update, and jobs that run meanwhile finish on their workers.
 
 ```sh
 docker pull ghcr.io/saschazesiger/ci-plane:latest

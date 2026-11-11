@@ -1,7 +1,8 @@
 name: Release
 
-# main → ghcr.io/<owner>/ci-plane:edge
-# tag vX.Y.Z → :X.Y.Z, :X.Y and :latest, plus a GitHub release
+# main → ghcr.io/<owner>/ci-plane:latest and :edge (the same image)
+# tag vX.Y.Z → :X.Y.Z and :X.Y, plus a GitHub release; never :latest, so
+# that :latest is always main, also when an older commit is tagged
 
 on:
   push:
@@ -35,7 +36,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/ci-plane
+          flavor: |
+            latest=false
           tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}

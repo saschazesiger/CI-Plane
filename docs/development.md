@@ -76,8 +76,8 @@ sh web/vendor/z-dash/tools/verify.sh web/vendor/z-dash
 ```
 
 CI (`.github/workflows/ci.yml`) runs the verification, `go vet`, `go test -race ./...` and a Docker build. The
-release workflow pushes `ghcr.io/saschazesiger/ci-plane:edge` from `main`, and `X.Y.Z`, `X.Y` and `latest` plus a
-GitHub release from a tag `vX.Y.Z`.
+release workflow pushes `ghcr.io/saschazesiger/ci-plane:latest` (and the same image as `edge`) from every push to
+`main`, and `X.Y.Z` and `X.Y` plus a GitHub release from a tag `vX.Y.Z`; a tag never moves `latest`.
 
 ## 🎭 Demo mode
 
