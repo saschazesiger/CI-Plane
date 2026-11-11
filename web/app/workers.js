@@ -10,7 +10,7 @@ import * as api from './api.js';
 import { ctx } from './main.js';
 import {
   $, $$, M, esc, icon, head, ago, day, clock, gb, cpus, plural, chip, workerChip, meter, share, empty,
-  switchHtml, busyButton, taskSteps, alertHtml, toast, toastError, setError,
+  switchHtml, busyButton, taskSteps, alertHtml, toast, toastError, setError, priorityName, priorityOptions, PRIORITY_HINT,
 } from './ui.js';
 
 const DS = window.DS;
@@ -49,7 +49,7 @@ function rowHtml(w) {
   return `<li class="ds-list__item" data-ds-key="w${w.id}" data-worker="${w.id}">` +
     `<button class="ds-btn ds-btn--quiet ds-btn--icon ds-grip" type="button" aria-label="Move ${esc(w.name)}" aria-describedby="workers-move-hint">${icon('grip', 20)}</button>` +
     `<span class="ds-list__text"><span class="ds-list__title"><button class="ds-list__action" type="button" data-open="${w.id}" id="worker-${w.id}">${esc(w.name)}</button></span>` +
-    `<span class="ds-list__meta">${esc(w.host)} · ${w.cpus || '?'} CPUs · ${w.memMb ? gb(w.memMb) : '? GB'} · ${plural(w.capacity.runners, 'runner')}</span></span>` +
+    `<span class="ds-list__meta">${esc(w.host)} · ${w.cpus || '?'} CPUs · ${w.memMb ? gb(w.memMb) : '? GB'} · ${plural(w.capacity.runners, 'runner')}${w.cpuPriority && w.cpuPriority !== 'normal' ? ` · ${priorityName(w.cpuPriority).toLowerCase()} priority` : ''}</span></span>` +
     metersHtml(w) + `<span class="cp-col-status">${workerChip(w)}</span>` +
     `<span class="ds-list__actions">${switchHtml({ id: `enable-${w.id}`, attrs: `data-enable="${w.id}"`, label: `${w.name} takes jobs`, checked: w.enabled, srLabel: true })}</span></li>`;
 }
@@ -146,6 +146,7 @@ function sheetHtml(d) {
   const facts = [
     ['Address', `${esc(w.user)}@${esc(w.host)}:${w.port}`],
     ['Tier', `${w.tier} <span class="ds-meta">(position ${w.position + 1})</span>`],
+    ['CPU priority', esc(priorityName(w.cpuPriority))],
     ['CPUs', String(w.cpus || '–')],
     ['Memory', w.memMb ? gb(w.memMb) : '–'],
     ['Disk', w.diskMb ? gb(w.diskMb) : '–'],
@@ -168,13 +169,13 @@ function sheetHtml(d) {
     `<p class="ds-meta" id="drain-hint">${w.draining ? 'Draining: running jobs finish, no new ones start. Stop draining to take jobs again.' : 'Drain before maintenance: running jobs finish, no new ones start. Clean up removes leftovers of old runners and unused images.'}</p>` +
     '<h3 class="ds-card__subtitle">Capacity</h3>' +
     '<ul class="ds-kv-list ds-kv-list--bars">' +
-      `<li><span>CPU reserved</span><strong>${cpus(c.usedCpus)} of ${cpus(c.cpus)}</strong>${bar(share(c.usedCpus, c.cpus))}</li>` +
+      `<li><span>CPUs taken</span><strong>${cpus(c.usedCpus)} of ${cpus(c.cpus)}</strong>${bar(share(c.usedCpus, c.cpus))}</li>` +
       `<li><span>Memory reserved</span><strong>${gb(c.usedMemMb)} of ${gb(c.memMb)}</strong>${bar(share(c.usedMemMb, c.memMb))}</li>` +
       `<li><span>CPU in use now</span><strong>${t.cpuText}</strong>${bar(t.cpu)}</li>` +
       `<li><span>Memory in use now</span><strong>${t.memText}</strong>${bar(t.mem)}</li>` +
       `<li><span>Disk used</span><strong>${t.diskText}${t.diskFree ? `, ${t.diskFree}` : ''}</strong>${bar(t.disk)}</li>` +
     '</ul>' +
-    `<p class="ds-meta">Reserved is what the runners on it hold for their size; the rest is kept for the system. A worker takes a job only when the size still fits.</p>` +
+    `<p class="ds-meta">CPUs taken: ${cpus(c.busyCpus)} busy right now, whatever uses them, and ${cpus(c.heldCpus)} held for runners that have just started. Memory is reserved by each runner for its size; the rest is kept for the system. A worker takes a job only when the free CPUs and the memory of its size are there.</p>` +
     `<dl class="ds-facts ds-facts--rows">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` +
     '<h3 class="ds-card__subtitle">Latest runners</h3>' +
     (d.runners.length ? `<ul class="ds-list" aria-label="Latest runners">${d.runners.map((r) =>
@@ -237,6 +238,9 @@ function editWorker(opener) {
   const tiers = Math.min(MAX_TIER, Math.max(...ctx.data.workers.map((o) => o.tier), w.tier) + 1);
   DS.dom.morphHtml($('#worker-tier'), Array.from({ length: tiers }, (_, i) => i + 1)
     .map((n) => `<option value="${n}"${n === w.tier ? ' selected' : ''}>Tier ${n}${n === 1 ? ' (filled first)' : ''}</option>`).join(''));
+  DS.dom.morphHtml($('#worker-priority'), priorityOptions(w.cpuPriority));
+  $('#worker-priority').value = w.cpuPriority || 'normal';
+  $('#worker-priority-hint').textContent = PRIORITY_HINT;
   $('#worker-name').value = w.name;
   setError($('#worker-name'), '');
   form.onsubmit = async (event) => {
@@ -247,7 +251,9 @@ function editWorker(opener) {
       return;
     }
     try {
-      await M.busy(event.submitter || $('[type="submit"]', form), () => api.patch(`/api/workers/${w.id}`, { name, tier: Number($('#worker-tier').value) }));
+      await M.busy(event.submitter || $('[type="submit"]', form), () => api.patch(`/api/workers/${w.id}`, {
+        name, tier: Number($('#worker-tier').value), cpuPriority: $('#worker-priority').value,
+      }));
     } catch (error) {
       if (error.fields && error.fields.name) {
         setError($('#worker-name'), error.fields.name);
@@ -302,7 +308,7 @@ const view = {
 
   html(d) {
     const action = `<a class="ds-btn ds-btn--primary" href="#/workers/add">${icon('plus', 16)}Add worker</a>`;
-    const lead = 'The servers that run your jobs. Tier 1 is filled first; inside a tier, the worker with the most room gets the job.';
+    const lead = 'The servers that run your jobs. Tier 1 is filled first; inside a tier, the worker that is least busy right now gets the job.';
     if (!d.workers.length) {
       return head('Workers', lead, action) + `<section class="ds-card">${empty({ glyph: 'server', title: 'No worker yet',
         text: 'A worker is any Linux server CI-Plane reaches over SSH. Its setup is one command.',

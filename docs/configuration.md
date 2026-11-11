@@ -33,7 +33,7 @@ job on.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| Sizes | `size-s` 2 CPUs / 4 GB, `size-m` 4 / 8, `size-l` 8 / 16, `size-xl` 16 / 32 | What a job reserves with that label, and the limit of each of its containers. 1 to 12 sizes; 0.5 to 256 CPUs, 0.5 to 1024 GB. |
+| Sizes | `size-s` 2 CPUs / 4 GB, `size-m` 4 / 8, `size-l` 8 / 16, `size-xl` 16 / 32 | What a job with that label needs: CPUs that must be free on a worker for it to start (not a limit), and memory that is reserved for it and is the limit of each of its containers. 1 to 12 sizes; 0.5 to 256 CPUs, 0.5 to 1024 GB. |
 | Default | `size-m` | The size of a job that names none. |
 
 **Runner**
@@ -49,7 +49,8 @@ job on.
 
 | Setting | Default | Range | Meaning |
 |---|---|---|---|
-| Kept for the system | 10 % | 0 to 50 % | Share of every worker's CPUs and memory that runners never get. |
+| Kept for the system | 10 % | 0 to 50 % | Share of every worker's CPUs and memory that is never counted as free for a job. |
+| A new runner holds its CPUs for | 120 seconds | 0 to 3600 s | After its job began. A runner that has just started causes no load yet, so the free CPUs of its size stay taken until its job begins and are then let go evenly over this time; afterwards only its real load counts. Raise it if jobs take long to reach their full load. |
 | Memory kept on top | 1 GB | 0 to 64 GB | Memory kept for the system in addition. |
 | Least free disk | 15 GB | 1 to 10 000 GB | Below this, a worker is *disk-full* and takes no jobs. |
 | Registry mirror at most | 20 GB | 1 to 10 000 GB | When the mirror is larger, the janitor empties it. |
@@ -70,6 +71,7 @@ job on.
 
 - **Cloudflare tunnel**: status, the e-mail addresses that may sign in, repair and removal ([Cloudflare](cloudflare.md)).
 - **Password**: change the admin password; other browsers are signed out.
+- **Workers** page: tier, on/off, draining and the [CPU priority](workers.md#-cpu-priority) of each worker.
 - **Repositories** page: on/off and parallel jobs per repository and per account ([GitHub](github.md#-limits-per-repository-and-account)).
 - **Workers** page: tiers, on/off, drain ([Workers](workers.md)).
 

@@ -10,43 +10,48 @@ import (
 	"github.com/saschazesiger/CI-Plane/internal/store"
 )
 
-type usage struct {
-	cpus  float64
-	memMB int
-}
-
-// Capacity is what a worker can give to runners and what is reserved.
+// Capacity is what a worker can give to runners and what is taken. CPU is
+// measured, memory is reserved: a job that gets too little CPU is only
+// slower, a job that gets too little memory is killed.
 type Capacity struct {
-	CPUs      float64 `json:"cpus"`      // allocatable
-	MemMB     int     `json:"memMb"`     // allocatable
-	UsedCPUs  float64 `json:"usedCpus"`  // reserved by runners
+	CPUs      float64 `json:"cpus"`      // the worker's CPUs minus the reserve
+	MemMB     int     `json:"memMb"`     // the worker's memory minus the reserve
+	BusyCPUs  float64 `json:"busyCpus"`  // in use right now by anything on the server
+	HeldCPUs  float64 `json:"heldCpus"`  // held for runners whose load does not show yet
+	UsedCPUs  float64 `json:"usedCpus"`  // BusyCPUs + HeldCPUs
 	UsedMemMB int     `json:"usedMemMb"` // reserved by runners
 	Runners   int     `json:"runners"`
 }
+
+// FreeCPUs is what a new runner would find.
+func (c Capacity) FreeCPUs() float64 { return max(c.CPUs-c.UsedCPUs, 0) }
 
 // FreeShare is the smaller of the free shares of CPU and memory, 0..1.
 func (c Capacity) FreeShare() float64 {
 	if c.CPUs <= 0 || c.MemMB <= 0 {
 		return 0
 	}
-	cpu := (c.CPUs - c.UsedCPUs) / c.CPUs
+	cpu := c.FreeCPUs() / c.CPUs
 	mem := float64(c.MemMB-c.UsedMemMB) / float64(c.MemMB)
-	if mem < cpu {
-		cpu = mem
-	}
-	if cpu < 0 {
-		cpu = 0
-	}
-	return cpu
+	return max(min(cpu, mem), 0)
 }
 
-// Fits reports whether a size still fits.
+// Fits reports whether a size can start: its CPUs are free and its memory
+// is not reserved.
 func (c Capacity) Fits(z model.Size) bool {
 	return c.CPUs-c.UsedCPUs >= z.CPUs && c.MemMB-c.UsedMemMB >= z.MemMB
 }
 
-// Allocatable is the capacity of an empty worker: what was detected minus
-// the reserve for the system.
+// hold adds a runner of size z that was just placed.
+func (c *Capacity) hold(z model.Size) {
+	c.HeldCPUs += z.CPUs
+	c.UsedCPUs += z.CPUs
+	c.UsedMemMB += z.MemMB
+	c.Runners++
+}
+
+// Allocatable is the capacity of an idle, empty worker: what was detected
+// minus the reserve for the system.
 func Allocatable(set model.Settings, w model.Worker) Capacity {
 	keep := float64(100-set.ReservePct) / 100
 	c := Capacity{CPUs: float64(w.CPUs) * keep, MemMB: int(float64(w.MemMB)*keep) - set.ReserveMemMB}
@@ -56,27 +61,59 @@ func Allocatable(set model.Settings, w model.Worker) Capacity {
 	return c
 }
 
-// CapacityOf returns the capacity of a worker with the reservations of the
-// given runners.
-func CapacityOf(set model.Settings, w model.Worker, runners []model.Runner) Capacity {
-	c := Allocatable(set, w)
-	for _, r := range runners {
-		if r.WorkerID == w.ID && r.Active() {
-			c.UsedCPUs += r.CPUs
-			c.UsedMemMB += r.MemMB
-			c.Runners++
+// heldCPUs is how many of the CPUs a runner asked for still count as taken
+// on top of the measured load. The measurement cannot show a runner that has
+// not worked yet, so ten jobs arriving in one second would all see the same
+// idle worker. A runner therefore holds the CPUs of its size until its job
+// begins, and then lets go of them evenly while its real load builds up and
+// reaches the measurement. From then on only what it really uses counts,
+// like any other load on the server.
+func heldCPUs(set model.Settings, r model.Runner, now int64) float64 {
+	switch r.State {
+	case model.RunnerProvisioning, model.RunnerStarting, model.RunnerIdle:
+		return r.CPUs
+	case model.RunnerBusy:
+		settle := float64(set.CPUSettleSec) * 1000
+		if r.BusyAt == 0 {
+			return r.CPUs
+		}
+		if age := float64(now - r.BusyAt); age >= 0 && age < settle {
+			return r.CPUs * (1 - age/settle)
 		}
 	}
+	return 0
+}
+
+// CapacityOf returns the capacity of a worker: the CPU load st measured on
+// it, and the memory and not yet visible CPU of the given runners.
+func CapacityOf(set model.Settings, w model.Worker, runners []model.Runner, st WorkerStatus, now int64) Capacity {
+	c := Allocatable(set, w)
+	if st.Connected {
+		c.BusyCPUs = st.BusyCPUs(w.CPUs)
+	}
+	for _, r := range runners {
+		if r.WorkerID != w.ID || !r.Active() {
+			continue
+		}
+		c.UsedMemMB += r.MemMB
+		c.Runners++
+		c.HeldCPUs += heldCPUs(set, r, now)
+	}
+	c.UsedCPUs = c.BusyCPUs + c.HeldCPUs
 	return c
 }
 
 // available reports whether a worker takes new jobs at all.
 func (s *snapshot) available(w model.Worker) bool {
-	return w.Enabled && !w.Draining && w.State == model.WorkerOnline && s.status[w.ID].Connected
+	// Without a first measurement nobody knows how busy it is: a worker that
+	// has just connected waits the few seconds until its load is known.
+	st := s.status[w.ID]
+	return w.Enabled && !w.Draining && w.State == model.WorkerOnline && st.Connected && st.At > 0
 }
 
 // pick chooses the worker for a job of a size: the lowest tier that has
-// room, and in it the worker with the largest free share. Workers in skip
+// room, and in it the worker with the largest free share, which for CPU is
+// its measured idle share. Workers in skip
 // are left out. Without a worker it says why.
 func (s *snapshot) pick(z model.Size, caps map[int64]Capacity, skip map[int64]bool) (model.Worker, bool, string) {
 	var best model.Worker
@@ -114,9 +151,9 @@ func (s *snapshot) pick(z model.Size, caps map[int64]Capacity, skip map[int64]bo
 	case !anyAvailable:
 		return best, false, "No worker is available: all are switched off, draining or offline"
 	case !anyLargeEnough:
-		return best, false, fmt.Sprintf("No worker is large enough for %s (%g CPU, %g GB)", z.Name, z.CPUs, float64(z.MemMB)/1024)
+		return best, false, fmt.Sprintf("No worker is large enough for %s (%g free CPUs, %g GB)", z.Name, z.CPUs, float64(z.MemMB)/1024)
 	}
-	return best, false, "All workers are full; the job starts when a slot is free"
+	return best, false, fmt.Sprintf("No worker has %g free CPUs and %g GB right now; the job starts when one does", z.CPUs, float64(z.MemMB)/1024)
 }
 
 // schedule gives every queued job a runner: a spare one if there is one,
@@ -124,7 +161,7 @@ func (s *snapshot) pick(z model.Size, caps map[int64]Capacity, skip map[int64]bo
 func (e *Engine) schedule(s *snapshot) bool {
 	caps := map[int64]Capacity{}
 	for _, w := range s.workers {
-		caps[w.ID] = CapacityOf(s.set, w, s.runners)
+		caps[w.ID] = CapacityOf(s.set, w, s.runners, s.status[w.ID], s.now)
 	}
 	perRepo, perAcc := map[int64]int{}, map[int64]int{}
 	for _, j := range s.jobs {
@@ -213,20 +250,21 @@ func (e *Engine) schedule(s *snapshot) bool {
 			e.setReason(j, why)
 			full = true
 			if s.now-j.WaitingSince > int64(s.set.NoOvertakeSec)*1000 {
-				// Nothing overtakes it on a worker that could hold it.
+				// Nothing overtakes it on a worker that could hold it once
+				// the runners there are done. A worker without runners is
+				// busy with other work, which may never end: keeping
+				// smaller jobs away from it would only stop the queue.
 				for _, c := range s.workers {
-					if s.available(c) && Allocatable(s.set, c).Fits(z) {
+					if s.available(c) && Allocatable(s.set, c).Fits(z) && caps[c.ID].Runners > 0 {
 						held[c.ID] = true
 					}
 				}
 			}
 			continue
 		}
-		if e.place(s, j, w, z) {
+		if e.place(s, j, w, z, caps[w.ID]) {
 			c := caps[w.ID]
-			c.UsedCPUs += z.CPUs
-			c.UsedMemMB += z.MemMB
-			c.Runners++
+			c.hold(z)
 			caps[w.ID] = c
 			perRepo[j.RepoID]++
 			perAcc[j.AccountID]++
@@ -278,7 +316,7 @@ func (e *Engine) designate(jobID int64, runnerID string) bool {
 
 // place creates a runner for a job on a worker. Only the intent is stored
 // here; the next pass carries it out.
-func (e *Engine) place(s *snapshot, j model.Job, w model.Worker, z model.Size) bool {
+func (e *Engine) place(s *snapshot, j model.Job, w model.Worker, z model.Size, c Capacity) bool {
 	id := newID()
 	r := model.Runner{
 		ID: id, Name: e.prefix + slug(w.Name) + "-" + id, WorkerID: w.ID, AccountID: j.AccountID, RepoID: j.RepoID, Repo: j.Repo,
@@ -295,9 +333,9 @@ func (e *Engine) place(s *snapshot, j model.Job, w model.Worker, z model.Size) b
 		if err := tx.SaveRunner(r); err != nil {
 			return err
 		}
-		c := CapacityOf(s.set, w, s.runners)
 		event(tx, model.LevelInfo, "job.assigned",
-			fmt.Sprintf("Worker %s chosen (tier %d, %d %% free); starting the runner %s", w.Name, w.Tier, int(c.FreeShare()*100), r.Name),
+			fmt.Sprintf("Worker %s chosen (tier %d, %.1f CPUs and %.0f GB free); starting the runner %s",
+				w.Name, w.Tier, c.FreeCPUs(), float64(c.MemMB-c.UsedMemMB)/1024, r.Name),
 			job.ID, r.ID, w.ID)
 		ok = true
 		return tx.SaveJob(job)

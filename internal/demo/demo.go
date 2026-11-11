@@ -173,14 +173,18 @@ type seedWorker struct {
 	cpus, memG int
 	diskG      int
 	enabled    bool
+	priority   string
+	other      float64 // CPU share of the server's other work at its peak
 }
 
 var seedWorkers = []seedWorker{
-	{"rack-01", "10.0.10.11", 1, 32, 128, 1800, true},
-	{"rack-02", "10.0.10.12", 1, 32, 128, 1800, true},
-	{"build-03", "10.0.10.13", 1, 16, 64, 900, true},
-	{"office-mini", "office-mini.lan", 2, 8, 32, 450, true},
-	{"old-laptop", "192.168.1.44", 2, 4, 16, 230, false},
+	{"rack-01", "10.0.10.11", 1, 32, 128, 1800, true, model.PriorityNormal, 0},
+	{"rack-02", "10.0.10.12", 1, 32, 128, 1800, true, model.PriorityNormal, 0},
+	// A server that does other work as well: jobs run in the background
+	// there and only start while it has CPUs to spare.
+	{"db-replica", "10.0.10.13", 1, 16, 64, 900, true, model.PriorityBackground, 0.7},
+	{"office-mini", "office-mini.lan", 2, 8, 32, 450, true, model.PriorityLow, 0.25},
+	{"old-laptop", "192.168.1.44", 2, 4, 16, 230, false, model.PriorityNormal, 0},
 }
 
 type seedRepo struct {
@@ -267,7 +271,7 @@ func (d *Demo) seed() error {
 			key, _ := hostKeyOf(sw.host)
 			w, err := tx.AddWorker(model.Worker{Name: sw.name, Host: sw.host, Port: 22, User: "ci-plane", HostKey: key,
 				Tier: sw.tier, Position: i, Enabled: sw.enabled, State: model.WorkerOnline, CPUs: sw.cpus, MemMB: sw.memG * 1024,
-				DiskMB: sw.diskG * 1024, Docker: "28.3.2", LastSeenAt: nowMs, CreatedAt: nowMs - int64(30-i)*24*3600*1000})
+				CPUPriority: sw.priority, DiskMB: sw.diskG * 1024, Docker: "28.3.2", LastSeenAt: nowMs, CreatedAt: nowMs - int64(30-i)*24*3600*1000})
 			if err != nil {
 				return err
 			}
@@ -281,8 +285,9 @@ func (d *Demo) seed() error {
 	if err != nil {
 		return err
 	}
-	for _, w := range workers {
+	for i, w := range workers {
 		d.hosts[w.ID] = newHostState(w, d.float())
+		d.hosts[w.ID].other = seedWorkers[i].other
 		d.World.SetStatus(w.ID, d.hosts[w.ID].status(nil, set))
 	}
 	d.Cloudflare.seedConfigured()
@@ -365,7 +370,7 @@ func (d *Demo) seedHistory(tx *store.Tx, set model.Settings, workers []model.Wor
 			}
 			for _, e := range []model.Event{
 				{At: queued, Kind: "job.queued", Message: "Queued on GitHub (" + size + ")", JobID: j.ID},
-				{At: queued + 300, Kind: "job.assigned", Message: fmt.Sprintf("Worker %s chosen (tier %d, %d %% free); starting the runner %s", w.Name, w.Tier, 40+d.intn(55), rn.Name), JobID: j.ID, RunnerID: rn.ID, WorkerID: w.ID},
+				{At: queued + 300, Kind: "job.assigned", Message: fmt.Sprintf("Worker %s chosen (tier %d, %.1f CPUs and %d GB free); starting the runner %s", w.Name, w.Tier, float64(40+d.intn(55))/10, 8+d.intn(40), rn.Name), JobID: j.ID, RunnerID: rn.ID, WorkerID: w.ID},
 				{At: queued + 1500, Kind: "runner.started", Message: "Containers started; waiting for the runner to connect to GitHub", JobID: j.ID, RunnerID: rn.ID, WorkerID: w.ID},
 				{At: j.StartedAt, Kind: "job.started", Message: fmt.Sprintf("Started on %s after %d s", rn.Name, (j.StartedAt-queued)/1000), JobID: j.ID, RunnerID: rn.ID, WorkerID: w.ID},
 				{At: j.CompletedAt, Level: level, Kind: "job.completed", Message: "Completed on GitHub: " + j.Conclusion, JobID: j.ID, RunnerID: rn.ID},

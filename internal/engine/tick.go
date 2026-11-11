@@ -310,7 +310,7 @@ func (e *Engine) provision(ctx context.Context, r model.Runner) time.Duration {
 		return 0
 	}
 
-	spec := RunnerSpec{Name: r.Name, JITConfig: reg.JITConfig, Image: set.RunnerImage, DindImage: set.DindImage, CPUs: r.CPUs, MemMB: r.MemMB}
+	spec := RunnerSpec{Name: r.Name, JITConfig: reg.JITConfig, Image: set.RunnerImage, DindImage: set.DindImage, MemMB: r.MemMB, CPUPriority: w.CPUPriority}
 	if err := e.fleet.Start(ctx, w, spec); err != nil {
 		e.failStart(r.ID, "the worker could not start the runner: "+err.Error(), true)
 		return 0

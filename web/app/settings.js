@@ -16,7 +16,8 @@ const CHANGED = '<span class="ds-field__changed ds-sr"> (changed)</span>';
 /* Numbers of the settings: the unit shown and how many stored units one shown unit is. */
 const NUMBERS = {
   capacity: [
-    ['reservePct', 'Kept for the system', '%', 1, 'A share of every worker\'s CPUs and memory that runners never reserve.'],
+    ['reservePct', 'Kept for the system', '%', 1, 'A share of every worker\'s CPUs and memory that is never counted as free for a job.'],
+    ['cpuSettleSec', 'A new runner holds its CPUs for', 'seconds', 1, 'After its job began. A runner that has just started causes no load yet, so the CPUs of its size stay taken until its job begins and are then let go evenly over this time; afterwards only its real load counts.'],
     ['reserveMemMb', 'Memory kept on top', 'GB', 1024, 'Memory every worker keeps for itself in addition to the share above.'],
     ['minDiskFreeMb', 'Least free disk', 'GB', 1000, 'Below this a worker takes no jobs until the janitor has freed space.'],
     ['mirrorCapMb', 'Registry mirror at most', 'GB', 1000, 'The Docker Hub cache on each worker is emptied when it grows past this.'],
@@ -52,7 +53,7 @@ function textField(key, label, hint, s) {
 function sizeRows() {
   return state.sizes.map((z, i) => `<tr data-ds-key="z${z.uid}" data-size="${i}">` +
     `<td data-label="Name"><input class="ds-input" id="size-${z.uid}-name" aria-label="Name of size ${i + 1}" data-field="sizes.${i}.name" data-size-field="name" value="${esc(z.name)}" autocomplete="off" spellcheck="false"></td>` +
-    `<td data-label="CPUs"><input class="ds-input" id="size-${z.uid}-cpus" type="number" step="0.5" min="0.5" inputmode="decimal" aria-label="CPUs of size ${i + 1}" data-field="sizes.${i}.cpus" data-size-field="cpus" value="${z.cpus}"></td>` +
+    `<td data-label="Free CPUs to start"><input class="ds-input" id="size-${z.uid}-cpus" type="number" step="0.5" min="0.5" inputmode="decimal" aria-label="Free CPUs that size ${i + 1} needs to start" data-field="sizes.${i}.cpus" data-size-field="cpus" value="${z.cpus}"></td>` +
     `<td data-label="Memory (GB)"><input class="ds-input" id="size-${z.uid}-mem" type="number" step="0.5" min="0.5" inputmode="decimal" aria-label="Memory of size ${i + 1} in GB" data-field="sizes.${i}.memMb" data-size-field="memGb" value="${z.memMb / 1024}"></td>` +
     `<td data-label="Default"><input class="ds-radio-input" type="radio" name="defaultSize" value="${i}" aria-label="Size ${i + 1} is the default"${z.name === state.defaultSize ? ' checked' : ''}></td>` +
     `<td class="ds-table__actions"><button class="ds-btn ds-btn--quiet ds-btn--icon" type="button" data-remove-size="${i}" aria-label="Remove size ${i + 1}" data-tip="Remove">${icon('close', 20)}</button></td></tr>`).join('');
@@ -61,9 +62,9 @@ function sizeRows() {
 function formHtml(s) {
   return '<form class="ds-stack ds-stack--page" id="settings-form" novalidate>' +
     '<section class="ds-card" aria-labelledby="sizes-title"><h2 class="ds-card__title" id="sizes-title">Sizes</h2>' +
-      `<p class="ds-muted">A job asks for a size with one more label in runs-on, for example <code>runs-on: [self-hosted, ${esc(s.baseLabel)}, size-l]</code>. Each runner gets the CPUs and memory of its size as limits; a job without a size gets the default.</p>` +
+      `<p class="ds-muted">A job asks for a size with one more label in runs-on, for example <code>runs-on: [self-hosted, ${esc(s.baseLabel)}, size-l]</code>. A job starts on a worker that has the free CPUs of its size right now and can reserve its memory. The memory is also the limit of the job; the CPUs are not: a job may use every CPU nothing else wants. A job without a size gets the default.</p>` +
       '<div class="ds-table-wrap"><table class="ds-table ds-table--stack"><caption class="ds-sr">Sizes</caption><thead><tr>' +
-        '<th scope="col">Name</th><th scope="col">CPUs</th><th scope="col">Memory (GB)</th><th scope="col">Default</th><th scope="col"><span class="ds-sr">Remove</span></th>' +
+        '<th scope="col">Name</th><th scope="col">Free CPUs to start</th><th scope="col">Memory (GB)</th><th scope="col">Default</th><th scope="col"><span class="ds-sr">Remove</span></th>' +
       `</tr></thead><tbody id="sizes-body">${sizeRows()}</tbody></table></div>` +
       `<p class="ds-meta" id="sizes-error" hidden></p>` +
       `<button class="ds-btn ds-btn--text ds-add-row" type="button" data-act="add-size">${icon('plus', 16)}Add a size</button>` +

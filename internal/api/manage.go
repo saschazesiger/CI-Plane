@@ -230,6 +230,7 @@ type numField struct {
 
 var numFields = []numField{
 	{"reservePct", func(s *model.Settings) int { return s.ReservePct }, 0, 50, 1, "%"},
+	{"cpuSettleSec", func(s *model.Settings) int { return s.CPUSettleSec }, 0, 3600, 1, "seconds"},
 	{"reserveMemMb", func(s *model.Settings) int { return s.ReserveMemMB }, 0, 64 * 1024, 1024, "GB"},
 	{"minDiskFreeMb", func(s *model.Settings) int { return s.MinDiskFreeMB }, 1000, 10_000_000, 1000, "GB"},
 	{"mirrorCapMb", func(s *model.Settings) int { return s.MirrorCapMB }, 1000, 10_000_000, 1000, "GB"},
@@ -273,7 +274,7 @@ func checkSettings(set model.Settings) map[string]string {
 		}
 		names[z.Name] = true
 		if z.CPUs < 0.5 || z.CPUs > 256 {
-			errs[k+"cpus"] = "From 0.5 to 256 CPUs."
+			errs[k+"cpus"] = "From 0.5 to 256 free CPUs."
 		}
 		if z.MemMB < 512 || z.MemMB > 1024*1024 {
 			errs[k+"memMb"] = "From 0.5 to 1024 GB."

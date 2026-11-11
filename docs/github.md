@@ -86,7 +86,7 @@ It is a small Ubuntu image with the runner, not the large image of GitHub-hosted
 | Container jobs and service containers | yes | yes; service ports answer on `localhost` |
 | Clean machine per job | yes | yes; nothing survives the job except what you push elsewhere |
 | Docker Hub pulls | GitHub's cache | through a pull-through mirror on the worker |
-| CPU and memory | fixed by the runner type | by the size label |
+| CPU and memory | fixed by the runner type | memory by the size label; every CPU of the worker that is free |
 | Time limit | 6 hours | 6 hours by default (*A job may run at most* in the settings) |
 | Architectures, systems | Linux, Windows, macOS, arm64 | Linux on x86_64 only |
 

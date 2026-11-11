@@ -417,7 +417,8 @@ func TestRunnerNeverConnects(t *testing.T) {
 
 func TestTiersAndCapacity(t *testing.T) {
 	r := newRig(t)
-	// Allocatable: 8 CPUs minus 10 % = 7.2, so one size-m (4 CPUs) each.
+	// 8 CPUs minus 10 % = 7.2 may be used, so one size-m (4 free CPUs) each
+	// while the runners are new and hold what their size asked for.
 	a := r.workerSized("alpha", 1, 8, 32*1024)
 	b := r.workerSized("beta", 1, 8, 32*1024)
 	c := r.workerSized("gamma", 2, 8, 32*1024)
@@ -442,7 +443,7 @@ func TestTiersAndCapacity(t *testing.T) {
 	if on(j3) != c.ID {
 		t.Fatalf("third job not on tier 2: worker %d", on(j3))
 	}
-	if j := r.job(j4); j.State != model.JobQueued || !strings.Contains(j.Reason, "full") {
+	if j := r.job(j4); j.State != model.JobQueued || !strings.Contains(j.Reason, "No worker has 4 free CPUs") {
 		t.Fatalf("fourth job: %s %q", j.State, j.Reason)
 	}
 
@@ -741,7 +742,7 @@ func TestRestartInTheMiddleOfACleanup(t *testing.T) {
 		t.Fatalf("runner: %s", x.State)
 	}
 	// Capacity stays reserved while the containers may still be there.
-	if c := engine.CapacityOf(model.DefaultSettings(), w, r.active()); c.Runners != 1 {
+	if c := engine.CapacityOf(model.DefaultSettings(), w, r.active(), engine.WorkerStatus{}, 0); c.Runners != 1 {
 		t.Fatalf("capacity released too early: %+v", c)
 	}
 
@@ -809,7 +810,7 @@ func TestWorkerLostDuringAJob(t *testing.T) {
 
 func TestLongWaitingJobIsNotOvertaken(t *testing.T) {
 	r := newRig(t)
-	// Allocatable 14.4 CPUs: one size-l (8) and one size-m (4), or three size-m.
+	// 14.4 CPUs may be used: one size-l (8) and one size-m (4), or three size-m.
 	w := r.workerSized("alpha", 1, 16, 64*1024)
 	m1 := r.queue("acme/api", 1000)
 	m2 := r.queue("acme/api", 1000)
@@ -833,8 +834,10 @@ func TestLongWaitingJobIsNotOvertaken(t *testing.T) {
 	if j := r.job(early); j.State != model.JobRunning {
 		t.Fatalf("small job while the large one is young: %s", j.State)
 	}
-	// Old: nothing overtakes on a worker that could hold it.
+	// Old: nothing overtakes on a worker that could hold it. By now the
+	// three jobs count with what they really use: 10 of 16 CPUs.
 	r.advance(301)
+	r.world.SetLoad(w.ID, 62.5)
 	late := r.queue("acme/web", 1, "size-s")
 	r.pass(2)
 	if j := r.job(late); j.State != model.JobQueued {
@@ -843,6 +846,7 @@ func TestLongWaitingJobIsNotOvertaken(t *testing.T) {
 	// Room appears: the large job goes first.
 	r.world.Kill(r.runner(r.job(m1).RunnerID).Name, 0)
 	r.world.Kill(r.runner(r.job(m2).RunnerID).Name, 0)
+	r.world.SetLoad(w.ID, 12.5)
 	for i := 0; i < 4; i++ {
 		r.pass(3)
 		r.advance(6)
@@ -850,7 +854,131 @@ func TestLongWaitingJobIsNotOvertaken(t *testing.T) {
 	if j := r.job(large); j.State != model.JobAssigned {
 		t.Fatalf("large job after room appeared: %s %q", j.State, j.Reason)
 	}
-	_ = w
+}
+
+// Other things run on a worker too. Jobs go where CPUs are really free, and
+// to no worker that is busy, whoever keeps it busy.
+func TestJobsFollowTheMeasuredLoad(t *testing.T) {
+	r := newRig(t)
+	a := r.workerSized("alpha", 1, 16, 64*1024)
+	b := r.workerSized("beta", 1, 16, 64*1024)
+	on := func(id int64) int64 {
+		j := r.job(id)
+		if j.RunnerID == "" {
+			return 0
+		}
+		return r.runner(j.RunnerID).WorkerID
+	}
+	// Something else uses 13 of alpha's 16 CPUs: 1.4 of 14.4 are left, not
+	// enough for a size-m, though CI-Plane started nothing there.
+	r.world.SetLoad(a.ID, 81.25)
+	r.world.SetLoad(b.ID, 25)
+	j1 := r.queue("acme/api", 1000)
+	j2 := r.queue("acme/api", 1000)
+	r.pass(2)
+	if on(j1) != b.ID || on(j2) != b.ID {
+		t.Fatalf("jobs on workers %d and %d, want both on the idle worker %d", on(j1), on(j2), b.ID)
+	}
+	// beta: 4 busy and 8 held of 14.4. No worker has 4 free CPUs now.
+	j3 := r.queue("acme/web", 1000)
+	r.pass(2)
+	if j := r.job(j3); j.State != model.JobQueued || !strings.Contains(j.Reason, "No worker has 4 free CPUs") {
+		t.Fatalf("third job with both workers busy: %s %q", j.State, j.Reason)
+	}
+	// A small job still finds its 2 CPUs on beta.
+	small := r.queue("acme/web", 1000, "size-s")
+	r.pass(2)
+	if on(small) != b.ID {
+		t.Fatalf("small job on worker %d, want %d", on(small), b.ID)
+	}
+	// The load on alpha ends: the waiting job starts there at once.
+	r.world.SetLoad(a.ID, 5)
+	r.pass(2)
+	if on(j3) != a.ID {
+		t.Fatalf("third job after alpha became idle: on worker %d, %q", on(j3), r.job(j3).Reason)
+	}
+}
+
+// Inside a tier the worker with the larger idle share gets the job, however
+// many runners are on it.
+func TestLeastBusyWorkerInATierWins(t *testing.T) {
+	r := newRig(t)
+	a := r.workerSized("alpha", 1, 16, 64*1024)
+	b := r.workerSized("beta", 1, 16, 64*1024)
+	r.world.SetLoad(a.ID, 60)
+	r.world.SetLoad(b.ID, 20)
+	j := r.queue("acme/api", 5, "size-s")
+	r.pass(2)
+	if got := r.runner(r.job(j).RunnerID).WorkerID; got != b.ID {
+		t.Fatalf("job on worker %d, want the less busy worker %d", got, b.ID)
+	}
+	r.world.SetLoad(a.ID, 10)
+	r.world.SetLoad(b.ID, 50)
+	j = r.queue("acme/api", 5, "size-s")
+	r.pass(2)
+	if got := r.runner(r.job(j).RunnerID).WorkerID; got != a.ID {
+		t.Fatalf("job on worker %d, want the less busy worker %d", got, a.ID)
+	}
+}
+
+// CPU is not reserved for the whole job: a runner holds the CPUs of its size
+// only until its real load shows in the measurement. Until then a burst of
+// jobs must not all land on the same idle worker.
+func TestRunnerHoldsItsCPUsOnlyWhileNew(t *testing.T) {
+	r := newRig(t)
+	w := r.workerSized("alpha", 1, 8, 64*1024) // 7.2 CPUs may be used
+	j1 := r.queue("acme/api", 1000)
+	j2 := r.queue("acme/api", 1000)
+	r.pass(2)
+	if a, b := r.job(j1).State, r.job(j2).State; a != model.JobAssigned || b != model.JobQueued {
+		t.Fatalf("burst of two size-m on 8 CPUs: %s %s", a, b)
+	}
+	r.world.Step()
+	r.pass(2)
+	r.world.Step() // the first job runs
+	r.pass(2)
+	if c := engine.CapacityOf(model.DefaultSettings(), w, r.active(), r.world.Status(w.ID), r.clock.Load()); c.HeldCPUs != 4 {
+		t.Fatalf("a job that just began holds %v CPUs, want 4", c.HeldCPUs)
+	}
+	if j := r.job(j2); j.State != model.JobQueued {
+		t.Fatalf("second job while the first is new: %s", j.State)
+	}
+	// Two minutes later the first job turns out to use one CPU. It is not
+	// limited to that, but the rest is free for the second job.
+	r.advance(121)
+	r.world.SetLoad(w.ID, 12.5)
+	r.pass(2)
+	if c := engine.CapacityOf(model.DefaultSettings(), w, r.active(), r.world.Status(w.ID), r.clock.Load()); c.BusyCPUs != 1 {
+		t.Fatalf("busy CPUs %v, want 1", c.BusyCPUs)
+	}
+	if j := r.job(j2); j.State != model.JobAssigned {
+		t.Fatalf("second job after the first settled: %s %q", j.State, j.Reason)
+	}
+	// Memory stays reserved for as long as the runner exists.
+	if c := engine.CapacityOf(model.DefaultSettings(), w, r.active(), r.world.Status(w.ID), r.clock.Load()); c.UsedMemMB != 2*8192 || c.Runners != 2 {
+		t.Fatalf("memory reserved %d MB by %d runners", c.UsedMemMB, c.Runners)
+	}
+}
+
+// The CPU priority is a property of the worker and reaches every runner
+// started on it; no runner gets a CPU limit.
+func TestWorkerPriorityReachesTheRunner(t *testing.T) {
+	r := newRig(t)
+	w := r.worker("alpha", 1)
+	must(t, r.st.Tx(func(tx *store.Tx) error {
+		cur, err := tx.Worker(w.ID)
+		if err != nil {
+			return err
+		}
+		cur.CPUPriority = model.PriorityBackground
+		return tx.SaveWorker(cur)
+	}))
+	j := r.queue("acme/api", 5)
+	r.pass(3)
+	spec, ok := r.world.Specs[r.runner(r.job(j).RunnerID).Name]
+	if !ok || spec.CPUPriority != model.PriorityBackground || spec.MemMB != 8192 {
+		t.Fatalf("runner started with %+v", spec)
+	}
 }
 
 func TestRemovedAccountLeavesNothingBehind(t *testing.T) {
@@ -1009,4 +1137,38 @@ func TestManyJobsEndClean(t *testing.T) {
 		}
 	}
 	r.clean(a, b, c)
+}
+
+// A worker that has connected but not measured anything yet is not taken
+// for idle: after a restart it could be busy with anything.
+func TestWorkerWithoutMeasurementWaits(t *testing.T) {
+	r := newRig(t)
+	w := r.worker("alpha", 1)
+	r.world.SetStatus(w.ID, engine.WorkerStatus{Connected: true})
+	j := r.queue("acme/api", 5)
+	r.pass(2)
+	if got := r.job(j); got.State != model.JobQueued {
+		t.Fatalf("job on a worker without a measurement: %s", got.State)
+	}
+	r.world.Connect(w.ID)
+	r.pass(2)
+	if got := r.job(j); got.State != model.JobAssigned {
+		t.Fatalf("job after the first measurement: %s %q", got.State, got.Reason)
+	}
+}
+
+// Other work on a server may never end. A large job that waits for it must
+// not keep smaller jobs away from that server for ever.
+func TestOtherLoadDoesNotBlockTheQueue(t *testing.T) {
+	r := newRig(t)
+	w := r.workerSized("alpha", 1, 16, 64*1024)
+	r.world.SetLoad(w.ID, 50) // 8 of 16 CPUs, none of them ours
+	large := r.queue("acme/api", 5, "size-l")
+	r.pass(2)
+	r.advance(600)
+	small := r.queue("acme/web", 5, "size-s")
+	r.pass(2)
+	if a, b := r.job(large).State, r.job(small).State; a != model.JobQueued || b != model.JobAssigned {
+		t.Fatalf("large %s, small %s; want the large one waiting and the small one started", a, b)
+	}
 }

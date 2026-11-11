@@ -26,6 +26,16 @@ const (
 	// of the official runner image; the runner container also gets it with
 	// --group-add, so custom images work as well.
 	dockerGID = "123"
+	// cgroupSlice is the systemd slice of runners on a worker whose CPU
+	// priority is not normal. A weight on a container only ranks it among
+	// its siblings: other containers and system services. A slice of our own
+	// sits at the top of the hierarchy, next to system.slice and user.slice,
+	// so its weight holds against everything on the server. No dash in the
+	// name: systemd would nest "ci-plane.slice" inside "ci.slice".
+	cgroupSlice = "ciplane.slice"
+	// lowWeight is the CPUWeight of the slice for the priority low; the
+	// default of every other slice is 100.
+	lowWeight = "25"
 )
 
 var nameRe = regexp.MustCompile(`^ci-plane-[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
@@ -43,7 +53,7 @@ func checkName(name string) error {
 const removeScript = `l="` + labelRunner + `=$n"
 ids=$(docker ps -aq --filter "label=$l")
 [ -z "$ids" ] || docker rm -f -v $ids >/dev/null
-docker rm -f -v "$n-runner" "$n-dind" >/dev/null 2>&1 || :
+docker rm -f -v "$n-runner" "$n-dind" "$n-priority" >/dev/null 2>&1 || :
 for x in $(docker network ls -q --filter "label=$l"); do
   docker network disconnect -f "$x" ` + mirrorName + ` >/dev/null 2>&1 || :
   docker network rm "$x" >/dev/null
@@ -68,16 +78,61 @@ docker volume create --label ` + labelRole + `=externals "$ext" >/dev/null
 const fillExternals = `docker run --rm --network none -u 0 -v "$ext:/e" --entrypoint sh "$img" -c 'test -f /e/.ci-plane-ready || { cp -a /home/runner/externals/. /e/ && touch /e/.ci-plane-ready; }'
 `
 
+// limits are the resource flags of both containers. CPU gets a weight and
+// never a limit: a job uses every CPU nobody else wants, and the weight
+// decides who gets how much when the CPUs are contended. Job containers run
+// in the cgroup of the daemon container, so its weight covers them all.
 func limits(spec engine.RunnerSpec) string {
 	var b strings.Builder
-	if spec.CPUs > 0 {
-		b.WriteString(" --cpus " + strconv.FormatFloat(spec.CPUs, 'f', -1, 64))
+	if n := model.CPUShares(spec.CPUPriority); n > 0 {
+		// The shares are what is left of the priority where the slice
+		// cannot be used (see priorityScript); $cgp is empty there.
+		b.WriteString(" --cpu-shares " + strconv.Itoa(n) + ` ${cgp:+--cgroup-parent "$cgp"}`)
 	}
 	if spec.MemMB > 0 {
 		b.WriteString(" --memory " + strconv.Itoa(spec.MemMB) + "m")
 	}
 	return b.String()
 }
+
+// priorityScript gives the slice of the runners the CPU priority $prio. It
+// runs after the first container was started in the slice, which is what
+// makes systemd create it.
+//
+// The priority is set through systemd (systemctl set-property): systemd owns
+// the cgroup of the slice and writes its own values back over anything
+// written there directly, at the latest on the next daemon-reload. It is set
+// with --runtime, so nothing stays on the server after a reboot, and it is
+// checked on every start by reading the cgroup, which needs no rights. Only
+// when it is not as wanted, one short privileged container enters the host
+// to call systemctl; whoever may use Docker may do that anyway.
+//
+// Background is CPUWeight=idle (cgroup cpu.idle, Linux 5.15 and systemd 252):
+// the runners only get CPU time nothing else wants. Older systems get the
+// lowest weight instead.
+const priorityScript = `if [ -n "$cgp" ]; then
+  g=/sys/fs/cgroup/$cgp
+  prio_is() {
+    if [ "$prio" = ` + model.PriorityBackground + ` ]; then
+      [ "$(cat "$g/cpu.idle" 2>/dev/null)" = 1 ] || [ "$(cat "$g/cpu.weight" 2>/dev/null)" = 1 ]
+    else
+      [ "$(cat "$g/cpu.idle" 2>/dev/null)" != 1 ] && [ "$(cat "$g/cpu.weight" 2>/dev/null)" = ` + lowWeight + ` ]
+    fi
+  }
+  prio_set() {
+    docker rm -f "$n-priority" >/dev/null 2>&1 || :
+    docker run --rm --name "$n-priority" --label ` + labelRole + `=priority --privileged --pid host --network none \
+      --entrypoint nsenter "$dind" -t 1 -m -- systemctl set-property --runtime "$cgp" "CPUWeight=$1" >/dev/null
+  }
+  # systemd may answer before the kernel shows the value.
+  prio_ok() { for t in 1 2 3 4 5 6 7 8 9 10; do if prio_is; then return 0; fi; sleep 0.2; done; return 1; }
+  if ! prio_is; then
+    # A kernel without cpu.idle takes CPUWeight=idle without any effect.
+    if [ "$prio" = ` + model.PriorityBackground + ` ]; then { prio_set idle 2>/dev/null && prio_ok; } || prio_set 1 || :; else prio_set ` + lowWeight + ` || :; fi
+    prio_ok || { echo "Could not give the runners the CPU priority $prio on this worker. Set the CPU priority of the worker to normal, or check that systemd runs on it and that its SSH user may start privileged containers." >&2; exit 1; }
+  fi
+fi
+`
 
 // startScript starts the two containers of a runner. The JIT config arrives
 // as the first line of stdin and only ever passes through printf, a shell
@@ -95,13 +150,23 @@ func limits(spec engine.RunnerSpec) string {
 //	externals      /home/runner/externals, read-only in <n>-dind
 func startScript(spec engine.RunnerSpec) string {
 	lim := limits(spec)
+	prio, setPrio := "", ""
+	if model.CPUShares(spec.CPUPriority) > 0 {
+		// The slice needs systemd as Docker's cgroup driver on cgroup v2,
+		// the default of current distributions. Elsewhere the runners keep
+		// the shares, which rank them below other containers and services.
+		prio = "prio=" + q(spec.CPUPriority) + `
+cgp=
+[ "$(docker info --format '{{.CgroupDriver}} {{.CgroupVersion}}' 2>/dev/null)" != "systemd 2" ] || cgp=` + cgroupSlice + "\n"
+		setPrio = priorityScript
+	}
 	return `set -e
 IFS= read -r jit || :
 n=` + q(spec.Name) + `
 img=` + q(spec.Image) + `
 dind=` + q(spec.DindImage) + `
 l="` + labelRunner + `=$n"
-` + removeScript + `
+` + prio + removeScript + `
 for i in "$img" "$dind"; do
   docker image inspect "$i" >/dev/null 2>&1 || docker pull -q "$i" >/dev/null || { echo "Could not pull the image $i; check its name in the settings." >&2; exit 1; }
 done
@@ -114,7 +179,7 @@ docker run -d --name "$n-dind" --label "$l" --privileged` + lim + ` --network "$
   -v "$n-docker:/var/lib/docker" -v "$n-work:/home/runner/_work" -v "$n-run:/var/run" \
   -v "$ext:/home/runner/externals:ro" \
   --entrypoint sh "$dind" -c 'chmod 0777 /home/runner/_work && exec dockerd-entrypoint.sh dockerd --host=unix:///var/run/docker.sock --group=` + dockerGID + ` --registry-mirror=http://` + mirrorName + `:5000' >/dev/null
-i=0
+` + setPrio + `i=0
 until docker exec "$n-dind" docker version >/dev/null 2>&1; do
   i=$((i+1))
   if [ "$i" -gt 300 ] || [ "$(docker inspect -f '{{.State.Running}}' "$n-dind")" != true ]; then
@@ -140,6 +205,9 @@ func (m *Manager) Start(ctx context.Context, w model.Worker, spec engine.RunnerS
 	}
 	if spec.JITConfig == "" || strings.ContainsAny(spec.JITConfig, "\r\n") {
 		return errors.New("the runner configuration from GitHub is empty or malformed")
+	}
+	if spec.CPUPriority != "" && !model.ValidPriority(spec.CPUPriority) {
+		return fmt.Errorf("the CPU priority %q of the worker is unknown; choose one in the worker's settings", spec.CPUPriority)
 	}
 	if spec.Image == "" || spec.DindImage == "" {
 		return errors.New("the runner image or the Docker-in-Docker image is not set in the settings")

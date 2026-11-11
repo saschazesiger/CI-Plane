@@ -35,6 +35,35 @@ const (
 	WorkerDiskFull    = "disk-full"   // free disk under the threshold
 )
 
+// CPU priorities of a worker: how the runners on it compete for CPU with
+// everything else on the server.
+const (
+	PriorityNormal     = "normal"     // like any other container
+	PriorityLow        = "low"        // a quarter of the weight of everything else on the server
+	PriorityBackground = "background" // only the CPU nothing else on the server wants
+)
+
+// CPUPriorities lists the priorities, highest first.
+var CPUPriorities = []string{PriorityNormal, PriorityLow, PriorityBackground}
+
+// ValidPriority reports whether p is one of CPUPriorities.
+func ValidPriority(p string) bool {
+	return p == PriorityNormal || p == PriorityLow || p == PriorityBackground
+}
+
+// CPUShares is the Docker --cpu-shares value of a priority; 0 leaves
+// Docker's default (1024). The weight only matters while the CPUs are
+// contended: it is never a limit.
+func CPUShares(priority string) int {
+	switch priority {
+	case PriorityLow:
+		return 256
+	case PriorityBackground:
+		return 2
+	}
+	return 0
+}
+
 // Event levels.
 const (
 	LevelInfo  = "info"
@@ -81,6 +110,7 @@ type Worker struct {
 	Position    int    `json:"position"`
 	Enabled     bool   `json:"enabled"`
 	Draining    bool   `json:"draining"`
+	CPUPriority string `json:"cpuPriority"` // one of CPUPriorities
 	State       string `json:"state"`
 	StateReason string `json:"stateReason"`
 	CPUs        int    `json:"cpus"`
@@ -131,8 +161,8 @@ type Runner struct {
 	ForgeID   int64    `json:"forgeId"` // runner id on GitHub; 0 = not registered
 	Labels    []string `json:"labels"`
 	Size      string   `json:"size"`
-	CPUs      float64  `json:"cpus"`
-	MemMB     int      `json:"memMb"`
+	CPUs      float64  `json:"cpus"`  // free CPUs its size asked for; held until its real load shows
+	MemMB     int      `json:"memMb"` // reserved, and the limit of its containers
 	State     string   `json:"state"`
 	Error     string   `json:"error"`
 	Failed    bool     `json:"failed"` // the start failed (as opposed to a normal end)
@@ -165,7 +195,9 @@ type Event struct {
 	WorkerID int64  `json:"workerId,omitempty"`
 }
 
-// Size is a named amount of CPU and memory a job reserves.
+// Size is what a job of that name needs: CPUs that must be free on a worker
+// for it to start there (never a limit), and memory that is reserved for it
+// and is the limit of its containers.
 type Size struct {
 	Name  string  `json:"name"`
 	CPUs  float64 `json:"cpus"`
@@ -181,6 +213,7 @@ type Settings struct {
 	DindImage        string `json:"dindImage"`
 	MirrorImage      string `json:"mirrorImage"`
 	ReservePct       int    `json:"reservePct"`       // share of CPU and memory kept for the system
+	CPUSettleSec     int    `json:"cpuSettleSec"`     // a new runner holds its CPUs until it worked this long
 	ReserveMemMB     int    `json:"reserveMemMb"`     // memory kept for the system on top
 	MinDiskFreeMB    int    `json:"minDiskFreeMb"`    // below: worker is disk-full
 	MirrorCapMB      int    `json:"mirrorCapMb"`      // registry mirror is emptied above
@@ -209,6 +242,7 @@ func DefaultSettings() Settings {
 		MirrorImage:      "registry:2",
 		ReservePct:       10,
 		ReserveMemMB:     1024,
+		CPUSettleSec:     120,
 		MinDiskFreeMB:    15000,
 		MirrorCapMB:      20000,
 		StartTimeoutSec:  120,

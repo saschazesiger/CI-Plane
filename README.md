@@ -30,7 +30,8 @@ One container with a web interface. Every job gets a fresh runner and its own Do
 |---|---|
 | 🧽 **Ephemeral runners** | One runner per job, registered just in time for that one job, removed with its containers and volumes afterwards. |
 | 🐳 **A Docker daemon per job** | Images, containers and networks of a job live in its own daemon and go with it. `docker build` and service containers just work. |
-| ⚖️ **Most free capacity wins** | Each job reserves CPU and memory by size. CI-Plane picks the worker with the largest free share. |
+| ⚖️ **Placed by real load** | A job goes to the worker that is least busy right now, and to none that is busy, whether with jobs or with other work. No CPU limits: a job uses every CPU that is free. |
+| 🎚️ **CPU priority per worker** | Add servers that are in use for other things: in the background, jobs only get the CPU nothing else wants. |
 | 🪜 **Tiers** | Fill your own hardware first; use the expensive machine only when tier 1 is full. |
 | 🛟 **Survives what goes wrong** | Lost webhooks, restarts in the middle of a step, dead servers: every step is stored before it runs and compared with GitHub every minute. |
 | 🧙 **Set up from the browser** | A five-step assistant creates the GitHub App, the Cloudflare tunnel and the login, and connects your first server. |
@@ -74,7 +75,7 @@ jobs:
       - run: make test
 ```
 
-| Label | CPUs | Memory | |
+| Label | Free CPUs to start | Memory | |
 |---|---|---|---|
 | `size-s` | 2 | 4 GB | |
 | `size-m` | 4 | 8 GB | default when no size is given |
@@ -132,7 +133,7 @@ flowchart LR
 ```
 
 GitHub sends a `workflow_job` webhook through a Cloudflare tunnel, so CI-Plane needs no open port. CI-Plane matches the
-labels, reserves the size on the worker with the most free capacity and registers a just-in-time runner that is valid
+labels, picks the worker that has the CPUs of the size free and is least busy, reserves the memory there and registers a just-in-time runner that is valid
 for one job. Over SSH it starts two containers on that worker: a Docker daemon for this job and the runner. When the
 job is over, both containers and their volumes are removed. Every step is written to SQLite before it is carried out,
 and a check against GitHub every minute catches anything a webhook missed.

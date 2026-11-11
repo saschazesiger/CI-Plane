@@ -117,7 +117,7 @@
   </section>
 </dialog>
 
-<!-- Edit a worker: its name and tier. -->
+<!-- Edit a worker: its name, tier and CPU priority. -->
 <dialog class="ds-dialog" id="worker-dialog" aria-labelledby="worker-dialog-title">
   <div class="ds-dialog__backdrop" data-close></div>
   <form class="ds-dialog__box ds-form" id="worker-form" novalidate>
@@ -131,6 +131,11 @@
       <label class="ds-field__label" for="worker-tier">Tier</label>
       <select class="ds-input" id="worker-tier" name="tier" aria-describedby="worker-tier-hint"></select>
       <small class="ds-field__hint" id="worker-tier-hint">Tier 1 is filled first; a higher tier only gets jobs when the tiers before it are full or off.</small>
+    </div>
+    <div class="ds-field">
+      <label class="ds-field__label" for="worker-priority">CPU priority</label>
+      <select class="ds-input" id="worker-priority" name="cpuPriority" aria-describedby="worker-priority-hint"></select>
+      <small class="ds-field__hint" id="worker-priority-hint"></small>
     </div>
     <div class="ds-dialog__actions">
       <button class="ds-btn ds-btn--text" type="button" data-close>Cancel</button>

@@ -189,3 +189,40 @@ func TestListJobsEventsAndPrune(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A database of an earlier version gets the columns added since, and its
+// workers the default of each.
+func TestOpenUpgradesAnOlderDatabase(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var w model.Worker
+	if err := st.Tx(func(tx *Tx) error {
+		w, err = tx.AddWorker(model.Worker{Name: "alpha", Host: "10.0.0.1", Port: 22, User: "ci-plane", Tier: 1, Enabled: true, CPUPriority: model.PriorityLow})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Back to the table as it was before the column existed.
+	if _, err := st.db.Exec(`ALTER TABLE workers DROP COLUMN cpu_priority`); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	for i := 0; i < 2; i++ { // the second time there is nothing to add
+		if st, err = Open(dir); err != nil {
+			t.Fatal(err)
+		}
+		if err := st.View(func(tx *Tx) error {
+			got, err := tx.Worker(w.ID)
+			if err == nil && got.CPUPriority != model.PriorityNormal {
+				t.Fatalf("priority after the upgrade: %q", got.CPUPriority)
+			}
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		st.Close()
+	}
+}

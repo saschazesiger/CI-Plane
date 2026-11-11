@@ -99,8 +99,11 @@ type RunnerSpec struct {
 	JITConfig string
 	Image     string
 	DindImage string
-	CPUs      float64
-	MemMB     int
+	MemMB     int // memory limit of each container; 0 = none
+	// CPUPriority is one of model.CPUPriorities; empty means normal. CPU is
+	// never limited: a job may use every CPU nobody else wants, and the
+	// priority decides who gets it when the CPUs are contended.
+	CPUPriority string
 }
 
 // Container is the runner container of one runner on a worker.
@@ -116,11 +119,22 @@ type WorkerStatus struct {
 	Error      string  // why it is not connected
 	At         int64   // time of the values below; 0 = none yet
 	Load1      float64 // load average over one minute
-	CPUPct     float64 // CPU in use, 0..100
+	CPUPct     float64 // CPU in use, 0..100, over the last few seconds
+	CPUAvgPct  float64 // the same, smoothed over about a minute; 0 = not measured
 	MemAvailMB int
 	MemTotalMB int
 	DiskFreeMB int
 	DiskMB     int
+}
+
+// BusyCPUs is how many of n CPUs are in use by anything on the server: the
+// higher of the current and the smoothed value, so that neither a short
+// pause of a busy server nor load that has only just begun is missed.
+func (st WorkerStatus) BusyCPUs(n int) float64 {
+	if st.At == 0 {
+		return 0
+	}
+	return float64(n) * min(max(st.CPUPct, st.CPUAvgPct, 0), 100) / 100
 }
 
 // Fleet is the set of workers as the engine needs it.

@@ -55,7 +55,8 @@ type World struct {
 	FailRemove   map[int64]int  // Remove calls that fail, by worker id
 	NeverConnect map[int64]bool // runners on these workers start but never come online
 	FailProbe    map[int64]bool
-	Starts       map[int64]int // successful starts, by worker id
+	Starts       map[int64]int                // successful starts, by worker id
+	Specs        map[string]engine.RunnerSpec // what each runner was started with, by name
 }
 
 // New creates an empty world.
@@ -64,7 +65,7 @@ func New() *World {
 		nextID: 1000, runners: map[int64]*runner{}, jobs: map[int64]*job{},
 		containers: map[int64]map[string]*container{}, status: map[int64]engine.WorkerStatus{},
 		FailStart: map[int64]int{}, FailRemove: map[int64]int{}, NeverConnect: map[int64]bool{},
-		FailProbe: map[int64]bool{}, Starts: map[int64]int{},
+		FailProbe: map[int64]bool{}, Starts: map[int64]int{}, Specs: map[string]engine.RunnerSpec{},
 	}
 }
 
@@ -80,6 +81,16 @@ func (w *World) SetStatus(workerID int64, st engine.WorkerStatus) {
 // Connect marks a worker as connected with plenty of memory and disk.
 func (w *World) Connect(workerID int64) {
 	w.SetStatus(workerID, engine.WorkerStatus{Connected: true, At: 1, MemAvailMB: 1 << 20, MemTotalMB: 1 << 20, DiskFreeMB: 1 << 20, DiskMB: 1 << 20})
+}
+
+// SetLoad sets the measured CPU use of a connected worker, 0..100: the load
+// of everything on the server, whether CI-Plane started it or not.
+func (w *World) SetLoad(workerID int64, pct float64) {
+	w.mu.Lock()
+	st := w.status[workerID]
+	st.CPUPct, st.CPUAvgPct = pct, pct
+	w.status[workerID] = st
+	w.mu.Unlock()
 }
 
 // Disconnect marks a worker as unreachable.
@@ -404,6 +415,7 @@ func (w *World) Start(_ context.Context, wk model.Worker, spec engine.RunnerSpec
 	}
 	w.containers[wk.ID][spec.Name] = &container{running: true}
 	w.Starts[wk.ID]++
+	w.Specs[spec.Name] = spec
 	return nil
 }
 

@@ -49,6 +49,17 @@ export function gb(mb, digits = 0) {
 /** CPU counts as written: 4, 0.5, 28.8. */
 export const cpus = (value) => String(Math.round(value * 10) / 10);
 
+/** The CPU priorities of a worker: value, name, what it means. */
+export const PRIORITIES = [
+  ['normal', 'Normal', 'jobs compete for CPU like everything else on the server'],
+  ['low', 'Low', 'jobs give way when the server is busy'],
+  ['background', 'Background', 'jobs only get the CPU nothing else wants'],
+];
+export const priorityName = (value) => (PRIORITIES.find(([v]) => v === value) || PRIORITIES[0])[1];
+export const priorityOptions = (selected) => PRIORITIES
+  .map(([v, name, text]) => `<option value="${v}"${v === (selected || 'normal') ? ' selected' : ''}>${name}: ${text}</option>`).join('');
+export const PRIORITY_HINT = 'Jobs are never limited in CPU. The priority decides who gets it when the server is busy: choose Background for a server that mainly does other work. A change takes effect with the next runner that starts on the worker.';
+
 /* ── Markup ────────────────────────────────────────────────────────── */
 
 /** A status chip: always an icon (or the spinner) and a word. */

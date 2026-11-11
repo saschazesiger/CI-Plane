@@ -2,6 +2,18 @@
 
 All notable changes to CI-Plane. Versions follow [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+- **Jobs are placed by the measured CPU load** of the workers instead of by reserved CPUs. A worker that is busy,
+  with jobs or with anything else that runs on it, gets no new jobs; inside a tier the least busy worker wins.
+- **No CPU limits.** The CPUs of a size are now what must be free on a worker for a job to start. A running job may
+  use every CPU nothing else wants. Memory is reserved and limited as before.
+- **CPU priority per worker** (*normal*, *low*, *background*), so that servers which do other work can be workers:
+  in the background, jobs only get CPU time nothing else wants.
+- New setting *A new runner holds its CPUs for* (120 seconds): over how long a runner whose job just began lets go
+  of the CPUs of its size, until only its real load counts.
+- Existing databases are upgraded when CI-Plane starts. Existing workers keep the priority *normal*.
+
 ## 0.1.0
 
 First release.

@@ -8,7 +8,7 @@ import * as api from './api.js';
 import { ctx, signedInNow } from './main.js';
 import {
   $, $$, M, esc, icon, head, ago, gb, plural, chip, jobChip, workerChip, empty, codeWithCopy, busyButton,
-  alertHtml, taskSteps, toast, toastError, setError, showFieldErrors, clearErrors,
+  alertHtml, taskSteps, toast, toastError, setError, showFieldErrors, clearErrors, priorityOptions, PRIORITY_HINT,
 } from './ui.js';
 
 const DS = window.DS;
@@ -24,7 +24,7 @@ const STEPS = [
 /* What the user typed, kept across live re-renders and step changes. */
 const cf = { token: '', zones: null, zoneId: '', sub: 'ci', emails: '', editing: false };
 const gh = { kind: 'user', org: '', adding: false };
-const wk = { host: '', port: '22', name: '', tier: '1', result: null, error: '', attempts: 0, retryAt: 0, timer: 0, workerId: 0 };
+const wk = { host: '', port: '22', name: '', tier: '1', priority: 'normal', result: null, error: '', attempts: 0, retryAt: 0, timer: 0, workerId: 0 };
 
 /* ── Step 1: password ─────────────────────────────────────────────── */
 
@@ -349,7 +349,11 @@ function workerHtml(d, inSetup) {
           `<select class="ds-input" id="wk-tier" data-field="tier" aria-describedby="wk-tier-hint">${Array.from({ length: tiers }, (_, i) => i + 1)
             .map((n) => `<option value="${n}"${String(n) === wk.tier ? ' selected' : ''}>Tier ${n}${n === 1 ? ' (filled first)' : ''}</option>`).join('')}</select>` +
           '<small class="ds-field__hint" id="wk-tier-hint">Put servers you would rather keep free into a higher tier.</small></div>' +
-      `</div><div class="ds-form-actions">${busyButton('ds-btn ds-btn--primary', 'Add worker', 'Adding', 'Added', 'type="submit" data-act="wk-add"')}</div></form>`;
+      '</div>' +
+      '<div class="ds-field"><label class="ds-field__label" for="wk-priority">CPU priority</label>' +
+        `<select class="ds-input" id="wk-priority" data-field="cpuPriority" aria-describedby="wk-priority-hint">${priorityOptions(wk.priority)}</select>` +
+        `<small class="ds-field__hint" id="wk-priority-hint">${PRIORITY_HINT}</small></div>` +
+      `<div class="ds-form-actions">${busyButton('ds-btn ds-btn--primary', 'Add worker', 'Adding', 'Added', 'type="submit" data-act="wk-add"')}</div></form>`;
   }
   return html;
 }
@@ -428,6 +432,7 @@ async function addWorker(button, inSetup) {
   clearErrors(form);
   wk.name = $('#wk-name').value.trim();
   wk.tier = $('#wk-tier').value;
+  wk.priority = $('#wk-priority').value;
   if (!wk.name) {
     setError($('#wk-name'), 'Give the worker a name.');
     $('#wk-name').focus();
@@ -436,7 +441,7 @@ async function addWorker(button, inSetup) {
   let r;
   try {
     r = await M.busy(button, () => api.post('/api/workers', {
-      host: wk.result.host, port: wk.result.port, user: wk.result.user, name: wk.name, tier: Number(wk.tier), facts: wk.result.facts,
+      host: wk.result.host, port: wk.result.port, user: wk.result.user, name: wk.name, tier: Number(wk.tier), cpuPriority: wk.priority, facts: wk.result.facts,
     }));
   } catch (error) {
     if (!showFieldErrors(form, error.fields)) toastError(error, 'add');
@@ -452,7 +457,7 @@ async function addWorker(button, inSetup) {
 
 function resetWorker() {
   stopRetry();
-  Object.assign(wk, { host: '', port: '22', name: '', tier: '1', result: null, error: '', attempts: 0, workerId: 0 });
+  Object.assign(wk, { host: '', port: '22', name: '', tier: '1', priority: 'normal', result: null, error: '', attempts: 0, workerId: 0 });
 }
 
 async function loadWorkerStep(params) {
@@ -474,7 +479,7 @@ async function loadWorkerStep(params) {
 function snippet(set) {
   const def = set.sizes.find((z) => z.name === set.defaultSize);
   return 'jobs:\n  build:\n' +
-    `    runs-on: [self-hosted, ${set.baseLabel}]${def ? `   # ${def.name}: ${def.cpus} CPUs, ${def.memMb / 1024} GB` : ''}\n` +
+    `    runs-on: [self-hosted, ${set.baseLabel}]${def ? `   # ${def.name}: starts where ${def.cpus} CPUs are free, ${def.memMb / 1024} GB` : ''}\n` +
     '    steps:\n      - uses: actions/checkout@v4\n      - run: echo "Hello from CI-Plane"\n';
 }
 
@@ -493,8 +498,8 @@ function tryHtml(d) {
     `<p class="ds-muted">Use this runs-on line in a workflow of a connected repository. Jobs without the label ${esc(set.baseLabel)} stay on GitHub's own runners.</p>` +
     codeWithCopy('snippet', snippet(set), 'Example workflow') +
     '<h3 class="ds-card__subtitle">Sizes</h3>' +
-    '<p class="ds-muted">Add one size to runs-on for a smaller or larger machine. You can change the sizes under Settings.</p>' +
-    `<div class="ds-table-wrap"><table class="ds-table ds-table--dense"><caption class="ds-sr">Sizes</caption><thead><tr><th scope="col">Size</th><th scope="col" class="ds-num">CPUs</th><th scope="col" class="ds-num">Memory</th><th scope="col">runs-on</th></tr></thead><tbody>${sizes}</tbody></table></div>` +
+    '<p class="ds-muted">Add one size to runs-on for a smaller or larger job: it starts where that many CPUs are free and gets that much memory. You can change the sizes under Settings.</p>' +
+    `<div class="ds-table-wrap"><table class="ds-table ds-table--dense"><caption class="ds-sr">Sizes</caption><thead><tr><th scope="col">Size</th><th scope="col" class="ds-num">Free CPUs to start</th><th scope="col" class="ds-num">Memory</th><th scope="col">runs-on</th></tr></thead><tbody>${sizes}</tbody></table></div>` +
     '<h3 class="ds-card__subtitle">Live</h3>' + `<div id="try-live">${liveHtml}</div>`;
 }
 

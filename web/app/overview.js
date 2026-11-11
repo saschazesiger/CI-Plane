@@ -4,7 +4,7 @@
  * what runs now and the latest events. Everything refreshes live.
  */
 import * as api from './api.js';
-import { $, M, esc, icon, head, ago, span, plural, gb, cpus, jobChip, workerChip, share, empty } from './ui.js';
+import { $, M, esc, icon, head, ago, span, plural, gb, cpus, jobChip, workerChip, share, empty, priorityName } from './ui.js';
 
 const DS = window.DS;
 
@@ -59,7 +59,6 @@ function capacityItems(workers) {
     const c = w.capacity;
     const cpuShare = share(c.usedCpus, c.cpus);
     const memShare = share(c.usedMemMb, c.memMb);
-    const load = w.live.connected ? w.live.cpuPct / 100 : 0;
     const bar = (value) => {
       const tone = value >= 0.95 ? ' ds-meter--error' : value >= 0.85 ? ' ds-meter--warning' : '';
       return `<span class="ds-meter${tone}" aria-hidden="true" style="--ds-share: ${value.toFixed(3)}"></span>`;
@@ -67,11 +66,10 @@ function capacityItems(workers) {
     return `<section class="ds-card ds-card--filled" data-ds-key="cap-${w.id}" aria-labelledby="cap-${w.id}-title">` +
       `<div class="ds-card__row"><h3 class="ds-card__subtitle" id="cap-${w.id}-title"><a href="#/workers?open=${w.id}">${esc(w.name)}</a></h3>${workerChip(w)}</div>` +
       '<ul class="ds-kv-list ds-kv-list--bars">' +
-        `<li><span>CPUs</span><strong>${cpus(c.usedCpus)} of ${cpus(c.cpus)}</strong>${bar(cpuShare)}</li>` +
+        `<li><span>CPUs taken</span><strong>${cpus(c.usedCpus)} of ${cpus(c.cpus)}</strong>${bar(cpuShare)}</li>` +
         `<li><span>Memory</span><strong>${gb(c.usedMemMb)} of ${gb(c.memMb)}</strong>${bar(memShare)}</li>` +
-        `<li><span>Busy now</span><strong>${w.live.connected ? `${Math.round(w.live.cpuPct)} %` : 'No data'}</strong>${bar(load)}</li>` +
       '</ul>' +
-      `<p class="ds-meta">Tier ${w.tier} · ${plural(c.runners, 'runner')}${w.draining ? ' · draining' : ''}</p></section>`;
+      `<p class="ds-meta">Tier ${w.tier} · ${plural(c.runners, 'runner')}${w.cpuPriority && w.cpuPriority !== 'normal' ? ` · ${priorityName(w.cpuPriority).toLowerCase()} priority` : ''}${w.draining ? ' · draining' : ''}</p></section>`;
   }).join('');
 }
 
@@ -125,7 +123,7 @@ export default {
       `<div class="ds-stack" id="alerts"${d.alerts.length ? '' : ' hidden'}>${alertsHtml(d.alerts)}</div>` +
       tilesHtml(d) +
       `<section class="ds-card"><div class="ds-card__row"><h2 class="ds-card__title">Capacity</h2><a class="ds-btn ds-btn--text ds-btn--sm" href="#/workers">All workers</a></div>` +
-        '<p class="ds-muted">CPUs and memory: what the runners of each worker reserve, of what it can give. Busy now: its real CPU use.</p>' +
+        '<p class="ds-muted">CPUs taken: what is busy on each worker right now, whatever uses it, plus what runners that have just started hold. Memory: what its runners reserve, of what it can give. A job goes where its size finds both free.</p>' +
         `<div id="capacity-slot">${capacityHtml(d.workers)}</div></section>` +
       '<div class="ds-grid-2">' +
         `<section class="ds-card"><div class="ds-card__row"><h2 class="ds-card__title">Running and waiting</h2><a class="ds-btn ds-btn--text ds-btn--sm" href="#/jobs">All jobs</a></div>` +

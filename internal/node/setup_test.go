@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/saschazesiger/CI-Plane/internal/engine"
 	"github.com/saschazesiger/CI-Plane/internal/model"
 	"github.com/saschazesiger/CI-Plane/internal/store"
 )
@@ -111,5 +112,71 @@ mkdir -p /run/sshd && /usr/sbin/sshd`)
 	}
 	if out := dockerOut(t, "exec", name, "sh", "-c", "docker ps -aq; docker volume ls -q --filter label=ci-plane.role; id ci-plane 2>&1 || :"); !strings.Contains(out, "no such user") || strings.Count(strings.TrimSpace(out), "\n") != 0 {
 		t.Fatalf("left after RemoveCommand: %s", out)
+	}
+}
+
+// A runner never gets a CPU limit. Without a priority its containers start
+// exactly as Docker starts any container; with one they get the shares and,
+// where the worker allows it, the slice.
+func TestStartScriptPriority(t *testing.T) {
+	spec := engine.RunnerSpec{Name: "ci-plane-w-1", Image: "runner:1", DindImage: "docker:dind", MemMB: 4096}
+	for _, prio := range []string{"", model.PriorityNormal} {
+		spec.CPUPriority = prio
+		s := startScript(spec)
+		for _, bad := range []string{"--cpus", "--cpu-shares", "--cgroup-parent", "systemctl", "--pid host"} {
+			if strings.Contains(s, bad) {
+				t.Fatalf("priority %q: the script contains %s", prio, bad)
+			}
+		}
+		if strings.Count(s, "--memory 4096m") != 2 {
+			t.Fatalf("priority %q: both containers need the memory limit", prio)
+		}
+	}
+	for prio, shares := range map[string]string{model.PriorityLow: "--cpu-shares 256 ", model.PriorityBackground: "--cpu-shares 2 "} {
+		spec.CPUPriority = prio
+		s := startScript(spec)
+		if strings.Contains(s, "--cpus") || strings.Count(s, shares+`${cgp:+--cgroup-parent "$cgp"}`) != 2 {
+			t.Fatalf("priority %s: flags missing or a CPU limit set:\n%s", prio, s)
+		}
+		if !strings.Contains(s, "prio='"+prio+"'") || !strings.Contains(s, "set-property --runtime") {
+			t.Fatalf("priority %s is not applied to the slice", prio)
+		}
+	}
+	m := newTestManager(t)
+	spec.JITConfig, spec.CPUPriority = "x", "realtime"
+	if err := m.Start(context.Background(), model.Worker{ID: 1}, spec); err == nil || !strings.Contains(err.Error(), "CPU priority") {
+		t.Fatalf("unknown priority: %v", err)
+	}
+}
+
+func TestSmoothedCPU(t *testing.T) {
+	at := func(sec int64, pct, avg float64) engine.WorkerStatus {
+		return engine.WorkerStatus{Connected: true, At: sec * 1000, CPUPct: pct, CPUAvgPct: avg}
+	}
+	if got := smooth(engine.WorkerStatus{}, at(5, 80, 0)); got != 80 {
+		t.Fatalf("first sample: %v", got)
+	}
+	// One idle sample of five seconds barely moves a busy average ...
+	prev := at(5, 100, 100)
+	got := smooth(prev, at(10, 0, 0))
+	if got < 85 || got > 95 {
+		t.Fatalf("one idle sample after a busy minute: %v", got)
+	}
+	// ... two idle minutes do.
+	for s := int64(15); s <= 130; s += 5 {
+		cur := at(s, 0, 0)
+		cur.CPUAvgPct = smooth(prev, cur)
+		prev = cur
+	}
+	if prev.CPUAvgPct > 10 {
+		t.Fatalf("after two idle minutes: %v", prev.CPUAvgPct)
+	}
+	// After a gap the old average says nothing.
+	if got := smooth(at(5, 100, 100), at(600, 20, 0)); got != 20 {
+		t.Fatalf("after a gap: %v", got)
+	}
+	// The scheduler takes the higher of both, so load that just began counts at once.
+	if st := at(10, 90, 10); st.BusyCPUs(10) != 9 {
+		t.Fatalf("busy CPUs: %v", st.BusyCPUs(10))
 	}
 }

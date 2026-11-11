@@ -44,7 +44,7 @@ sequenceDiagram
   participant M as CI-Plane
   participant W as Worker
   G->>M: workflow_job queued
-  M->>M: match labels, check limits, reserve capacity
+  M->>M: match labels, check limits, find free CPUs and memory
   M->>G: register a just-in-time runner
   M->>W: start Docker daemon + runner (SSH)
   W->>G: runner connects, takes a job
@@ -52,7 +52,7 @@ sequenceDiagram
   G->>M: workflow_job completed
   W-->>M: runner container exited
   M->>W: remove containers and volumes
-  M->>M: release capacity, start the next queued job
+  M->>M: release the memory, start the next queued job
 ```
 
 1. **Queued.** A job is handled when its `runs-on` contains `ci-plane` and every other label is known
@@ -97,31 +97,55 @@ After a crash CI-Plane finds what it started by name and label, and finishes or 
 
 ## 🎯 Choosing a worker
 
-**Sizes.** A job reserves a fixed amount of CPU and memory, chosen with a label. The reservation is also the limit
-of its containers.
+**Sizes.** A size, chosen with a label, says what a job needs to start: free CPUs and memory.
 
-| Label | CPU | Memory | |
+| Label | Free CPUs to start | Memory | |
 |---|---|---|---|
 | `size-s` | 2 | 4 GB | |
 | `size-m` | 4 | 8 GB | used when no size is given |
 | `size-l` | 8 | 16 GB | |
 | `size-xl` | 16 | 32 GB | |
 
-**Capacity.** A worker offers its CPUs and memory minus a reserve for the system: 10 % of both, and 1 GB of memory
-on top, by default. Free capacity is that minus the reservations of the runners on it. Reservations make the decision
-exact even when ten jobs arrive in the same second, before any of them causes load.
+The two are handled differently, because they fail differently. A job that gets too little CPU is slower; a job that
+gets too little memory is killed.
 
-**Eligible** is a worker that is switched on, online (connected, healthy, enough free disk) and not draining, whose
-free capacity holds the size, and whose memory available right now is at least half the size's memory. The last
-check, on values measured every five seconds, guards against load that CI-Plane does not know about.
+- **CPU is measured, never limited.** A job starts on a worker that has the CPUs of its size free *right now*, and
+  may then use every CPU nothing else wants. Free is what the server really has idle, whatever keeps it busy: jobs of
+  CI-Plane or anything else that runs there.
+- **Memory is reserved and limited.** The memory of the size is set aside on the worker for as long as the runner
+  exists, and it is the limit of its containers.
+
+**Free CPUs.** Every five seconds a worker reports its CPU use. CI-Plane counts as busy the higher of that value and
+its average over about a minute, so a server that only pauses between two steps does not look free. A worker offers
+its CPUs and memory minus a reserve for the system: 10 % of both, and 1 GB of memory on top, by default.
+
+```
+free CPUs = CPUs × 90 % − busy CPUs − CPUs held for new runners
+```
+
+A runner that has just started causes no load yet. So that ten jobs arriving in the same second do not all land on
+the same idle worker, a runner **holds** the CPUs of its size from the moment it is placed until its job begins. Then it lets go of them
+evenly over two minutes (*A new runner holds its CPUs for* in the settings), while its real load builds up and shows
+in the measurement. After that only its real load counts: a `size-l` job
+that uses one CPU leaves the other seven to the next job.
+
+**Eligible** is a worker that is switched on, online (connected, healthy, enough free disk) and not draining, that
+has the free CPUs of the size, whose unreserved memory holds the size, and whose memory available right now is at
+least half the size's memory.
 
 **Order.** The lowest **tier** with room wins; inside a tier, the worker with the largest free share
-(the smaller of the free CPU share and the free memory share). Tiers let you fill your own hardware first and use an
-expensive machine only as overflow. After a failed start, the job tries another worker first.
+(the smaller of the free CPU share and the unreserved memory share), which is the least busy one. Tiers let you fill
+your own hardware first and use an expensive machine only as overflow. After a failed start, the job tries another
+worker first.
 
-**Queue.** If nothing fits, the job waits, oldest first, within the limits of parallel jobs per repository and per
+**Priority.** Each worker has a CPU priority for its runners: *normal*, *low* or *background*. It decides who gets
+the CPU when a server is busy, and makes it safe to add a server that mainly does other work.
+[Workers](workers.md#-cpu-priority) has the details.
+
+**Queue.** If no worker has the CPUs and memory free, the job waits, oldest first, within the limits of parallel jobs per repository and per
 account. A small job may overtake a large one that does not fit yet. After five minutes of waiting, nothing overtakes
-a job on a worker that could hold it.
+a job on a worker that could hold it once the runners there are done. A worker that is busy with other work only is
+not kept free: that load may never end.
 
 ## 🧱 On the worker
 
@@ -131,7 +155,7 @@ load, available memory and free disk every five seconds.
 
 | Per job | |
 |---|---|
-| `<name>-dind` | `docker:dind`, privileged, limited to the size: the Docker daemon of this job only |
+| `<name>-dind` | `docker:dind`, privileged, limited to the memory of the size: the Docker daemon of this job only |
 | `<name>-runner` | the runner image, unprivileged, sharing the network of its daemon (service ports answer on `localhost`) |
 | `<name>-net` | the network of the job; the registry mirror joins it |
 | `<name>-docker`, `-work`, `-run` | Docker data, the work directory and the daemon's socket, deleted with the job |
@@ -141,6 +165,7 @@ load, available memory and free disk every five seconds.
 | runner, `docker:dind` and `registry:2` images | pulled in advance and refreshed daily, so a runner starts in seconds |
 | `ci-plane-externals-<image>` | a read-only copy of the runner's tools, shared by all jobs, which container jobs need |
 | `ci-plane-mirror` | a pull-through cache for Docker Hub, emptied when it grows past its cap |
+| `ciplane.slice` | only with a CPU priority other than *normal*: the cgroup of the runners, which carries the priority |
 
 CI-Plane only creates and removes Docker objects named `ci-plane-*` that carry a `ci-plane.*` label. Whatever else
 runs on the server is left alone.
@@ -151,8 +176,10 @@ runs on the server is left alone.
   Docker Hub is where rate limits and repeated pulls hurt; other registries are pulled directly.
 - **One GitHub App per account or organisation.** A private app can only be installed on the account that owns it,
   and a public app could be installed by strangers. See [GitHub](github.md#-the-github-app).
-- **Limits per container, not per job.** A job is two containers, and each gets the full size as its limit. See
-  [Security](security.md#-resource-limits).
+- **No CPU limit.** A limit would leave CPUs idle while jobs wait, and would still not protect the other work of a
+  server from a job that uses its full limit. Placing by measured load and a priority per worker do both.
+- **Memory limit per container, not per job.** A job is two containers, and each gets the memory of the size as its
+  limit. See [Security](security.md#-resource-limits).
 - **A slow check stays.** Webhooks are the fast path; once a minute CI-Plane compares its state with GitHub, and
   every five minutes it asks GitHub to redeliver failed webhooks. This is a safety net, not a way to run without
   the tunnel.

@@ -189,6 +189,9 @@ type addWorkerReq struct {
 	Name  string      `json:"name"`
 	Tier  int         `json:"tier"`
 	Facts WorkerFacts `json:"facts"`
+	// CPUPriority is optional; a server that is in use for other things can
+	// be added in the background from its first job on.
+	CPUPriority string `json:"cpuPriority"`
 }
 
 func (s *Server) addWorker(w http.ResponseWriter, r *http.Request) {
@@ -203,6 +206,12 @@ func (s *Server) addWorker(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Tier == 0 {
 		req.Tier = 1
+	}
+	if req.CPUPriority == "" {
+		req.CPUPriority = model.PriorityNormal
+	}
+	if !model.ValidPriority(req.CPUPriority) {
+		errs["cpuPriority"] = "Choose normal, low or background as the CPU priority."
 	}
 	if msg := s.checkName(req.Name, 0); msg != "" {
 		errs["name"] = msg
@@ -235,14 +244,14 @@ func (s *Server) addWorker(w http.ResponseWriter, r *http.Request) {
 		}
 		wk, err = tx.AddWorker(model.Worker{
 			Name: req.Name, Host: req.Host, Port: req.Port, User: req.User, HostKey: strings.TrimSpace(req.Facts.HostKey),
-			Tier: req.Tier, Position: pos, Enabled: true, State: model.WorkerSetup,
+			Tier: req.Tier, Position: pos, Enabled: true, State: model.WorkerSetup, CPUPriority: req.CPUPriority,
 			CPUs: req.Facts.CPUs, MemMB: req.Facts.MemMB, DiskMB: req.Facts.DiskMB, Docker: req.Facts.Docker,
 		})
 		if err != nil {
 			return err
 		}
 		_, err = tx.AddEvent(model.Event{Kind: "worker.added", WorkerID: wk.ID,
-			Message: fmt.Sprintf("Added with host key %s; %d CPUs, %s memory", req.Facts.Fingerprint, req.Facts.CPUs, gb(req.Facts.MemMB))})
+			Message: fmt.Sprintf("Added with host key %s; %d CPUs, %s memory, CPU priority %s", req.Facts.Fingerprint, req.Facts.CPUs, gb(req.Facts.MemMB), req.CPUPriority)})
 		return err
 	})
 	if err != nil {
@@ -330,6 +339,14 @@ type editWorkerReq struct {
 	Tier     *int    `json:"tier"`
 	Enabled  *bool   `json:"enabled"`
 	Draining *bool   `json:"draining"`
+	// CPUPriority applies to runners started from now on.
+	CPUPriority *string `json:"cpuPriority"`
+}
+
+var priorityNotes = map[string]string{
+	model.PriorityNormal:     "CPU priority normal: jobs compete for CPU like any other container",
+	model.PriorityLow:        "CPU priority low: jobs give way to other containers and services when the CPUs are busy",
+	model.PriorityBackground: "CPU priority background: jobs only get the CPU nothing else on the server wants",
 }
 
 func (s *Server) editWorker(w http.ResponseWriter, r *http.Request) {
@@ -350,6 +367,9 @@ func (s *Server) editWorker(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Tier != nil && (*req.Tier < 1 || *req.Tier > maxTier) {
 		errs["tier"] = fmt.Sprintf("The tier is a number from 1 to %d; 1 is filled first.", maxTier)
+	}
+	if req.CPUPriority != nil && !model.ValidPriority(*req.CPUPriority) {
+		errs["cpuPriority"] = "Choose normal, low or background as the CPU priority."
 	}
 	if len(errs) > 0 {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: firstOf(errs), Fields: errs})
@@ -381,6 +401,10 @@ func (s *Server) editWorker(w http.ResponseWriter, r *http.Request) {
 			}
 			note(fmt.Sprintf("Moved from tier %d to tier %d", wk.Tier, *req.Tier))
 			wk.Tier, wk.Position = *req.Tier, pos
+		}
+		if req.CPUPriority != nil && *req.CPUPriority != wk.CPUPriority {
+			wk.CPUPriority = *req.CPUPriority
+			note(priorityNotes[wk.CPUPriority] + "; takes effect with the next runner that starts here")
 		}
 		if req.Enabled != nil && *req.Enabled != wk.Enabled {
 			wk.Enabled = *req.Enabled

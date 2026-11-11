@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -358,6 +359,22 @@ func parseStats(line string) (engine.WorkerStatus, bool) {
 		MemAvailMB: n[0], MemTotalMB: n[1], DiskFreeMB: n[2], DiskMB: n[3]}, true
 }
 
+// cpuWindow is the time over which the CPU value is smoothed. One sample
+// covers a few seconds, too short to decide where a job goes: a build that
+// pauses between two steps would make a busy server look free.
+const cpuWindow = 45 * time.Second
+
+// smooth returns the smoothed CPU use after the sample cur. It starts anew
+// after a gap, because an old average says nothing about now.
+func smooth(prev, cur engine.WorkerStatus) float64 {
+	dt := time.Duration(cur.At-prev.At) * time.Millisecond
+	if !prev.Connected || prev.At == 0 || dt <= 0 || dt > 2*cpuWindow {
+		return cur.CPUPct
+	}
+	a := 1 - math.Exp(-float64(dt)/float64(cpuWindow))
+	return prev.CPUAvgPct + a*(cur.CPUPct-prev.CPUAvgPct)
+}
+
 // stream runs the live values on t until they stop or go stale. It reports
 // whether at least one line arrived.
 func (m *Manager) stream(ctx context.Context, c *conn, t transport) bool {
@@ -384,6 +401,7 @@ func (m *Manager) stream(ctx context.Context, c *conn, t transport) bool {
 			if st, ok := parseStats(l); ok {
 				got = true
 				c.mu.Lock()
+				st.CPUAvgPct = smooth(c.status, st)
 				c.status = st
 				c.mu.Unlock()
 			}

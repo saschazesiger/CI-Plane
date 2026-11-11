@@ -56,6 +56,7 @@ func dockerTest(t *testing.T) (*Manager, model.Settings) {
 	t.Cleanup(func() {
 		// What Prepare and Start share per worker; on a real worker it stays.
 		exec.Command("docker", "rm", "-f", mirrorName).Run()
+		exec.Command("systemctl", "revert", cgroupSlice).Run() // the priority of the slice
 		exec.Command("docker", "volume", "rm", mirrorName).Run()
 		vols, _ := exec.Command("docker", "volume", "ls", "-q", "--filter", "label="+labelRole+"=externals").Output()
 		for _, v := range strings.Fields(string(vols)) {
@@ -119,7 +120,12 @@ func TestDockerRecipe(t *testing.T) {
 		t.Run(wk.Name, func(t *testing.T) {
 			name := randName("ci-plane-test-")
 			jit := randName("fake-jit-config-")
-			spec := engine.RunnerSpec{Name: name, JITConfig: jit, Image: stubImage, DindImage: set.DindImage, CPUs: 1.5, MemMB: 2048}
+			// One worker at each priority that uses the slice.
+			prio := model.PriorityBackground
+			if wk.ID == 2 {
+				prio = model.PriorityLow
+			}
+			spec := engine.RunnerSpec{Name: name, JITConfig: jit, Image: stubImage, DindImage: set.DindImage, MemMB: 2048, CPUPriority: prio}
 			defer m.Remove(context.Background(), wk, name)
 
 			// Leftovers under the same name are removed first.
@@ -178,9 +184,23 @@ func TestDockerRecipe(t *testing.T) {
 			if out := dockerOut(t, "exec", mirrorName, "wget", "-qO-", "http://localhost:5000/v2/_catalog"); !strings.Contains(out, "library/hello-world") {
 				t.Fatalf("mirror not used: %s", out)
 			}
-			lim := dockerOut(t, "inspect", "-f", "{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}} {{.HostConfig.Privileged}}", name+"-dind", name+"-runner")
-			if lim != "1500000000 2147483648 true\n1500000000 2147483648 false\n" {
+			// Memory is limited, CPU is not: it only has a priority.
+			shares := map[string]string{model.PriorityBackground: "2", model.PriorityLow: "256"}[prio]
+			lim := dockerOut(t, "inspect", "-f", "{{.HostConfig.NanoCpus}} {{.HostConfig.CpuShares}} {{.HostConfig.Memory}} {{.HostConfig.Privileged}}", name+"-dind", name+"-runner")
+			if lim != "0 "+shares+" 2147483648 true\n0 "+shares+" 2147483648 false\n" {
 				t.Fatalf("limits: %q", lim)
+			}
+			if driver := dockerOut(t, "info", "--format", "{{.CgroupDriver}} {{.CgroupVersion}}"); driver == "systemd 2\n" {
+				parents := dockerOut(t, "inspect", "-f", "{{.HostConfig.CgroupParent}}", name+"-dind", name+"-runner")
+				if parents != cgroupSlice+"\n"+cgroupSlice+"\n" {
+					t.Fatalf("cgroup parents: %q", parents)
+				}
+				idle, _ := os.ReadFile("/sys/fs/cgroup/" + cgroupSlice + "/cpu.idle")
+				weight, _ := os.ReadFile("/sys/fs/cgroup/" + cgroupSlice + "/cpu.weight")
+				got := strings.TrimSpace(string(idle)) + " " + strings.TrimSpace(string(weight))
+				if want := map[string]string{model.PriorityBackground: "1 1", model.PriorityLow: "0 " + lowWeight}[prio]; got != want {
+					t.Fatalf("priority %s: cpu.idle and cpu.weight of the slice are %q, want %q", prio, got, want)
+				}
 			}
 
 			// A second Start under the same name replaces the first.
@@ -200,7 +220,7 @@ func TestDockerRecipe(t *testing.T) {
 	t.Run("real runner exits", func(t *testing.T) {
 		name := randName("ci-plane-test-")
 		jit := base64.StdEncoding.EncodeToString([]byte(`{"fake":"` + randName("") + `"}`))
-		spec := engine.RunnerSpec{Name: name, JITConfig: jit, Image: set.RunnerImage, DindImage: set.DindImage, CPUs: 1, MemMB: 2048}
+		spec := engine.RunnerSpec{Name: name, JITConfig: jit, Image: set.RunnerImage, DindImage: set.DindImage, MemMB: 2048}
 		defer m.Remove(context.Background(), w, name)
 		begin := time.Now()
 		if err := m.Start(ctx, w, spec); err != nil {
@@ -230,7 +250,7 @@ func TestDockerRecipe(t *testing.T) {
 
 	t.Run("failed start cleans up", func(t *testing.T) {
 		name := randName("ci-plane-test-")
-		spec := engine.RunnerSpec{Name: name, JITConfig: randName("fake-jit-"), Image: stubImage, DindImage: "ci-plane-no-such-image:0", CPUs: 1, MemMB: 512}
+		spec := engine.RunnerSpec{Name: name, JITConfig: randName("fake-jit-"), Image: stubImage, DindImage: "ci-plane-no-such-image:0", MemMB: 512}
 		err := m.Start(ctx, w, spec)
 		if err == nil {
 			t.Fatal("Start with a missing image succeeded")

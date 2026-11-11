@@ -15,7 +15,8 @@ import (
 // the incident it is in, if any.
 type hostState struct {
 	cpus, memMB, diskMB int
-	diskUsed            int // MB used by images, caches and the mirror
+	other               float64 // share of the CPUs that something else on the server uses, at its peak
+	diskUsed            int     // MB used by images, caches and the mirror
 	phase               float64
 	downUntil           time.Time
 	diskLowUntil        time.Time
@@ -29,8 +30,8 @@ func newHostState(w model.Worker, r float64) *hostState {
 	return &hostState{cpus: w.CPUs, memMB: w.MemMB, diskMB: disk, diskUsed: int(float64(disk) * (0.18 + 0.2*r)), phase: r * 6}
 }
 
-// status derives the live values from the reservations of the runners on
-// the worker, with a little noise so the meters breathe.
+// status derives the live values from the runners on the worker and from
+// whatever else the server does, with a little noise so the meters breathe.
 func (h *hostState) status(runners []model.Runner, set model.Settings) engine.WorkerStatus {
 	now := time.Now()
 	if now.Before(h.downUntil) {
@@ -44,7 +45,10 @@ func (h *hostState) status(runners []model.Runner, set model.Settings) engine.Wo
 	}
 	wave := (math.Sin(float64(now.UnixMilli())/9000+h.phase) + 1) / 2 // 0..1
 	busy := 0.45 + 0.35*wave
-	cpuPct := 3 + 100*cpu*busy/float64(max(h.cpus, 1))
+	// The other work of the server comes and goes slowly, so jobs can be
+	// seen moving away from it and back.
+	slow := (math.Sin(float64(now.UnixMilli())/70000+h.phase*2) + 1) / 2
+	cpuPct := 3 + 100*h.other*slow + 100*cpu*busy/float64(max(h.cpus, 1))
 	if cpuPct > 99 {
 		cpuPct = 99
 	}
@@ -57,7 +61,7 @@ func (h *hostState) status(runners []model.Runner, set model.Settings) engine.Wo
 		free = 0
 	}
 	return engine.WorkerStatus{
-		Connected: true, At: now.UnixMilli(), Load1: round1(cpu*busy + 0.2 + wave*0.3), CPUPct: round1(cpuPct),
+		Connected: true, At: now.UnixMilli(), Load1: round1(cpu*busy + 0.2 + wave*0.3), CPUPct: round1(cpuPct), CPUAvgPct: round1(cpuPct),
 		MemTotalMB: h.memMB, MemAvailMB: max(h.memMB-used, 256), DiskMB: h.diskMB, DiskFreeMB: free,
 	}
 }

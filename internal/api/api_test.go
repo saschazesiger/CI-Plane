@@ -782,7 +782,8 @@ func TestOverviewAndJobs(t *testing.T) {
 		t.Fatalf("alerts: %v", keys)
 	}
 	capacity := ov.body["workers"].([]any)[0].(map[string]any)["capacity"].(map[string]any)
-	if capacity["usedCpus"].(float64) != 4 || capacity["runners"].(float64) != 1 {
+	// 40 % of 8 CPUs are busy; the runner's job has not begun to count by its load.
+	if capacity["busyCpus"].(float64) != 3.2 || capacity["heldCpus"].(float64) != 4 || capacity["runners"].(float64) != 1 {
 		t.Fatalf("capacity: %v", capacity)
 	}
 	jobs := r.expect(r.local_("GET", "/api/jobs?state=running,queued&limit=10", nil), 200)

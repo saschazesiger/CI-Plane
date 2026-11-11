@@ -157,7 +157,7 @@ func TestJITConfigStaysSecret(t *testing.T) {
 	}
 	w := model.Worker{ID: 1, Host: "127.0.0.1", Port: s.port(), User: "ci-plane", HostKey: s.hostKeyLine()}
 	jit := "eyJzZWNyZXQiOiJ0b3Atc2VjcmV0LWppdC1jb25maWcifQ=="
-	spec := engine.RunnerSpec{Name: "ci-plane-w-1", JITConfig: jit, Image: "runner:1", DindImage: "docker:dind", CPUs: 2, MemMB: 4096}
+	spec := engine.RunnerSpec{Name: "ci-plane-w-1", JITConfig: jit, Image: "runner:1", DindImage: "docker:dind", MemMB: 4096, CPUPriority: model.PriorityBackground}
 	if err := m.Start(context.Background(), w, spec); err != nil {
 		t.Fatal(err)
 	}

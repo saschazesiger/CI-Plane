@@ -96,12 +96,22 @@ mount the host's disks and leave the container. That is why the trust model abov
 
 ## 📏 Resource limits
 
-A job's size is enforced with Docker's `--cpus` and `--memory` on **each** of its two containers, the runner and its
-Docker daemon. Steps run in one or the other (a `run:` step in the runner, a container or `docker build` in the
-daemon), so real use rarely exceeds the size. The worst case for memory is **twice the size**, when both are full at
-once. CI-Plane keeps a reserve per worker (10 % and 1 GB by default) and only places a job when at least half of the
+**Memory** of a job's size is enforced with Docker's `--memory` on **each** of its two containers, the runner and
+its Docker daemon. Steps run in one or the other (a `run:` step in the runner, a container or `docker build` in the
+daemon), so real use rarely exceeds the size. The worst case is **twice the size**, when both are full at once.
+CI-Plane keeps a reserve per worker (10 % and 1 GB by default) and only places a job when at least half of the
 size's memory is really available at that moment. One shared limit for both containers would need root on the worker
 and is on the roadmap.
+
+**CPU** is not limited: a job may use every CPU of the worker that nothing else wants. What protects the other work
+of a server is the placement (a job only starts where the CPUs of its size are idle) and the
+[CPU priority](workers.md#-cpu-priority) of the worker. The priority guards against load, not against an attack: a job runs
+privileged and can change anything on the worker, its priority included.
+
+With a priority other than *normal*, CI-Plane starts one more kind of privileged container on the worker: for about
+a second, sharing the host's process namespace, to run `systemctl set-property --runtime ciplane.slice CPUWeight=…`
+on the server. It runs a fixed command with no input from a job, and only when the priority is not set yet. It needs
+no right the SSH user does not already have through Docker.
 
 Disk is not limited per job. A worker under the free-disk threshold takes no jobs until space is back.
 

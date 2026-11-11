@@ -21,6 +21,7 @@ type live struct {
 	At         int64   `json:"at"`
 	Load1      float64 `json:"load1"`
 	CPUPct     float64 `json:"cpuPct"`
+	CPUAvgPct  float64 `json:"cpuAvgPct"`
 	MemAvailMB int     `json:"memAvailMb"`
 	MemTotalMB int     `json:"memTotalMb"`
 	DiskFreeMB int     `json:"diskFreeMb"`
@@ -28,7 +29,7 @@ type live struct {
 }
 
 func liveOf(st engine.WorkerStatus) live {
-	return live{Connected: st.Connected, Error: st.Error, At: st.At, Load1: st.Load1, CPUPct: st.CPUPct,
+	return live{Connected: st.Connected, Error: st.Error, At: st.At, Load1: st.Load1, CPUPct: st.CPUPct, CPUAvgPct: st.CPUAvgPct,
 		MemAvailMB: st.MemAvailMB, MemTotalMB: st.MemTotalMB, DiskFreeMB: st.DiskFreeMB, DiskMB: st.DiskMB}
 }
 
@@ -91,10 +92,11 @@ func (s *Server) workerViews(sn *snapshot) []workerView {
 	out := make([]workerView, 0, len(sn.workers))
 	for _, w := range sn.workers {
 		w.HostKey = strings.TrimSpace(w.HostKey)
+		st := s.status(w.ID)
 		out = append(out, workerView{
 			Worker:   w,
-			Capacity: engine.CapacityOf(sn.set, w, sn.runners),
-			Live:     liveOf(s.status(w.ID)),
+			Capacity: engine.CapacityOf(sn.set, w, sn.runners, st, sn.now),
+			Live:     liveOf(st),
 			Task:     s.tasks.latest("prepare", workerTarget(w.ID)),
 		})
 	}

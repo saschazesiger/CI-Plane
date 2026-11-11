@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS workers (
   state TEXT NOT NULL DEFAULT 'setup', state_reason TEXT NOT NULL DEFAULT '',
   cpus INTEGER NOT NULL DEFAULT 0, mem_mb INTEGER NOT NULL DEFAULT 0, disk_mb INTEGER NOT NULL DEFAULT 0,
   docker TEXT NOT NULL DEFAULT '', failures INTEGER NOT NULL DEFAULT 0,
-  last_seen_at INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+  last_seen_at INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
+  cpu_priority TEXT NOT NULL DEFAULT 'normal'
 );
 CREATE TABLE IF NOT EXISTS jobs (
   id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL DEFAULT 0, account_id INTEGER NOT NULL, repo_id INTEGER NOT NULL,
@@ -96,7 +97,41 @@ func Open(dir string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("create schema: %w", err)
 	}
+	// Columns added after the first release; CREATE TABLE IF NOT EXISTS
+	// leaves an existing table as it is.
+	for _, c := range []struct{ table, column, def string }{
+		{"workers", "cpu_priority", "TEXT NOT NULL DEFAULT 'normal'"},
+	} {
+		if err := addColumn(db, c.table, c.column, c.def); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("upgrade the database: %w", err)
+		}
+	}
 	return &Store{db: db, now: Now}, nil
+}
+
+// addColumn adds a column unless the table has it.
+func addColumn(db *sql.DB, table, column, def string) error {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	_, err = db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + def)
+	return err
 }
 
 // SetClock replaces the clock that stamps rows, for tests.
@@ -336,12 +371,12 @@ func (t *Tx) DeleteRepo(id int64) error {
 // --- workers ---------------------------------------------------------------
 
 const workerCols = `id, name, host, port, user, host_key, tier, position, enabled, draining, state, state_reason,
- cpus, mem_mb, disk_mb, docker, failures, last_seen_at, created_at`
+ cpus, mem_mb, disk_mb, docker, failures, last_seen_at, created_at, cpu_priority`
 
 func scanWorker(r interface{ Scan(...any) error }) (model.Worker, error) {
 	var w model.Worker
 	err := r.Scan(&w.ID, &w.Name, &w.Host, &w.Port, &w.User, &w.HostKey, &w.Tier, &w.Position, &w.Enabled, &w.Draining,
-		&w.State, &w.StateReason, &w.CPUs, &w.MemMB, &w.DiskMB, &w.Docker, &w.Failures, &w.LastSeenAt, &w.CreatedAt)
+		&w.State, &w.StateReason, &w.CPUs, &w.MemMB, &w.DiskMB, &w.Docker, &w.Failures, &w.LastSeenAt, &w.CreatedAt, &w.CPUPriority)
 	return w, err
 }
 
@@ -353,10 +388,13 @@ func (t *Tx) AddWorker(w model.Worker) (model.Worker, error) {
 	if w.State == "" {
 		w.State = model.WorkerSetup
 	}
+	if w.CPUPriority == "" {
+		w.CPUPriority = model.PriorityNormal
+	}
 	res, err := t.q.Exec(`INSERT INTO workers(name, host, port, user, host_key, tier, position, enabled, draining, state, state_reason,
-	  cpus, mem_mb, disk_mb, docker, failures, last_seen_at, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	  cpus, mem_mb, disk_mb, docker, failures, last_seen_at, created_at, cpu_priority) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		w.Name, w.Host, w.Port, w.User, w.HostKey, w.Tier, w.Position, b2i(w.Enabled), b2i(w.Draining), w.State, w.StateReason,
-		w.CPUs, w.MemMB, w.DiskMB, w.Docker, w.Failures, w.LastSeenAt, w.CreatedAt)
+		w.CPUs, w.MemMB, w.DiskMB, w.Docker, w.Failures, w.LastSeenAt, w.CreatedAt, w.CPUPriority)
 	if err != nil {
 		return w, err
 	}
@@ -367,9 +405,9 @@ func (t *Tx) AddWorker(w model.Worker) (model.Worker, error) {
 // SaveWorker stores every field of a worker.
 func (t *Tx) SaveWorker(w model.Worker) error {
 	_, err := t.q.Exec(`UPDATE workers SET name=?, host=?, port=?, user=?, host_key=?, tier=?, position=?, enabled=?, draining=?,
-	  state=?, state_reason=?, cpus=?, mem_mb=?, disk_mb=?, docker=?, failures=?, last_seen_at=? WHERE id=?`,
+	  state=?, state_reason=?, cpus=?, mem_mb=?, disk_mb=?, docker=?, failures=?, last_seen_at=?, cpu_priority=? WHERE id=?`,
 		w.Name, w.Host, w.Port, w.User, w.HostKey, w.Tier, w.Position, b2i(w.Enabled), b2i(w.Draining), w.State, w.StateReason,
-		w.CPUs, w.MemMB, w.DiskMB, w.Docker, w.Failures, w.LastSeenAt, w.ID)
+		w.CPUs, w.MemMB, w.DiskMB, w.Docker, w.Failures, w.LastSeenAt, w.CPUPriority, w.ID)
 	return err
 }
 
