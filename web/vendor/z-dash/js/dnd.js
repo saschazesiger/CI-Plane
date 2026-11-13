@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Drag and drop (3.0): pointer and keyboard moves with announcements, the
  * engine under kanban boards, trees and panel grids. DS.motion.sortable()

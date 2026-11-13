@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Banner (DS.banner): messages for the whole app (a system broadcast,
  * maintenance, offline) in the .ds-banner above the view, in priority

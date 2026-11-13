@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Key-value editor (DS.kveditor): rows of a key and a value, added and
  * removed, filled by pasting KEY=value lines, a warning on a key that comes

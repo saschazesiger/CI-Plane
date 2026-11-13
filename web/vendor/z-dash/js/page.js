@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Page head (DS.page): a sticky head that condenses once the reader has
  * scrolled, and actions that fold into a More menu by width.

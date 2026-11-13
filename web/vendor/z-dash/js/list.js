@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Lists (3.0): rows that are chosen by a checkbox or a radio, rows that
  * move by drag, a window over thousands of rows, and facts whose values

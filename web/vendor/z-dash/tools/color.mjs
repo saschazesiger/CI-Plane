@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Colour science for the theme generator (tools/theme.mjs) and the
  * styleguide's live preview: plain ES2022, no dependency and no Node API,

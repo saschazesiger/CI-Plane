@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /** Types of DS.calendar (js/calendar.js): the date engine of every picker, and the month grid. */
 
 /** A date without a time or a time zone; month 1-12. */

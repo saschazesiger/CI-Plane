@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Popovers (DS.popover): an anchored, non-modal panel that DS.overlay opens
  * and closes (the stack, Escape, focus return, ds:open and ds:close stay in

@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The usage meter (DS.usage): what an assistant or agent used (tokens, and
  * what they cost) against a budget, as a meter with its figures and, near

@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * DS.chart (3.0): dependency-free SVG charts on the chart roles. One small
  * engine (scales, nice ticks, a time axis in the page's locale, paths,

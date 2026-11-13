@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Moves a project from Z-Dash 2.x to 3.0, without dependencies
  * (Node 22 or later; docs/migration.md):

@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Truncate (DS.truncate): a text too long for its place is cut at its end,
  * its start or its middle with an ellipsis, and shows whole in a tooltip

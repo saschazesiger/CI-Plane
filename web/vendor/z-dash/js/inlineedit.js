@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Inline edit (DS.inlineedit): a value shown as text that turns into a field
  * in place, saved with Enter or Save and left with Escape or Cancel; busy

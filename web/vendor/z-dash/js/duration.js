@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The duration input (DS.duration): a text field that reads a length of
  * time the way people write it ("1h 30m", "90 min", "1:30", "1.5h", "2

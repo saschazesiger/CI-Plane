@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Diff view (DS.diff): unified diff text (git diff, diff -u) shown as files
  * with their headers, hunks, two line-number gutters and word-level marks,

@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Search hits (DS.hits): the hits of a search marked in a text, as
  * <mark class="ds-hit"> around each, ignoring case and accents.

@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * <Tabs> (dist/react/tabs.js): ARIA tabs of docs/components.md, "Tabs",
  * driven by DS.tabs: selection by click and the arrow keys (one tab stop),

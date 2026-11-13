@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Menu button (DS.menubutton): a button that opens a menu (DS.menu, through
  * DS.overlay), with a chevron that turns while it is open. A menu of

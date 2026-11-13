@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The React adapter's shared part (dist/react/shared.js): option classes,
  * refs, the life of a behaviour on an element React renders, overlays,

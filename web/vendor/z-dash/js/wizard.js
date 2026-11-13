@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Form wizard (DS.wizard): a form in steps, each checked before the next,
  * Back and Next, and a summary step that lists what was entered, on the

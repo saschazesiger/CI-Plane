@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Remembered UI preferences (3.0): columns, density, dismissed banners, sheet
  * widths. JSON values in localStorage under `ds:<namespace>:<key>`, so a host

@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The classic-script wrapper of Z-Dash (no dependency): turns the
  * ES modules of js/ into one script that sets window.DS, as ds.js does.

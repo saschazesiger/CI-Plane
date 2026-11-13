@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The data grid (DS.datagrid): the behaviour a console table needs, on top of
  * the table's CSS (table.css stays plain; this module and datagrid.css add only

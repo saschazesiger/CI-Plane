@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Keyboard shortcuts (3.0): one registry per document, combos that read
  * right on every platform, scopes, and the data of a shortcut sheet.

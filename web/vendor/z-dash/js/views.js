@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Saved views (DS.views): named sets of filters, a sort and columns for a
  * list or a table, picked from a menu; one is the default, the page's own

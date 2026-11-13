@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Command palette (DS.command): one search field over every command of an
  * app, in a dialog. The WAI-ARIA combobox pattern inside a modal dialog:

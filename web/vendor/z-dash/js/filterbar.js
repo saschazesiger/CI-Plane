@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Filter bar (DS.filterbar): a search and inline filters above a list, the
  * applied filters as chips with "Clear all", and a result count. When the

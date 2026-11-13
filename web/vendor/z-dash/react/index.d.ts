@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /** Every component of the React adapter (each file alone loads only its own module: prefer those). */
 export { Alert } from './alert.js';
 export { Badge } from './badge.js';

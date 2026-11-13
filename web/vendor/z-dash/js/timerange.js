@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The time range with refresh (DS.timerange): the range control of a
  * monitoring view. A button names the range ("Last 1 hour") and opens a

@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash
+# Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash
 # Verifies a copy of Z-Dash against its SHA256SUMS, without network
 # and without Node (POSIX sh; needs sha256sum or shasum, find, sort, diff).
 #

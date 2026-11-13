@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Sort control (DS.sort): the field and the direction of a list or a set of
  * cards, outside a table. Inline (a select of the fields and an order

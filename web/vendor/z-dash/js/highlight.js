@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Syntax highlighter (D13): small tokenizers of the system's own for json,
  * js/ts, sh, html/xml, css, sql, yaml, go, py and diff, and a hook for an

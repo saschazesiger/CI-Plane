@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /*
  * Lightbox: the images of a gallery (the photos of a device, the
  * attachments of a ticket) one at a time over the whole window, with
@@ -20,6 +20,7 @@
  *     <div class="ds-dialog__box ds-lightbox__box">
  *       <div class="ds-lightbox__bar">
  *         <p class="ds-lightbox__count">Image 2 of 6</p>
+ *         <a class="ds-btn ds-btn--ghost ds-btn--icon" href="..." target="_blank" rel="noopener" aria-label="Open the image">(external)</a>   (original: true)
  *         <button class="ds-btn ds-btn--ghost ds-btn--icon" type="button" aria-label="Zoom out">(minimize)</button>
  *         <button class="ds-btn ds-btn--ghost ds-btn--icon" type="button" aria-label="Zoom in">(plus)</button>
  *         <button class="ds-btn ds-btn--ghost ds-btn--icon" type="button" aria-label="Close" data-ds-close>(close)</button>

@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Toggle buttons and toggle groups (DS.toggle): a button that stays on or
  * off (aria-pressed), and a set of them where one or several are on.

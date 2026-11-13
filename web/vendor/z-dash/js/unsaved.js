@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Unsaved-changes guard (DS.unsaved): knows when a form holds edits that
  * are not saved yet, shows them in a save bar, saves on Ctrl+S (Command+S

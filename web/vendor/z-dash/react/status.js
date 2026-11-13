@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * <Status> (dist/react/status.js): the status chip of docs/components.md,
  * "Status chip": the state of one item, always with an icon and a word.

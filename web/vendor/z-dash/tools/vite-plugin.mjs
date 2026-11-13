@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Z-Dash for Vite, without dependencies: the scan of
  * tools/bundle.mjs over the files Vite transforms, served as two virtual

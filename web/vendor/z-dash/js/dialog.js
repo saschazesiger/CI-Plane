@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The behaviour of a dialog (DS.dialog): what only a dialog does once
  * DS.overlay opened it (the stack, the trap, focus return, Escape, dismiss

@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /** Types of DS.command (js/command.js): the command palette. */
 
 /** One command. `children` makes it a page: a list, or a function of the query that returns one. */

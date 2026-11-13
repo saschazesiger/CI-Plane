@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * <Badge> (dist/react/badge.js): the .ds-badge of docs/components.md,
  * "Badge": a count or a dot on a button, chip, tab or drawer item.

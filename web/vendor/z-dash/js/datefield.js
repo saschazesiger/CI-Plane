@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The segmented date field (DS.datefield): a date, a time, a date and a
  * time, or a range of dates, typed segment by segment (the WAI-ARIA

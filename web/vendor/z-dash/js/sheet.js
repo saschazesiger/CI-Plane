@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The side sheet's module (DS.sheet). The modal sheet's behaviour is the
  * core's (js/overlay.js: the stack, the trap, focus return, Escape,

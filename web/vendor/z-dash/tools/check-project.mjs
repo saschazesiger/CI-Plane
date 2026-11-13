@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Checks a project that vendors Z-Dash against the project rules
  * of AGENTS.md ("Using Z-Dash in a project"), without

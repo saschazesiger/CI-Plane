@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /** Types of <Button> (react/button.js). */
 import type * as React from 'react';
 import type { IntrinsicTag, OptionProps } from './shared.js';

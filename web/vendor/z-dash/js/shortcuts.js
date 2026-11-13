@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Shortcut sheet (DS.shortcuts): "?" opens a dialog that lists every
  * shortcut registered with DS.hotkeys (DS.hotkeys.list()), grouped by scope

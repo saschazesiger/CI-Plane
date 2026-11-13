@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The calendar (DS.calendar): the date engine every picker shares, and the
  * month grid built on it (the grid of the WAI-ARIA date picker dialog).

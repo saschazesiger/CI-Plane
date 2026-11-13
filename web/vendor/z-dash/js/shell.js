@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The app frame's behaviour (DS.shell): what a 2.x page wired by hand around
  * the frame, the drawer and the top bar, as declarative behaviours. The

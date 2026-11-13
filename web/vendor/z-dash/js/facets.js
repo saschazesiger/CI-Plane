@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Facet filter panel (DS.facets): the filters of a list beside it, one facet
  * per field with counts, a search inside a long facet, "Show all" after a

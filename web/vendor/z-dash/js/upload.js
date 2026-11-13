@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * File upload (DS.upload): a drop zone, the chosen files with their progress,
  * retry and remove, a grid of previews, paste, limits on type, size and

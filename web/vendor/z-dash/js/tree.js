@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Tree view (3.0): the APG tree pattern on `.ds-tree` markup. One tab stop
  * (the active item, tabindex="0"); the arrow keys walk the rows that show,

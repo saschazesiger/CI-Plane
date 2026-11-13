@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * <DSProvider> (dist/react/provider.js): the root of a React tree on
  * Z-Dash. It renders the .ds-theme element (or wraps a tree in

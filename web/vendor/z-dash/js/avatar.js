@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Avatar (DS.avatar): initials and a colour of their own from a name, the
  * name as the avatar's label, a status dot with its word in that label; and

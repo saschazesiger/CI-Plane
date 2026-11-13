@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * A small CSS scanner for the tools (no dependency, not a full parser): it
  * reads the stylesheets that themes and projects write, keeping line

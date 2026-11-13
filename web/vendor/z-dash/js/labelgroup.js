@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Label group (DS.labelgroup): the tags of one item on one line, as many
  * as fit, then a "+N" button that shows all of them in a popup.

@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Icons: one outline set on a 24px grid (shapes from Lucide, ISC, partly
  * from Feather, MIT; notices in LICENSE): stroke width 2, round caps and

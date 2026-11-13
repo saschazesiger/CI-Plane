@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The reasoning disclosure (DS.reasoning): the summary line of an
  * assistant's thinking, the time it took, and the thoughts that stay at

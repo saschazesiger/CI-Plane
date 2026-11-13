@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * <Field> (dist/react/field.js): a labelled field of docs/components.md,
  * "Form": the label above the control, a hint and the states in words,

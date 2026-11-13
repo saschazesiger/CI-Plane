@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * JSON viewer (3.0): a JSON document as a tree that opens and closes, on
  * DS.tree (the APG tree: one tab stop, the arrows walk and open the rows,

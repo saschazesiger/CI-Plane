@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Badge: a count that never outgrows its pill. The figure stops at a maximum
  * and shows "99+"; nothing (an empty badge takes no room) at zero or below.

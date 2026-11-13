@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The theme generator: one seed colour in, one theme file out, with every
  * colour role of the system in the light and the dark scheme, checked

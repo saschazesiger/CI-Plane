@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /** Types of DS.splitbutton (js/splitbutton.js). */
 
 /** A split button's controller: the chosen variant of a menu of radio items (else null). */

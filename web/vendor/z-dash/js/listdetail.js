@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * List-detail layout (DS.listdetail): which level shows, list, detail or
  * sub-detail, and what follows when it changes. This module writes the level

@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The select panel (DS.selectpanel): a button that opens a popover with a
  * filter, a list of options to check and an apply foot (labels, assignees,

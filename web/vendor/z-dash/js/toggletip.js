@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Toggletips (DS.toggletip): the info button "i" that opens a help card on a
  * click or a tap (never on hover), keeps focus on itself and says the card's

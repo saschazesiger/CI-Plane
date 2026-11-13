@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * One-time code and PIN (DS.otp): n cells of one character each, with
  * auto-advance, paste and the browser's one-time-code autofill.

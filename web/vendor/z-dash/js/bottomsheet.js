@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The bottom sheet (DS.bottomsheet): a modal sheet at the bottom edge with
  * a drag handle, detents and drag to dismiss. DS.overlay opens and closes it

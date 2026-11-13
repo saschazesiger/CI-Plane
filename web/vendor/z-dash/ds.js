@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /*
  * Classic-script build of src/js (no modules needed): window.DS.core,
  * DS.motion, DS.indicator, DS.dom, DS.ripple, DS.icons, DS.position,
@@ -37,7 +37,7 @@
  */
 (function (root) {
   'use strict';
-  var version = '3.0.1';
+  var version = '3.1.0';
   // DashboardStyle: the deprecated name from before the rename (3.0), the same object.
   var registry = root.ZDash || root.DashboardStyle || {};
   root.ZDash = registry;
@@ -563,6 +563,7 @@
       images: 'Images',
       zoomIn: 'Zoom in',
       zoomOut: 'Zoom out',
+      openImage: 'Open the image',
       imageFailed: 'The image could not be loaded.',
       resizeSheet: 'Resize the sheet',
       sheetDetent: 'Sheet at {percent} percent of the screen',
@@ -32125,7 +32126,7 @@
     });
   });
 
-  add('lightbox', ['MAX_ZOOM', 'nextZoom', 'clampPan', 'create', 'open', 'close', 'show'], function () {
+  add('lightbox', ['MAX_ZOOM', 'nextZoom', 'detailZoom', 'clampPan', 'create', 'open', 'close', 'show'], function () {
     /**
      * The lightbox (DS.lightbox): the images of a gallery one at a time over the
      * whole window, with thumbnails, keys, zoom and pan, a caption and swipe on
@@ -32138,7 +32139,7 @@
      *
      *   const box = DS.lightbox.create(gallery);    // get(), set(), open(), close(), next(), prev(), on(), destroy()
      *   DS.lightbox.open(gallery, { index: 2, opener });
-     *   DS.lightbox.show([{ src, alt, caption, thumb }], { label, opener });   // without a gallery in the page
+     *   DS.lightbox.show([{ src, alt, caption, thumb }], { label, opener, original });   // without a gallery in the page
      *
      * The images: every .ds-lightbox__item (or [data-ds-lightbox-item]) of the
      * gallery, read when it opens: its href or data-src (the full image), its
@@ -32154,22 +32155,28 @@
      * show the image at once. A change says "Image 3 of 6" and the caption
      * (else the alt) politely.
      *
-     * Pointer: a double click (a double tap) zooms to 2 at that point and back;
-     * Ctrl and the wheel (a trackpad pinch) and two fingers zoom; a zoomed
-     * image pans with a drag (it follows the pointer); unzoomed, a horizontal
-     * swipe of a finger follows it and goes to the next or the previous image
-     * past a fifth of the frame (else it glides back).
+     * Pointer: a click of the mouse (the frame shows the zoom-in cursor) and a
+     * double tap zoom in at that point, to the image's own pixels (detailZoom():
+     * at least 2), and back to the fit; a click that ended a drag does not. Ctrl
+     * and the wheel (a trackpad pinch) and two fingers zoom; a zoomed image pans
+     * with a drag (it follows the pointer) and with the wheel (two fingers on a
+     * trackpad, Shift for sideways); unzoomed, a horizontal swipe of a finger
+     * follows it and goes to the next or the previous image past a fifth of the
+     * frame (else it glides back).
      *
      * Zoom: 1 (the fit), 2 and 4 by the buttons and keys, up to MAX_ZOOM by a
      * pinch. The pan is clamped so the image always covers the frame
      * (clampPan()). --ds-lightbox-zoom, --ds-lightbox-x and --ds-lightbox-y are
      * runtime properties on the frame.
      *
+     * `original: true` (create() and show()) adds a link to the bar that opens
+     * the current image on its own in a new tab (its `href`, else its `src`).
+     *
      * ES2022; no progressive feature of its own.
      */
     const define = DS.core.define, emit = DS.core.emit, t = DS.core.t;
     const enter = DS.motion.enter, motionDuration = DS.motion.motionDuration;
-    const chevronLeft = DS.icons.chevronLeft, chevronRight = DS.icons.chevronRight, closeIcon = DS.icons.close, alertCircle = DS.icons.alertCircle, minimize = DS.icons.minimize, plus = DS.icons.plus, iconElement = DS.icons.iconElement;
+    const chevronLeft = DS.icons.chevronLeft, chevronRight = DS.icons.chevronRight, closeIcon = DS.icons.close, alertCircle = DS.icons.alertCircle, external = DS.icons.external, minimize = DS.icons.minimize, plus = DS.icons.plus, iconElement = DS.icons.iconElement;
     const openOverlay = DS.overlay.open, closeOverlay = DS.overlay.close, internals = DS.overlay.internals;
     const announce = DS.a11y.announce, roving = DS.a11y.roving;
 
@@ -32192,6 +32199,19 @@
       if (direction === 0) return 1;
       const next = direction > 0 ? zoom * 2 : zoom / 2;
       return Math.min(MAX_ZOOM, Math.max(1, Math.round(next * 100) / 100));
+    }
+
+    /**
+     * The zoom a click or a double tap goes to: the image's own pixels
+     * (`natural` over `fitted`, its widths in px), at least 2 (an image shown at
+     * its own size still gets closer), at most MAX_ZOOM.
+     * @param {number} natural
+     * @param {number} fitted
+     * @returns {number}
+     */
+    function detailZoom(natural, fitted) {
+      const own = natural > 0 && fitted > 0 ? natural / fitted : 0;
+      return Math.min(MAX_ZOOM, Math.max(2, Math.round(own * 100) / 100));
     }
 
     /**
@@ -32222,13 +32242,14 @@
           alt: thumb?.getAttribute('alt') || item.getAttribute('aria-label') || '',
           caption: item.getAttribute('data-caption') ?? '',
           thumb: thumb?.getAttribute('src') ?? '',
+          href: item.getAttribute('href') ?? '',
           item,
         };
       });
     }
 
-    /** Builds the viewer with DOM APIs inside the theme of `home`. */
-    function buildViewer(home, label) {
+    /** Builds the viewer with DOM APIs inside the theme of `home`; `original` adds the link to the image. */
+    function buildViewer(home, label, original) {
       const doc = home.ownerDocument;
       const make = (tag, className) => {
         const node = doc.createElement(tag);
@@ -32260,7 +32281,15 @@
       const zoomIn = button('', t('zoomIn'), plus);
       const closer = button('', t('close'), closeIcon);
       closer.setAttribute('data-ds-close', '');
-      bar.append(count, zoomOut, zoomIn, closer);
+      let opener = null;
+      if (original) {
+        opener = make('a', 'ds-btn ds-btn--ghost ds-btn--icon');
+        opener.target = '_blank';
+        opener.rel = 'noopener';
+        opener.setAttribute('aria-label', t('openImage'));
+        opener.append(iconElement(external, 20, undefined, doc));
+      }
+      bar.append(count, ...(opener ? [opener] : []), zoomOut, zoomIn, closer);
       const stage = make('div', 'ds-lightbox__stage');
       const prev = button('ds-lightbox__nav ds-lightbox__nav--prev', t('previous'), chevronLeft);
       const next = button('ds-lightbox__nav ds-lightbox__nav--next', t('next'), chevronRight);
@@ -32286,7 +32315,7 @@
       const theme = home.closest('.ds-theme');
       const parent = !theme || theme === doc.documentElement ? doc.body : theme;
       parent.append(dialog);
-      return { dialog, box, count, zoomIn, zoomOut, closer, prev, next, figure, frame, image, caption, thumbs };
+      return { dialog, box, count, original: opener, zoomIn, zoomOut, closer, prev, next, figure, frame, image, caption, thumbs };
     }
 
     /** The properties of the option classes the viewer takes from the gallery's region; it has no tone. */
@@ -32322,10 +32351,10 @@
      * ds:zoom ({ zoom }); destroy() removes the viewer.
      * `images` (a function returning the list) replaces the gallery's items;
      * `label` names the viewer (else the gallery's aria-label, else the string
-     * `images`).
+     * `images`); `original: true` adds the link that opens the image on its own.
      * @param {Element} gallery
      * `home` is where the viewer finds its theme (else the gallery).
-     * @param {{ images?: () => Array<{ src: string, alt?: string, caption?: string, thumb?: string }>, label?: string, home?: Element }} [options]
+     * @param {{ images?: () => Array<{ src: string, alt?: string, caption?: string, thumb?: string, href?: string }>, label?: string, home?: Element, original?: boolean }} [options]
      */
     function create(gallery, options = {}) {
       const known = controllers.get(gallery);
@@ -32334,13 +32363,13 @@
       const signal = abort.signal;
       const listeners = [];
       const list = () => (typeof options.images === 'function' ? options.images() : imagesOf(gallery));
-      const state = { index: 0, zoom: 1, x: 0, y: 0, images: /** @type {any[]} */ ([]), viewer: /** @type {any} */ (null), rover: /** @type {any} */ (null), pointers: new Map(), gesture: /** @type {any} */ (null), lastTap: 0 };
+      const state = { index: 0, zoom: 1, x: 0, y: 0, images: /** @type {any[]} */ ([]), viewer: /** @type {any} */ (null), rover: /** @type {any} */ (null), pointers: new Map(), gesture: /** @type {any} */ (null), lastTap: 0, pointerType: '', dragged: false };
 
       const homeOf = () => options.home ?? (gallery.isConnected ? gallery : gallery.ownerDocument?.body ?? globalThis.document.body);
       const viewer = () => {
         if (state.viewer?.dialog.isConnected) return state.viewer;
         const label = options.label ?? gallery.getAttribute?.('aria-label') ?? t('images');
-        state.viewer = buildViewer(homeOf(), label);
+        state.viewer = buildViewer(homeOf(), label, Boolean(options.original));
         wireViewer(state.viewer);
         return state.viewer;
       };
@@ -32382,6 +32411,12 @@
         state.y = pan.y;
         paintTransform();
         if (before !== next) emit(gallery, 'zoom', { zoom: next });
+      };
+
+      /** The zoom of a click or a double tap: in to the image's own pixels, or back to the fit. */
+      const toggleZoom = (point) => {
+        const { image } = state.viewer;
+        zoomTo(state.zoom > 1 ? 1 : detailZoom(image.naturalWidth, image.offsetWidth), point);
       };
 
       const panBy = (dx, dy) => {
@@ -32445,6 +32480,7 @@
         if (v.image.getAttribute('src') !== image.src) v.image.src = image.src;
         else if (v.image.complete) done();
         v.caption.textContent = image.caption ?? '';
+        if (v.original) v.original.href = image.href || image.src;
         v.count.textContent = t('imageOf', { index: state.index + 1, total });
         v.prev.hidden = total < 2;
         v.next.hidden = total < 2;
@@ -32511,14 +32547,31 @@
           const box = frame.getBoundingClientRect();
           return { x: event.clientX - box.left - box.width / 2, y: event.clientY - box.top - box.height / 2 };
         };
-        frame.addEventListener('dblclick', (event) => zoomTo(state.zoom > 1 ? 1 : 2, centre(event)), { signal });
+        // A mouse zooms with one click (the zoom-in cursor promises it); the second click of a double click is not
+        // another toggle, and a click that ends a drag is not one at all. Touch and a pen zoom with a double tap (end()).
+        frame.addEventListener('click', (/** @type {MouseEvent} */ event) => {
+          if (state.pointerType !== 'mouse' || event.button !== 0 || event.detail > 1 || state.dragged) return;
+          toggleZoom(centre(event));
+        }, { signal });
         frame.addEventListener('wheel', (/** @type {WheelEvent} */ event) => {
-          if (!event.ctrlKey) return;
+          if (event.ctrlKey) {
+            event.preventDefault();
+            zoomTo(state.zoom * Math.exp(-event.deltaY / 200), centre(event));
+            return;
+          }
+          // Zoomed, the wheel (two fingers on a trackpad) pans the image as it would scroll a page; Shift turns it sideways.
+          if (state.zoom <= 1) return;
           event.preventDefault();
-          zoomTo(state.zoom * Math.exp(-event.deltaY / 200), centre(event));
+          const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? frame.clientHeight : 1;
+          let dx = event.deltaX * unit;
+          let dy = event.deltaY * unit;
+          if (event.shiftKey && !dx) [dx, dy] = [dy, 0];
+          panBy(-dx, -dy);
         }, { signal, passive: false });
         frame.addEventListener('pointerdown', (/** @type {PointerEvent} */ event) => {
           if (event.button !== 0 || state.images.length === 0) return;
+          state.pointerType = event.pointerType;
+          state.dragged = false;
           try {
             frame.setPointerCapture?.(event.pointerId);
           } catch {
@@ -32580,19 +32633,24 @@
           state.gesture = null;
           frame.removeAttribute('data-dragging');
           if (!gesture) return;
-          if (gesture.kind === 'swipe' && gesture.touch) {
+          state.dragged = Boolean(gesture.moved);
+          if (gesture.touch && !gesture.moved && gesture.kind !== 'pinch') {
+            if (event.type !== 'pointerup') return;
+            // A double tap zooms in, or out of a zoomed image (a touch has no dblclick in every engine, and where it
+            // has one it would toggle a second time, so none is heard).
+            const now = event.timeStamp;
+            // Two taps within --ds-delay-dismiss are one double tap; a third starts again.
+            if (now - state.lastTap < motionDuration(frame, '--ds-delay-dismiss')) {
+              toggleZoom(centre(event));
+              state.lastTap = 0;
+            } else state.lastTap = now;
+          } else if (gesture.kind === 'swipe' && gesture.touch) {
             const dx = event.clientX - gesture.start.x;
             const width = frame.getBoundingClientRect().width;
-            if (gesture.moved && Math.abs(dx) > width / 5 && state.images.length > 1) show(state.index + (dx < 0 ? 1 : -1));
-            else if (gesture.moved) {
+            if (Math.abs(dx) > width / 5 && state.images.length > 1) show(state.index + (dx < 0 ? 1 : -1));
+            else {
               state.x = 0;
               paintTransform();
-            } else {
-              // A double tap zooms (a touch has no dblclick in every engine).
-              const now = event.timeStamp;
-              // Two taps within --ds-delay-dismiss are one double tap.
-              if (now - state.lastTap < motionDuration(frame, '--ds-delay-dismiss')) zoomTo(state.zoom > 1 ? 1 : 2, centre(event));
-              state.lastTap = now;
             }
           }
         };
@@ -32691,10 +32749,11 @@
 
     /**
      * Shows a list of images without a gallery in the page: [{ src, alt,
-     * caption, thumb }], at `index`, named `label`; the viewer is removed once
-     * it closed. Returns its controller.
-     * @param {Array<{ src: string, alt?: string, caption?: string, thumb?: string }>} images
-     * @param {{ index?: number, opener?: Element|null, label?: string }} [options]
+     * caption, thumb, href }], at `index`, named `label`; `original: true`
+     * adds the link that opens the image on its own (`href`, else `src`). The
+     * viewer is removed once it closed. Returns its controller.
+     * @param {Array<{ src: string, alt?: string, caption?: string, thumb?: string, href?: string }>} images
+     * @param {{ index?: number, opener?: Element|null, label?: string, original?: boolean }} [options]
      */
     function show(images, options = {}) {
       const doc = options.opener?.ownerDocument ?? globalThis.document;
@@ -32702,7 +32761,7 @@
       // A detached element stands for the gallery: it hears the events.
       const key = doc.createElement('div');
       if (options.label) key.setAttribute('aria-label', options.label);
-      const controller = create(key, { images: () => images.slice(), label: options.label, home });
+      const controller = create(key, { images: () => images.slice(), label: options.label, home, original: options.original });
       key.addEventListener('ds:close', () => controller.destroy(), { once: true });
       controller.open(options.index ?? 0, options.opener ?? null);
       return controller;
@@ -32716,6 +32775,7 @@
     return Object.freeze({
       MAX_ZOOM: MAX_ZOOM,
       nextZoom: nextZoom,
+      detailZoom: detailZoom,
       clampPan: clampPan,
       create: create,
       open: open,

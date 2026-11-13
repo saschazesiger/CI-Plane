@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Audio level meter (DS.levelmeter): the live level of a microphone from a
  * page-supplied AnalyserNode, or from values the page sets, with the

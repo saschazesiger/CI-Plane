@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Types of DS.typeconfirm (src/components/typeconfirm/typeconfirm.js).
  * Hand-written; the build test keeps the declared exports and their

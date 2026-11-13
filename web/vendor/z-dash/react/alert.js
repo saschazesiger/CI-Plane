@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * <Alert> (dist/react/alert.js): the .ds-alert of docs/components.md,
  * "Alert": a message about a page or a section, in place, with an icon and

@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /** Types of DS.daterange (js/daterange.js): the date range picker and its relative presets. */
 import type { DisabledRule } from './calendar.js';
 

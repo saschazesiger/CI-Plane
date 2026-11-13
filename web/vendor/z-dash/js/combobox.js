@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * The combobox (DS.combobox): the behaviour of a .ds-combo marked
  * data-ds-combobox, on the list engine of DS.listbox. Without the attribute

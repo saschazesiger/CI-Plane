@@ -1,4 +1,4 @@
-/*! Z-Dash 3.0.1 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Type-to-confirm (DS.typeconfirm): a destructive action that waits until
  * the name of what goes has been typed. It lives in a confirm dialog, whose
