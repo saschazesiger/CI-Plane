@@ -1,4 +1,4 @@
-/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.2.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /**
  * Core runtime (3.0): one shared runtime per page, the behaviour registry,
  * declarative initialisation, events and the system's own strings.

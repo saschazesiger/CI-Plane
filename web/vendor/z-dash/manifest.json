@@ -1,6 +1,6 @@
 {
   "name": "z-dash",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "layers": "@layer ds.tokens, ds.base, ds.components, ds.motion, ds.utilities;",
   "sublayers": "@layer ds.components.global, ds.components.layout, ds.components.utilities, ds.components.scroller, ds.components.spinner, ds.components.loader, ds.components.indicator, ds.components.button, ds.components.loading, ds.components.disclosure, ds.components.timeline, ds.components.tasks, ds.components.status, ds.components.alert, ds.components.switch, ds.components.slider, ds.components.progress, ds.components.chart, ds.components.tile, ds.components.list, ds.components.card, ds.components.prose, ds.components.empty, ds.components.menu, ds.components.chip, ds.components.badge, ds.components.sheet, ds.components.dialog, ds.components.table, ds.components.pagination, ds.components.form, ds.components.drag, ds.components.combobox, ds.components.tooltip, ds.components.page, ds.components.shell, ds.components.tabs, ds.components.steps, ds.components.toast, ds.components.savebar, ds.components.calendar, ds.components.container, ds.components.loadmore, ds.components.popover, ds.components.splitpane, ds.components.upload, ds.components.datefield, ds.components.kveditor, ds.components.listdetail, ds.components.sort, ds.components.text, ds.components.toggletip, ds.components.dashpanel, ds.components.filterbar, ds.components.picker, ds.components.spacing, ds.components.wizard, ds.components.facets, ds.components.sticky, ds.components.timepicker, ds.components.unsaved, ds.components.datepicker, ds.components.print, ds.components.query, ds.components.views, ds.components.datagrid, ds.components.daterange, ds.components.timerange, ds.components.duration, ds.components.link, ds.components.toggle, ds.components.button-group, ds.components.menubutton, ds.components.splitbutton, ds.components.copy, ds.components.prioritybar, ds.components.listbox, ds.components.number, ds.components.tree, ds.components.choices, ds.components.jsonview, ds.components.password, ds.components.auditlog, ds.components.secret, ds.components.taginput, ds.components.otp, ds.components.selectpanel, ds.components.inlineedit, ds.components.orderedchoice, ds.components.transfer, ds.components.typeconfirm, ds.components.errorsummary, ds.components.search, ds.components.meter, ds.components.bar-list, ds.components.category-bar, ds.components.lozenge, ds.components.result, ds.components.formatted, ds.components.kbd, ds.components.truncate, ds.components.expandable, ds.components.hits, ds.components.tracker, ds.components.labelgroup, ds.components.image, ds.components.composer, ds.components.message, ds.components.transcript, ds.components.suggestions, ds.components.feedback, ds.components.ailabel, ds.components.tearsheet, ds.components.loadingoverlay, ds.components.lightbox, ds.components.bottomsheet, ds.components.highlight, ds.components.markdown, ds.components.code, ds.components.toc, ds.components.backtop, ds.components.diff, ds.components.logview, ds.components.object, ds.components.terminal, ds.components.shimmer, ds.components.wheel, ds.components.thinking, ds.components.toolcall, ds.components.reasoning, ds.components.cite, ds.components.plan, ds.components.question, ds.components.usage, ds.components.presence, ds.components.avatar, ds.components.persona, ds.components.media, ds.components.levelmeter, ds.components.command, ds.components.shortcuts, ds.components.banner, ds.components.notifications, ds.components.ripple;",
   "core": {
@@ -418,7 +418,7 @@
         "text-wrap"
       ],
       "bytes": 8806,
-      "gzip": 2244
+      "gzip": 2245
     },
     "scroller": {
       "css": "css/components/scroller.css",
@@ -458,7 +458,7 @@
         "scrollbar-gutter"
       ],
       "bytes": 7356,
-      "gzip": 1788
+      "gzip": 1789
     },
     "spinner": {
       "css": "css/components/spinner.css",
@@ -490,7 +490,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 6673,
-      "gzip": 1680
+      "gzip": 1681
     },
     "loader": {
       "css": "css/components/loader.css",
@@ -517,7 +517,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 4353,
-      "gzip": 1238
+      "gzip": 1239
     },
     "indicator": {
       "css": "css/components/indicator.css",
@@ -544,7 +544,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 6348,
-      "gzip": 1413
+      "gzip": 1414
     },
     "button": {
       "css": "css/components/button.css",
@@ -619,7 +619,7 @@
       "ripple": true,
       "progressive": [],
       "bytes": 18114,
-      "gzip": 3243
+      "gzip": 3244
     },
     "loading": {
       "css": "css/components/loading.css",
@@ -706,7 +706,7 @@
       "ripple": true,
       "progressive": [],
       "bytes": 6847,
-      "gzip": 1812
+      "gzip": 1813
     },
     "timeline": {
       "css": "css/components/timeline.css",
@@ -782,7 +782,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 5344,
-      "gzip": 1483
+      "gzip": 1482
     },
     "status": {
       "css": "css/components/status.css",
@@ -813,7 +813,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 6310,
-      "gzip": 1662
+      "gzip": 1663
     },
     "alert": {
       "css": "css/components/alert.css",
@@ -902,7 +902,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 17464,
-      "gzip": 3070
+      "gzip": 3069
     },
     "slider": {
       "css": "css/components/slider.css",
@@ -1366,7 +1366,7 @@
         "hyphenate-limit-chars"
       ],
       "bytes": 14044,
-      "gzip": 2779
+      "gzip": 2780
     },
     "empty": {
       "css": "css/components/empty.css",
@@ -1839,7 +1839,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 6177,
-      "gzip": 1597
+      "gzip": 1596
     },
     "form": {
       "css": "css/components/form.css",
@@ -2024,7 +2024,7 @@
       "ripple": true,
       "progressive": [],
       "bytes": 11898,
-      "gzip": 2707
+      "gzip": 2708
     },
     "combobox": {
       "css": "css/components/combobox.css",
@@ -2633,7 +2633,7 @@
       "ripple": true,
       "progressive": [],
       "bytes": 9415,
-      "gzip": 2327
+      "gzip": 2328
     },
     "container": {
       "css": "css/components/container.css",
@@ -2946,7 +2946,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 5733,
-      "gzip": 1599
+      "gzip": 1600
     },
     "listdetail": {
       "css": "css/components/listdetail.css",
@@ -3145,7 +3145,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 6299,
-      "gzip": 1674
+      "gzip": 1675
     },
     "filterbar": {
       "css": "css/components/filterbar.css",
@@ -3969,7 +3969,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 3943,
-      "gzip": 1072
+      "gzip": 1073
     },
     "splitbutton": {
       "css": "css/components/splitbutton.css",
@@ -4480,7 +4480,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 6515,
-      "gzip": 1741
+      "gzip": 1740
     },
     "otp": {
       "css": "css/components/otp.css",
@@ -4644,7 +4644,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 5446,
-      "gzip": 1490
+      "gzip": 1491
     },
     "transfer": {
       "css": "css/components/transfer.css",
@@ -4740,7 +4740,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 4600,
-      "gzip": 1204
+      "gzip": 1205
     },
     "search": {
       "css": "css/components/search.css",
@@ -4777,7 +4777,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 4882,
-      "gzip": 1369
+      "gzip": 1370
     },
     "meter": {
       "css": "css/components/meter.css",
@@ -5062,7 +5062,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 3975,
-      "gzip": 1063
+      "gzip": 1064
     },
     "hits": {
       "css": "css/components/hits.css",
@@ -5585,6 +5585,7 @@
         "data-ds-lightbox",
         "data-failed",
         "data-loading",
+        "data-tall",
         "data-zoomed"
       ],
       "keyframes": [],
@@ -5602,8 +5603,8 @@
       "progressive": [
         "scrollbar-color"
       ],
-      "bytes": 9748,
-      "gzip": 2492
+      "bytes": 9857,
+      "gzip": 2512
     },
     "bottomsheet": {
       "css": "css/components/bottomsheet.css",
@@ -5681,7 +5682,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 4269,
-      "gzip": 1050
+      "gzip": 1049
     },
     "markdown": {
       "css": "css/components/markdown.css",
@@ -6365,7 +6366,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 5428,
-      "gzip": 1460
+      "gzip": 1459
     },
     "question": {
       "css": "css/components/question.css",
@@ -6539,7 +6540,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 9159,
-      "gzip": 2276
+      "gzip": 2277
     },
     "persona": {
       "css": "css/components/persona.css",
@@ -6618,7 +6619,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 9144,
-      "gzip": 2285
+      "gzip": 2286
     },
     "levelmeter": {
       "css": "css/components/levelmeter.css",
@@ -6769,7 +6770,7 @@
       "ripple": false,
       "progressive": [],
       "bytes": 5658,
-      "gzip": 1440
+      "gzip": 1439
     },
     "banner": {
       "css": "css/components/banner.css",
@@ -8340,8 +8341,10 @@
       ],
       "exports": [
         "MAX_ZOOM",
+        "TALL_RATIO",
         "nextZoom",
         "detailZoom",
+        "isTall",
         "clampPan",
         "create",
         "open",

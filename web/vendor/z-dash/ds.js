@@ -1,4 +1,4 @@
-/*! Z-Dash 3.1.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
+/*! Z-Dash 3.2.0 | MIT License | https://github.com/saschazesiger/Z-Dash */
 /*
  * Classic-script build of src/js (no modules needed): window.DS.core,
  * DS.motion, DS.indicator, DS.dom, DS.ripple, DS.icons, DS.position,
@@ -37,7 +37,7 @@
  */
 (function (root) {
   'use strict';
-  var version = '3.1.0';
+  var version = '3.2.0';
   // DashboardStyle: the deprecated name from before the rename (3.0), the same object.
   var registry = root.ZDash || root.DashboardStyle || {};
   root.ZDash = registry;
@@ -32126,7 +32126,7 @@
     });
   });
 
-  add('lightbox', ['MAX_ZOOM', 'nextZoom', 'detailZoom', 'clampPan', 'create', 'open', 'close', 'show'], function () {
+  add('lightbox', ['MAX_ZOOM', 'TALL_RATIO', 'nextZoom', 'detailZoom', 'isTall', 'clampPan', 'create', 'open', 'close', 'show'], function () {
     /**
      * The lightbox (DS.lightbox): the images of a gallery one at a time over the
      * whole window, with thumbnails, keys, zoom and pan, a caption and swipe on
@@ -32148,8 +32148,9 @@
      * item as the opener.
      *
      * Keys in the viewer: ArrowLeft and ArrowRight the previous and the next
-     * image (wrapping; zoomed, they pan), ArrowUp and ArrowDown pan a zoomed
-     * image, Home and End the first and the last, + (or =) and - zoom, 0 back to
+     * image (wrapping; zoomed, they pan), ArrowUp and ArrowDown (and PageUp and
+     * PageDown) pan a zoomed or a tall image, Home and End the first and the
+     * last, + (or =) and - zoom, 0 back to
      * the fit, Escape first back to the fit, then closed (DS.overlay). In the
      * row of thumbnails the arrow keys move between them (DS.a11y.roving) and
      * show the image at once. A change says "Image 3 of 6" and the caption
@@ -32163,6 +32164,12 @@
      * trackpad, Shift for sideways); unzoomed, a horizontal swipe of a finger
      * follows it and goes to the next or the previous image past a fifth of the
      * frame (else it glides back).
+     *
+     * A tall image (isTall(): at least TALL_RATIO times as high as wide, a
+     * full-page screenshot) would be a narrow strip fitted whole, so it fits
+     * the frame's width (data-tall on the frame), opens at its top and pans up
+     * and down at the fit as a zoomed image does: a drag, the wheel, the keys;
+     * a finger's upright drag pans and a sideways one still swipes.
      *
      * Zoom: 1 (the fit), 2 and 4 by the buttons and keys, up to MAX_ZOOM by a
      * pinch. The pan is clamped so the image always covers the frame
@@ -32184,6 +32191,9 @@
 
     /** The largest zoom (a pinch); the buttons and keys step 1, 2, 4. */
     const MAX_ZOOM = 4;
+
+    /** How many times as high as wide an image is tall (a full-page screenshot): it fits the width and pans. */
+    const TALL_RATIO = 2;
 
     /** The items of a gallery. */
     const ITEMS = '.ds-lightbox__item, [data-ds-lightbox-item]';
@@ -32212,6 +32222,19 @@
     function detailZoom(natural, fitted) {
       const own = natural > 0 && fitted > 0 ? natural / fitted : 0;
       return Math.min(MAX_ZOOM, Math.max(2, Math.round(own * 100) / 100));
+    }
+
+    /**
+     * Whether an image of `width` by `height` (its own pixels) is tall: at least
+     * TALL_RATIO times as high as wide. Fitted whole it would be a strip too
+     * narrow to read, so it fits the frame's width instead, starts at its top
+     * and pans up and down without a zoom.
+     * @param {number} width
+     * @param {number} height
+     * @returns {boolean}
+     */
+    function isTall(width, height) {
+      return width > 0 && height >= width * TALL_RATIO;
     }
 
     /**
@@ -32379,9 +32402,15 @@
       /** The frame's size and the image's fitted size. */
       const measure = () => {
         const { frame, image } = state.viewer;
-        const box = frame.getBoundingClientRect();
-        // The fitted size: the layout box, which the zoom's scale does not change.
-        return { frame: { width: box.width, height: box.height }, size: { width: image.offsetWidth, height: image.offsetHeight } };
+        // Layout boxes, which neither the zoom's scale nor the dialog's entrance scale changes.
+        return { frame: { width: frame.offsetWidth, height: frame.offsetHeight }, size: { width: image.offsetWidth, height: image.offsetHeight } };
+      };
+
+      /** Whether the image reaches past the frame at its zoom: a zoomed one, or a tall one at the fit. */
+      const canPan = () => {
+        const { frame, size } = measure();
+        const far = clampPan(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, size, frame, state.zoom);
+        return far.x !== 0 || far.y !== 0;
       };
 
       const paintTransform = () => {
@@ -32417,6 +32446,26 @@
       const toggleZoom = (point) => {
         const { image } = state.viewer;
         zoomTo(state.zoom > 1 ? 1 : detailZoom(image.naturalWidth, image.offsetWidth), point);
+      };
+
+      /**
+       * Fits a loaded image: a tall one (isTall()) takes the frame's width and,
+       * at the fit, starts at its top, placed there at once rather than gliding.
+       */
+      const fit = () => {
+        const v = state.viewer;
+        if (!v || !v.image.complete) return;
+        const tall = isTall(v.image.naturalWidth, v.image.naturalHeight);
+        v.frame.toggleAttribute('data-tall', tall);
+        if (!tall || state.zoom !== 1) return;
+        const { frame, size } = measure();
+        const top = clampPan(0, Number.MAX_SAFE_INTEGER, size, frame, 1);
+        state.x = top.x;
+        state.y = top.y;
+        v.image.style.transition = 'none';
+        paintTransform();
+        void v.image.offsetWidth;
+        v.image.style.transition = '';
       };
 
       const panBy = (dx, dy) => {
@@ -32471,7 +32520,10 @@
         v.frame.removeAttribute('data-failed');
         v.frame.setAttribute('data-loading', '');
         v.image.alt = image.alt ?? '';
-        const done = () => v.frame.removeAttribute('data-loading');
+        const done = () => {
+          v.frame.removeAttribute('data-loading');
+          fit();
+        };
         v.image.onload = done;
         v.image.onerror = () => {
           done();
@@ -32516,13 +32568,18 @@
         v.dialog.addEventListener('keydown', (/** @type {KeyboardEvent} */ event) => {
           if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
           if (/** @type {Element} */ (event.target)?.closest?.('.ds-lightbox__thumbs')) return;
-          const step = Math.round(v.frame.getBoundingClientRect().width / 10);
+          const step = Math.round(v.frame.offsetWidth / 10);
+          const page = Math.round(v.frame.offsetHeight * 0.9);
           const zoomed = state.zoom > 1;
+          // A tall image pans up and down at the fit too; sideways the arrows still go to the next image.
+          const pans = zoomed || canPan();
           const keys = {
             ArrowLeft: () => (zoomed ? panBy(step, 0) : show(state.index - 1)),
             ArrowRight: () => (zoomed ? panBy(-step, 0) : show(state.index + 1)),
-            ArrowUp: () => zoomed && panBy(0, step),
-            ArrowDown: () => zoomed && panBy(0, -step),
+            ArrowUp: () => panBy(0, step),
+            ArrowDown: () => panBy(0, -step),
+            PageUp: () => panBy(0, page),
+            PageDown: () => panBy(0, -page),
             Home: () => show(0),
             End: () => show(state.images.length - 1),
             '+': () => zoomTo(nextZoom(state.zoom, 1)),
@@ -32535,7 +32592,7 @@
           if (!run) return;
           // Escape closes (DS.overlay) unless it first takes the zoom back.
           if (event.key === 'Escape' && !zoomed) return;
-          if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && !zoomed) return;
+          if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].includes(event.key) && !pans) return;
           // A button keeps its own Space and Enter; the arrows are the viewer's.
           event.preventDefault();
           run();
@@ -32559,8 +32616,9 @@
             zoomTo(state.zoom * Math.exp(-event.deltaY / 200), centre(event));
             return;
           }
-          // Zoomed, the wheel (two fingers on a trackpad) pans the image as it would scroll a page; Shift turns it sideways.
-          if (state.zoom <= 1) return;
+          // Zoomed (or tall), the wheel (two fingers on a trackpad) pans the image as it would scroll a page; Shift turns
+          // it sideways.
+          if (state.zoom <= 1 && !canPan()) return;
           event.preventDefault();
           const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? frame.clientHeight : 1;
           let dx = event.deltaX * unit;
@@ -32585,7 +32643,8 @@
             state.gesture = { kind: 'pinch', distance: Math.hypot(a.x - b.x, a.y - b.y) || 1, zoom: state.zoom };
             return;
           }
-          state.gesture = { kind: state.zoom > 1 ? 'pan' : 'swipe', start: { x: event.clientX, y: event.clientY }, from: { x: state.x, y: state.y }, touch: event.pointerType !== 'mouse', moved: false };
+          // Unzoomed, a tall image (pans) still pans: a mouse's drag and a finger's mostly upright one (move()).
+          state.gesture = { kind: state.zoom > 1 ? 'pan' : 'swipe', pans: state.zoom <= 1 && canPan(), start: { x: event.clientX, y: event.clientY }, from: { x: state.x, y: state.y }, touch: event.pointerType !== 'mouse', moved: false };
         }, { signal });
         frame.addEventListener('pointermove', (/** @type {PointerEvent} */ event) => {
           if (!state.pointers.has(event.pointerId) || !state.gesture) return;
@@ -32601,6 +32660,8 @@
           const dx = event.clientX - gesture.start.x;
           const dy = event.clientY - gesture.start.y;
           if (!gesture.moved && Math.hypot(dx, dy) < 4) return;
+          // The first move decides on a tall image at the fit: a finger sideways swipes, anything else pans.
+          if (!gesture.moved && gesture.kind === 'swipe' && gesture.pans && (!gesture.touch || Math.abs(dy) >= Math.abs(dx))) gesture.kind = 'pan';
           gesture.moved = true;
           frame.setAttribute('data-dragging', '');
           if (gesture.kind === 'pan') {
@@ -32622,7 +32683,7 @@
             // A pinch that lost a finger: the finger left pans (zoomed) or swipes from where it is.
             if (gesture?.kind === 'pinch' && state.pointers.size === 1) {
               const [rest] = [...state.pointers.values()];
-              state.gesture = { kind: state.zoom > 1 ? 'pan' : 'swipe', start: { x: rest.x, y: rest.y }, from: { x: state.x, y: state.y }, touch: true, moved: true };
+              state.gesture = { kind: state.zoom > 1 || canPan() ? 'pan' : 'swipe', start: { x: rest.x, y: rest.y }, from: { x: state.x, y: state.y }, touch: true, moved: true };
             } else if (gesture?.kind === 'pinch' && state.pointers.size === 2) {
               // Two of three fingers left: the pinch goes on from these two.
               const [a, b] = [...state.pointers.values()];
@@ -32656,6 +32717,11 @@
         };
         frame.addEventListener('pointerup', end, { signal });
         frame.addEventListener('pointercancel', end, { signal });
+
+        // A new size of the window (a phone turned) keeps the pan within the image.
+        v.dialog.ownerDocument.defaultView?.addEventListener('resize', () => {
+          if (isOpen()) panBy(0, 0);
+        }, { signal });
 
         v.dialog.addEventListener('ds:close', (event) => {
           if (event.target !== v.dialog) return;
@@ -32693,6 +32759,8 @@
           carryOptions(homeOf(), v.dialog);
           show(index, false);
           const opened = openOverlay(v.dialog, { opener });
+          // An image loaded before the viewer was laid out is fitted once it is.
+          fit();
           announce(`${t('imageOf', { index: state.index + 1, total: state.images.length })}. ${state.images[state.index].caption || state.images[state.index].alt || ''}`.trim());
           emit(gallery, 'open', { index: state.index });
           return opened;
@@ -32774,8 +32842,10 @@
 
     return Object.freeze({
       MAX_ZOOM: MAX_ZOOM,
+      TALL_RATIO: TALL_RATIO,
       nextZoom: nextZoom,
       detailZoom: detailZoom,
+      isTall: isTall,
       clampPan: clampPan,
       create: create,
       open: open,
