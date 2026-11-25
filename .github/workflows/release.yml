@@ -8,6 +8,9 @@ on:
   push:
     branches: [main]
     tags: ['v*.*.*']
+  # The nightly update of the Z-Dash server starts it: its push, made with
+  # GITHUB_TOKEN, starts no workflow by itself.
+  workflow_dispatch:
 
 permissions:
   contents: write

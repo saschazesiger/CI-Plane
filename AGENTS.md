@@ -15,10 +15,11 @@ file. Read [docs/how-it-works.md](docs/how-it-works.md) for the design before ch
 | `internal/sim/` | `Forge` and `Fleet` in memory: tests and demo mode |
 | `internal/node/` | workers over SSH: implements `engine.Fleet` and `api.Workers`; `docker.go` holds the start script of a runner, also used on pools |
 | `internal/github/` | GitHub Apps: implements `engine.Forge` and `api.GitHub`, webhooks; `relay.go` starts the runners of pools through the relay workflow and hands them out at `/webhook/relay` |
-| `internal/cloudflare/` | tunnel and Access: implements `api.Cloudflare` |
-| `internal/api/` | HTTP API, login, live updates; `services.go` holds the contracts |
+| `internal/api/` | CI-Plane's HTTP API, registered on the Z-Dash server; `services.go` holds the contracts |
 | `internal/demo/` | demo mode on the simulator |
-| `web/` | the interface; `web/vendor/z-dash/` is a verified copy of Z-Dash 3, never edit it |
+| `web/` | the interface, on the Z-Dash shell |
+
+CI-Plane runs on the **Z-Dash server** (`github.com/saschazesiger/Z-Dash/server`, its `docs/server.md`): the listeners, the sign-in (the admin password locally, Cloudflare Access through the tunnel), the CSRF and Host guards, the live updates, the Cloudflare tunnel with its settings, and Z-Dash itself at `/z-dash/` come from there. A fix to any of them goes to Z-Dash, then `go get github.com/saschazesiger/Z-Dash/server@main` here (the nightly *Update Z-Dash server* does that). `cmd/ci-plane/tunnel.go` moves a tunnel of an earlier CI-Plane to the server's format once.
 
 ## Rules
 
@@ -31,7 +32,8 @@ file. Read [docs/how-it-works.md](docs/how-it-works.md) for the design before ch
 - **Interface: Z-Dash only** (formerly Dashboard-Style). Use its components (`ds-*`), option classes (`ds-tone-*`,
   `ds-sm`, `ds-density-*`) and `DS.*` helpers as documented in <https://github.com/saschazesiger/Z-Dash>
   (`docs/components.md`, `docs/options.md`, `docs/patterns.md`, `docs/rules.md`, `example/`). The page loads the
-  minified build (`ds.min.css`, `ds.min.js`); `web/web.go` embeds only those files of the copy. No framework, no bundler, no other CSS library. Project CSS is a theme (tokens) plus layout glue.
+  minified build (`/z-dash/ds.min.css`, `/z-dash/ds.min.js`) and the shell (`/z-dash/server/`) from the Z-Dash
+  server; `web/web.go` embeds only CI-Plane's own files. No framework, no bundler, no other CSS library. Project CSS is a theme (tokens) plus layout glue.
 - **Few dependencies.** Standard library, `golang.org/x/crypto`, `modernc.org/sqlite`. Anything else needs a reason.
 - **Secrets** go through `internal/secret` and never into logs, events or command lines.
 - Text and documentation are English. Comments say why, not what.
@@ -46,7 +48,8 @@ file. Read [docs/how-it-works.md](docs/how-it-works.md) for the design before ch
 go build ./... && go vet ./...
 go test ./...                      # the engine tests take about half a minute
 go test -race ./internal/engine/   # slower, run before changing the engine
-sh web/vendor/z-dash/tools/verify.sh web/vendor/z-dash
-node web/vendor/z-dash/tools/check-project.mjs --config web/ds-check.json   # needs Node 22
+ZD="$(go list -m -f '{{.Dir}}' github.com/saschazesiger/Z-Dash/server)/zdash/dist"
+rm -rf web/.z-dash && cp -R "$ZD" web/.z-dash && chmod -R u+w web/.z-dash   # the module's copy of Z-Dash, for its tools
+node web/.z-dash/tools/check-project.mjs --config web/ds-check.json   # needs Node 22
 CI_PLANE_DEMO=1 go run ./cmd/ci-plane   # the interface on simulated workers, http://localhost:8080
 ```

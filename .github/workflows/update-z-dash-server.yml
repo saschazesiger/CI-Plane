@@ -1,0 +1,96 @@
+# Keeps an app on the latest main of the Z-Dash server (and with it Z-Dash).
+#
+# From Z-Dash's server/templates/ (the Go module
+# github.com/saschazesiger/Z-Dash/server, its docs/server.md).
+# Once a day it asks for main of the module: unchanged, the run ends there;
+# changed, it updates go.mod and go.sum, runs the app's checks and tests,
+# commits to the default branch and starts the build.
+#
+# Why a build has to be started explicitly: a push made with GITHUB_TOKEN does
+# not trigger other workflows (GitHub prevents loops), but workflow_dispatch
+# does.
+
+name: Update Z-Dash server
+
+on:
+  schedule:
+    # Daily at 02:30 UTC, off the full hour on purpose.
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # commit go.mod and go.sum
+  actions: write    # start BUILD_WORKFLOW
+
+concurrency:
+  group: update-z-dash-server
+  cancel-in-progress: false
+
+env:
+  MODULE: github.com/saschazesiger/Z-Dash/server
+  # Optional: the project check (docs/server.md, "Checking a project"), for
+  # example
+  #   rm -rf web/.z-dash && cp -R "$ZD" web/.z-dash && chmod -R u+w web/.z-dash &&
+  #   node web/.z-dash/tools/check-project.mjs --config web/ds-check.json
+  # where $ZD is the module's copy of Z-Dash. Empty to skip.
+  CHECK: >-
+    rm -rf web/.z-dash && cp -R "$ZD" web/.z-dash && chmod -R u+w web/.z-dash &&
+    sh web/.z-dash/tools/verify.sh web/.z-dash &&
+    node web/.z-dash/tools/check-project.mjs --config web/ds-check.json &&
+    node web/.z-dash/tools/check-theme.mjs web/theme.css --with web/.z-dash/themes/dark.css
+  # File name of the workflow that builds and deploys (it needs a
+  # workflow_dispatch trigger), for example release.yml; empty to skip.
+  BUILD_WORKFLOW: release.yml
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v5
+        if: env.CHECK != ''
+        with:
+          node-version: 22
+
+      - name: Update the module
+        id: update
+        run: |
+          before=$(go list -m -f '{{.Version}}' "$MODULE")
+          go get "$MODULE@main"
+          go mod tidy
+          after=$(go list -m -f '{{.Version}}' "$MODULE")
+          echo "before $before, after $after"
+          if git diff --quiet -- go.mod go.sum; then
+            echo "The Z-Dash server is up to date; nothing to build." >> "$GITHUB_STEP_SUMMARY"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "version=$after" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check and test
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          ZD="$(go list -m -f '{{.Dir}}' "$MODULE")/zdash/dist"
+          export ZD
+          go vet ./...
+          go test ./...
+          if [ -n "$CHECK" ]; then sh -c "$CHECK"; fi
+
+      - name: Commit
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add go.mod go.sum
+          git commit -m "Update the Z-Dash server to ${{ steps.update.outputs.version }}"
+          git push
+
+      - name: Start the build
+        if: steps.update.outputs.changed == 'true' && env.BUILD_WORKFLOW != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run "$BUILD_WORKFLOW" --ref "${GITHUB_REF_NAME}"

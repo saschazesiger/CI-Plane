@@ -15,11 +15,9 @@ and GIFs, and how the vendored design system is updated. The rules for changes a
 | `internal/sim/` | `Forge` and `Fleet` in memory: tests and demo mode |
 | `internal/node/` | workers over SSH: the setup and remove commands, Docker scripts, live values, janitor |
 | `internal/github/` | GitHub Apps: manifest flow, tokens, just-in-time runners, webhooks, redelivery |
-| `internal/cloudflare/` | tunnel and Access setup, the `cloudflared` supervisor, Access token checks |
 | `internal/api/` | HTTP API, login, live updates (server-sent events); `services.go` holds the contracts |
 | `internal/demo/` | demo mode on the simulator, with stand-ins for GitHub, Cloudflare and workers |
 | `web/` | the interface: `index.html`, `app/*.js`, `theme.css`, `app.css`, embedded into the binary |
-| `web/vendor/z-dash/` | a verified copy of Z-Dash; never edit it |
 | `scripts/screenshots.mjs` | the screenshots and GIFs of the documentation |
 | `docs/` | this documentation; `docs/images/` is generated |
 
@@ -49,7 +47,6 @@ go test -race ./internal/engine/      # slower; run it before changing the engin
 |---|---|
 | `internal/engine` | scheduling, tiers, limits, every failure in [Reliability](reliability.md), restarts mid-step, 60-job runs; all on the simulator |
 | `internal/github` | manifest flow, tokens, runners, webhooks and signatures, redelivery, against a fake GitHub API |
-| `internal/cloudflare` | setup, repair, removal, the supervisor and Access tokens, against a fake Cloudflare API and a fake `cloudflared` |
 | `internal/node` | SSH against an in-process SSH server, parsing, the scripts |
 | `internal/api`, `store`, `model`, `secret`, `demo` | the HTTP API and login, storage, label matching, encryption, the demo |
 
@@ -70,9 +67,10 @@ The interface has no build step. Before a change to `web/`, check it against Z-D
 the vendored copy is untouched (needs Node for the first command):
 
 ```sh
-node web/vendor/z-dash/tools/check-project.mjs --config web/ds-check.json
-node web/vendor/z-dash/tools/check-theme.mjs web/theme.css --with web/vendor/z-dash/themes/dark.css
-sh web/vendor/z-dash/tools/verify.sh web/vendor/z-dash
+ZD="$(go list -m -f '{{.Dir}}' github.com/saschazesiger/Z-Dash/server)/zdash/dist"
+rm -rf web/.z-dash && cp -R "$ZD" web/.z-dash && chmod -R u+w web/.z-dash
+node web/.z-dash/tools/check-project.mjs --config web/ds-check.json
+node web/.z-dash/tools/check-theme.mjs web/theme.css --with web/.z-dash/themes/dark.css
 ```
 
 CI (`.github/workflows/ci.yml`) runs the verification, `go vet`, `go test -race ./...` and a Docker build. The
@@ -123,22 +121,21 @@ The GIFs are made from screenshots taken in a loop rather than a screen video: l
 give much smaller, sharper GIFs. Waits play six times faster. Keep each GIF under about 3 MB and look at every picture
 before you commit it. `KEEP_TMP=1` keeps the frames for inspection.
 
-## 🎨 The vendored design system
+## 🎨 The Z-Dash server and design system
 
-The interface uses only [Z-Dash](https://github.com/saschazesiger/Z-Dash) 3 (called Dashboard-Style until 2.x),
-vendored in `web/vendor/z-dash/` with a `SHA256SUMS` file and the commit in `VERSION`. Never edit the copy; the
-project's look lives in `web/theme.css` (tokens) and `web/app.css` (layout glue). The page loads the minified build
-(`ds.min.css`, `ds.min.js`), and `web/web.go` embeds only the files the page loads; a new file of the copy that the
-page needs goes into its `//go:embed` lines too. `web/ds-check.json` says the project is written for major version 3.
+CI-Plane runs on the [Z-Dash](https://github.com/saschazesiger/Z-Dash) server, the Go module
+`github.com/saschazesiger/Z-Dash/server` (its `docs/server.md`). It brings the two listeners, the sign-in (the admin
+password on the local address, Cloudflare Access through the tunnel), the guards, the live updates, the Cloudflare
+tunnel with its settings page, and Z-Dash 3 itself, served at `/z-dash/`; the shell at `/z-dash/server/` draws the
+sign-in, the account and the tunnel and password settings. CI-Plane registers its own API on it
+(`internal/api`), keeps its own database (the server keeps its password, sessions and tunnel in CI-Plane's `kv`
+table, `store.ServerKV`), and its look lives in `web/theme.css` (tokens) and `web/app.css` (layout glue).
+`web/ds-check.json` says the project is written for major version 3.
 
-The workflow `.github/workflows/update-z-dash.yml` checks Z-Dash's `main` once a day, vendors a new commit, verifies
-it, runs the project check and `go test ./...` and commits the update. To update by hand:
+The workflow `.github/workflows/update-z-dash-server.yml` takes the module's `main` once a day, runs the checks
+and `go test ./...`, commits `go.mod` and `go.sum` and starts the release. By hand:
 
 ```sh
-commit=$(curl -fsSL -H 'Accept: application/vnd.github.sha' https://api.github.com/repos/saschazesiger/Z-Dash/commits/main)
-curl -fsSL "https://raw.githubusercontent.com/saschazesiger/Z-Dash/$commit/scripts/vendor.sh" -o /tmp/vendor.sh
-sh /tmp/vendor.sh "$commit" web/vendor/z-dash
-sh web/vendor/z-dash/tools/verify.sh web/vendor/z-dash
-node web/vendor/z-dash/tools/check-project.mjs --config web/ds-check.json
+go get github.com/saschazesiger/Z-Dash/server@main && go mod tidy
 go test ./...
 ```

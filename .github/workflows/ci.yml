@@ -19,12 +19,16 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Vendored Z-Dash is untouched
-        run: sh web/vendor/z-dash/tools/verify.sh web/vendor/z-dash
+      # Z-Dash comes with the Z-Dash server module (go.mod); its copy carries the tools.
+      - name: The module's copy of Z-Dash
+        run: |
+          ZD="$(go list -m -f '{{.Dir}}' github.com/saschazesiger/Z-Dash/server)/zdash/dist"
+          rm -rf web/.z-dash && cp -R "$ZD" web/.z-dash && chmod -R u+w web/.z-dash
+          sh web/.z-dash/tools/verify.sh web/.z-dash
       - name: Interface follows the Z-Dash project rules
-        run: node web/vendor/z-dash/tools/check-project.mjs --config web/ds-check.json
+        run: node web/.z-dash/tools/check-project.mjs --config web/ds-check.json
       - name: Theme keeps its contrast, light and dark
-        run: node web/vendor/z-dash/tools/check-theme.mjs web/theme.css --with web/vendor/z-dash/themes/dark.css
+        run: node web/.z-dash/tools/check-theme.mjs web/theme.css --with web/.z-dash/themes/dark.css
       - run: go vet ./...
       - run: go test -race ./...
       - name: Build image

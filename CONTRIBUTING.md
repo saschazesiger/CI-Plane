@@ -8,8 +8,9 @@ Thanks for helping. Issues and pull requests are welcome; for larger changes, op
 go build ./... && go vet ./...
 go test ./...                                  # the engine tests take about half a minute
 go test -race ./internal/engine/               # before changing the engine
-sh web/vendor/z-dash/tools/verify.sh web/vendor/z-dash
-node web/vendor/z-dash/tools/check-project.mjs --config web/ds-check.json   # needs Node 22
+ZD="$(go list -m -f '{{.Dir}}' github.com/saschazesiger/Z-Dash/server)/zdash/dist"
+rm -rf web/.z-dash && cp -R "$ZD" web/.z-dash && chmod -R u+w web/.z-dash
+node web/.z-dash/tools/check-project.mjs --config web/ds-check.json   # needs Node 22
 CI_PLANE_DEMO=1 go run ./cmd/ci-plane          # the interface on simulated workers, http://localhost:8080
 ```
 
@@ -27,7 +28,7 @@ These come from [AGENTS.md](AGENTS.md), which has the details.
   GitHub, only runners named `ci-plane-*`.
 - **Errors are for the person in front of the interface.** Say what happened and what to do, in plain English.
 - **Interface: Z-Dash only.** Its components and helpers, no framework, no bundler, no other CSS library.
-  Never edit `web/vendor/z-dash/`.
+  Z-Dash and the server foundation come from the Z-Dash module; fix them there.
 - **Few dependencies.** Standard library, `golang.org/x/crypto`, `modernc.org/sqlite`. Anything else needs a reason.
 - **Secrets** go through `internal/secret` and never into logs, events or command lines.
 - Text and documentation are English. Comments say why, not what.

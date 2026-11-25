@@ -4,6 +4,14 @@ All notable changes to CI-Plane. Versions follow [Semantic Versioning](https://s
 
 ## Unreleased
 
+- **On the Z-Dash server.** The listeners, the sign-in, the guards, the live updates, the Cloudflare tunnel with its
+  settings and Z-Dash itself now come from the Go module `github.com/saschazesiger/Z-Dash/server`; CI-Plane keeps its
+  API, its database and its interface. Nothing to do on an update: the admin password and the sessions stay, and a
+  tunnel set up before moves to the server's format at the first start, without a new setup. The tunnel's settings
+  now show each step of a setup, offer to replace a DNS record or an Access application of the same name, repair
+  with the stored token, and list the log; the Cloudflare login is the one-time PIN by e-mail.
+  `CI_PLANE_TUNNEL_LISTEN` must be a loopback address (it is by default). The nightly workflow is now *Update Z-Dash
+  server* (`go get …@main`) and starts the release.
 - **Pools: runners of other providers** next to your workers. A pool runs runners on GitHub-hosted machines, on
   Blacksmith or on any other provider of GitHub Actions runners, through a small workflow in a private repository
   of yours. It has a tier like a worker, so it can be the overflow when your servers are full, or go first to use
