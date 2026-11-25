@@ -8,6 +8,7 @@ Thanks for helping. Issues and pull requests are welcome; for larger changes, op
 go build ./... && go vet ./...
 go test ./...                                  # the engine tests take about half a minute
 go test -race ./internal/engine/               # before changing the engine
+go mod download github.com/saschazesiger/Z-Dash/server
 ZD="$(go list -m -f '{{.Dir}}' github.com/saschazesiger/Z-Dash/server)/zdash/dist"
 rm -rf web/.z-dash && cp -R "$ZD" web/.z-dash && chmod -R u+w web/.z-dash
 node web/.z-dash/tools/check-project.mjs --config web/ds-check.json   # needs Node 22

@@ -48,6 +48,7 @@ CI-Plane runs on the **Z-Dash server** (`github.com/saschazesiger/Z-Dash/server`
 go build ./... && go vet ./...
 go test ./...                      # the engine tests take about half a minute
 go test -race ./internal/engine/   # slower, run before changing the engine
+go mod download github.com/saschazesiger/Z-Dash/server
 ZD="$(go list -m -f '{{.Dir}}' github.com/saschazesiger/Z-Dash/server)/zdash/dist"
 rm -rf web/.z-dash && cp -R "$ZD" web/.z-dash && chmod -R u+w web/.z-dash   # the module's copy of Z-Dash, for its tools
 node web/.z-dash/tools/check-project.mjs --config web/ds-check.json   # needs Node 22

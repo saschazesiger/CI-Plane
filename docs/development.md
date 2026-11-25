@@ -67,6 +67,7 @@ The interface has no build step. Before a change to `web/`, check it against Z-D
 the vendored copy is untouched (needs Node for the first command):
 
 ```sh
+go mod download github.com/saschazesiger/Z-Dash/server
 ZD="$(go list -m -f '{{.Dir}}' github.com/saschazesiger/Z-Dash/server)/zdash/dist"
 rm -rf web/.z-dash && cp -R "$ZD" web/.z-dash && chmod -R u+w web/.z-dash
 node web/.z-dash/tools/check-project.mjs --config web/ds-check.json
