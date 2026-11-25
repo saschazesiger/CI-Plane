@@ -23,7 +23,7 @@ jobs:
       - name: The module's copy of Z-Dash
         run: |
           go mod download github.com/saschazesiger/Z-Dash/server
-ZD="$(go list -m -f '{{.Dir}}' github.com/saschazesiger/Z-Dash/server)/zdash/dist"
+          ZD="$(go list -m -f '{{.Dir}}' github.com/saschazesiger/Z-Dash/server)/zdash/dist"
           rm -rf web/.z-dash && cp -R "$ZD" web/.z-dash && chmod -R u+w web/.z-dash
           sh web/.z-dash/tools/verify.sh web/.z-dash
       - name: Interface follows the Z-Dash project rules
