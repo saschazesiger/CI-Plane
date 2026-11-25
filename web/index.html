@@ -7,40 +7,18 @@
 <meta name="description" content="CI-Plane starts ephemeral GitHub Actions runners on your own servers.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <!-- Fonts, the design system, the CI-Plane theme (tokens only), the shipped dark theme when the device asks for it,
-     then the layout glue. No inline scripts: the Content-Security-Policy forbids them. -->
-<link rel="stylesheet" href="vendor/z-dash/fonts/fonts.css">
-<link rel="stylesheet" href="vendor/z-dash/ds.min.css">
+     the shell's helper class (the tunnel settings), then the layout glue. Z-Dash and the shell come from the server
+     (/z-dash/). No inline scripts: the Content-Security-Policy forbids them. -->
+<link rel="stylesheet" href="/z-dash/fonts/fonts.css">
+<link rel="stylesheet" href="/z-dash/ds.min.css">
 <link rel="stylesheet" href="theme.css">
-<link rel="stylesheet" href="vendor/z-dash/themes/dark.css" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="/z-dash/themes/dark.css" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="/z-dash/server/shell.css">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<!-- While the session loads: shows only when that takes a moment. -->
-<div class="ds-boot" role="status" id="boot"><span class="ds-loader" aria-hidden="true"></span>Starting CI-Plane ...</div>
-
-<!-- Sign in. -->
-<div class="ds-auth" id="auth" hidden>
-  <div class="ds-auth__alert" id="auth-alert"></div>
-  <section class="ds-card ds-card--elevated ds-auth__card" aria-labelledby="auth-title">
-    <div class="cp-brand-row"><span class="cp-logo" aria-hidden="true"></span><span class="ds-brand__name">CI-Plane</span></div>
-    <h1 class="ds-card__title" id="auth-title" tabindex="-1">Sign in</h1>
-    <form class="ds-form" id="login-form" novalidate>
-      <div class="ds-field">
-        <label class="ds-field__label" for="login-password">Admin password</label>
-        <input class="ds-input" id="login-password" name="password" type="password" autocomplete="current-password" required aria-describedby="login-hint">
-        <small class="ds-field__hint" id="login-hint">Forgot it? Start CI-Plane with the environment variable CI_PLANE_ADMIN_PASSWORD set to a new password.</small>
-      </div>
-      <div class="ds-form-actions">
-        <button class="ds-btn ds-btn--filled" type="submit"><span class="ds-btn__faces">
-          <span class="ds-btn__face">Sign in</span>
-          <span class="ds-btn__face ds-btn__face--busy" aria-hidden="true"><span class="ds-spinner ds-spinner--ink ds-sm"></span>Signing in</span>
-          <span class="ds-btn__face ds-btn__face--done" aria-hidden="true" data-icon-done>Signed in</span>
-        </span></button>
-      </div>
-    </form>
-  </section>
-</div>
-
+<!-- The app, hidden until someone is signed in: the shell (/z-dash/server/shell.js) shows the sign-in card, or the
+     first-password card on the very first visit, meanwhile. -->
 <div class="ds-app ds-app--drawer" id="app" hidden>
   <a class="ds-skip" href="#main">Skip to content</a>
 
@@ -51,12 +29,8 @@
     <div class="ds-topbar__actions">
       <a class="ds-btn ds-btn--quiet ds-btn--icon" href="https://github.com/saschazesiger/CI-Plane#readme" target="_blank" rel="noopener" aria-label="Documentation (opens GitHub)" data-tip="Documentation" data-icon="helpCircle" data-icon-place="start"></a>
     </div>
-    <div class="ds-account ds-account--capsule" id="account">
-      <div class="ds-account__text" aria-hidden="true"><div class="ds-account__name" id="account-name">Admin</div><div class="ds-account__email" id="account-email"></div></div>
-      <span class="ds-account__avatar" role="img" id="account-avatar" aria-label="Admin" data-tip="Admin">A</span>
-      <span class="ds-account__divider"></span>
-      <button class="ds-btn ds-btn--text" type="button" id="sign-out">Sign out</button>
-    </div>
+    <!-- Filled by the shell: who is signed in, how, and Sign out. -->
+    <div class="ds-account ds-account--capsule" id="account" data-zs-account></div>
   </div>
 
   <div class="ds-scrim"></div>
@@ -178,7 +152,7 @@
   </div>
 </dialog>
 
-<script src="vendor/z-dash/ds.min.js"></script>
+<script src="/z-dash/ds.min.js"></script>
 <script type="module" src="app/main.js"></script>
 </body>
 </html>

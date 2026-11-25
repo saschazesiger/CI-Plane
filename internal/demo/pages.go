@@ -23,10 +23,10 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · GitHub (demo)</title>
-<link rel="stylesheet" href="/vendor/z-dash/fonts/fonts.css">
-<link rel="stylesheet" href="/vendor/z-dash/ds.min.css">
+<link rel="stylesheet" href="/z-dash/fonts/fonts.css">
+<link rel="stylesheet" href="/z-dash/ds.min.css">
 <link rel="stylesheet" href="/theme.css">
-<link rel="stylesheet" href="/vendor/z-dash/themes/dark.css" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="/z-dash/themes/dark.css" media="(prefers-color-scheme: dark)">
 </head>
 <body class="ds-auth">
 <div class="ds-auth__alert"><div class="ds-alert" role="status"><span class="ds-alert__text"><strong>Demo:</strong> this page plays GitHub's part. Nothing is sent to github.com.</span></div></div>

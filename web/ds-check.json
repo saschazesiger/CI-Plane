@@ -5,7 +5,7 @@
   "js": ["app/**/*.js"],
   "html": ["index.html"],
   "themes": ["theme.css"],
-  "themesWith": ["vendor/z-dash/themes/dark.css"],
-  "vendor": "vendor/z-dash",
+  "themesWith": [".z-dash/themes/dark.css"],
+  "vendor": ".z-dash",
   "exceptions": []
 }

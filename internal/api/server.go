@@ -155,7 +155,7 @@ func (s *Server) routes() {
 	app := s.d.App
 	app.Public("GET /github/return", s.githubReturn)
 	if s.d.Extra != nil {
-		app.Public("/demo/", s.d.Extra.ServeHTTP)
+		app.Unguarded("/demo/", s.d.Extra.ServeHTTP)
 	}
 
 	app.HandleFunc("GET /api/setup", s.setupState)

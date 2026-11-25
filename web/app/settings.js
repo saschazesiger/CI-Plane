@@ -1,12 +1,13 @@
 /*
  * Settings: the two sizes, images, capacity and timeouts in one form whose edited fields are marked and wait in the save bar; the
- * Cloudflare tunnel with its allowed e-mail addresses; the password; the
- * version.
+ * Cloudflare tunnel (the Z-Dash server's tunnel settings, mountTunnel); the password (its mountPassword); the version.
  */
+import { mountTunnel } from '/z-dash/server/tunnel.js';
+import { mountPassword } from '/z-dash/server/password.js';
 import * as api from './api.js';
 import { ctx } from './main.js';
 import {
-  $, $$, M, esc, icon, head, chip, busyButton, alertHtml, taskSteps, toast, toastError, setError, showFieldErrors, clearErrors,
+  $, $$, M, esc, icon, head, toast, toastError, showFieldErrors, clearErrors,
 } from './ui.js';
 
 const DS = window.DS;
@@ -94,48 +95,20 @@ function formHtml(s) {
     '</form>';
 }
 
-function tunnelHtml(cf) {
-  const st = cf.status;
-  const task = cf.task && cf.task.state === 'running' ? cf.task : null;
-  let body;
-  if (task) {
-    body = `<div class="ds-card ds-card--filled">${taskSteps(task)}</div>`;
-  } else if (!st.configured) {
-    body = '<p class="ds-muted">Not set up. Without the tunnel GitHub cannot hand jobs to CI-Plane, and this page is reachable on your network only.</p>' +
-      '<div class="cp-row"><a class="ds-btn ds-btn--tonal" href="#/setup?step=2">Set up the tunnel</a></div>';
-  } else {
-    const chips = [
-      st.running ? chip('ok', 'Running', 'check') : chip('error', 'Stopped', 'alertCircle'),
-      st.connected ? chip('ok', 'Connected', 'check') : chip('error', 'Not connected', 'wifiOff'),
-      st.verified ? chip('ok', 'Checked from outside', 'check') : chip('warning', 'Not checked from outside', 'alert'),
-    ].join('');
-    body = `<div class="cp-row">${chips}</div>` +
-      (st.error ? alertHtml('error', 'The tunnel has a problem', `${esc(st.error)}. Repair it by running the setup again.`) : '') +
-      `<ul class="ds-kv-list"><li><span>Public address</span><strong><a href="${esc(st.publicUrl)}" target="_blank" rel="noopener">${esc(st.publicUrl)}</a></strong></li>` +
-      `<li><span>Webhooks of GitHub go to</span><strong><code>${esc(st.publicUrl)}/webhook</code></strong></li></ul>` +
-      '<form class="ds-form" id="emails-form" novalidate><div class="ds-field"><label class="ds-field__label" for="cf-allowed">Who may sign in from outside</label>' +
-        `<textarea class="ds-input" id="cf-allowed" data-field="emails" spellcheck="false" aria-describedby="cf-allowed-hint">${esc(st.emails.join('\n'))}</textarea>` +
-        '<small class="ds-field__hint" id="cf-allowed-hint">One e-mail address per line. Cloudflare Access sends them a one-time code; nobody else gets in.</small></div>' +
-        `<div class="ds-form-actions">${busyButton('ds-btn', 'Save addresses', 'Saving', 'Saved', 'type="submit"')}</div></form>` +
-      '<nav class="ds-card__links" aria-label="Tunnel actions">' +
-        `<a class="ds-btn ds-btn--text ds-card__link" href="#/setup?step=2">Repair: run the setup again${icon('arrowRight', 16)}</a>` +
-        '<button class="ds-btn ds-btn--text ds-card__link" type="button" data-act="cf-remove">Remove the tunnel ...</button></nav>';
-  }
-  return '<h2 class="ds-card__title" id="tunnel-title">Cloudflare tunnel</h2>' + body;
+/* The tunnel and the password are the shell's; these hold them while the view shows. */
+let tunnel = null;
+let password = null;
+
+function unmount() {
+  if (tunnel) tunnel.destroy();
+  if (password) password.destroy();
+  tunnel = null;
+  password = null;
 }
 
 function passwordHtml() {
-  const s = ctx.session;
-  if (s.demo) return '<h2 class="ds-card__title">Password</h2><p class="ds-muted">The demo has no password: everybody who opens it is signed in.</p>';
-  return '<h2 class="ds-card__title" id="pw-title">Password</h2>' +
-    '<p class="ds-muted">The admin password signs you in on the local address. Changing it signs out every other browser.</p>' +
-    '<form class="ds-form" id="password-change" novalidate>' +
-      '<div class="ds-field"><label class="ds-field__label" for="pw-current">Current password</label><input class="ds-input" id="pw-current" type="password" autocomplete="current-password" data-field="current"></div>' +
-      '<div class="ds-field"><label class="ds-field__label" for="pw-next">New password</label><input class="ds-input" id="pw-next" type="password" autocomplete="new-password" data-field="password" aria-describedby="pw-next-hint">' +
-        '<small class="ds-field__hint" id="pw-next-hint">At least 10 characters.</small></div>' +
-      '<div class="ds-field"><label class="ds-field__label" for="pw-again">Repeat the new password</label><input class="ds-input" id="pw-again" type="password" autocomplete="new-password"></div>' +
-      `<div class="ds-form-actions">${busyButton('ds-btn', 'Change password', 'Changing', 'Changed', 'type="submit"')}</div>` +
-    '</form>';
+  if (ctx.session.open) return '<h2 class="ds-card__title">Password</h2><p class="ds-muted">The demo has no password: everybody who opens it is signed in.</p>';
+  return '<h2 class="ds-card__title" id="pw-title">Password</h2><div id="cp-password"></div>';
 }
 
 /* ── The form ─────────────────────────────────────────────────────── */
@@ -249,93 +222,52 @@ $('#savebar-discard').addEventListener('click', () => {
 
 export default {
   title: 'Settings',
-  topics: ['state', 'tasks'],
-
   async load() {
-    const [settings, cf] = await Promise.all([api.get('/api/settings'), api.get('/api/cloudflare')]);
-    return { ...settings, cf };
+    return api.get('/api/settings');
   },
 
   html(d) {
     takeSaved(d.settings);
     return head('Settings', 'Changes to sizes, images and limits wait in the bar at the bottom until you save them; they apply from the next job on.') +
       `<div id="settings-slot">${formHtml(d.settings)}</div>` +
+      '<section class="ds-card" id="tunnel-card" aria-labelledby="tunnel-title"><h2 class="ds-card__title" id="tunnel-title">Cloudflare tunnel</h2>' +
+        '<p class="ds-muted">GitHub reaches CI-Plane through the tunnel to hand it jobs, and Cloudflare Access lets only the people you name open this page from outside. Without it, CI-Plane is reachable on your network only.</p>' +
+        '<div id="cp-tunnel"></div></section>' +
       '<div class="ds-grid-2">' +
-        `<section class="ds-card" id="tunnel-card" aria-labelledby="tunnel-title">${tunnelHtml(d.cf)}</section>` +
         `<section class="ds-card" id="password-card">${passwordHtml()}</section>` +
-      '</div>' +
       '<section class="ds-card"><h2 class="ds-card__title">About</h2>' +
         `<ul class="ds-kv-list"><li><span>Version</span><strong>${esc(d.version)}</strong></li>` +
-        `<li><span>Signed in</span><strong>${esc(ctx.session.demo ? 'Demo' : ctx.session.via === 'tunnel' ? `${ctx.session.email}, through Cloudflare Access` : 'Admin, with the password')}</strong></li></ul>` +
+        `<li><span>Signed in</span><strong>${esc(ctx.session.open ? 'Demo' : ctx.session.via === 'tunnel' ? `${ctx.session.email}, through Cloudflare Access` : 'Admin, with the password')}</strong></li></ul>` +
         '<nav class="ds-card__links" aria-label="About CI-Plane">' +
           `<a class="ds-btn ds-btn--text ds-card__link" href="https://github.com/saschazesiger/CI-Plane#readme" target="_blank" rel="noopener">Documentation${icon('external', 16)}</a>` +
           `<a class="ds-btn ds-btn--text ds-card__link" href="https://github.com/saschazesiger/CI-Plane/issues" target="_blank" rel="noopener">Report a problem${icon('external', 16)}</a>` +
           `<a class="ds-btn ds-btn--text ds-card__link" href="#/setup">Setup assistant${icon('arrowRight', 16)}</a></nav>` +
-      '</section>';
+      '</section></div>';
   },
 
-  mount(d) {
+  mount() {
+    // The tunnel follows its own state (and the "cloudflare" notices); the view only places it.
+    unmount();
+    tunnel = mountTunnel($('#cp-tunnel'), { name: ctx.session.name, level: 3 });
+    if ($('#cp-password')) password = mountPassword($('#cp-password'), ctx.session);
     const section = ctx.params.get('section');
     if (section === 'cloudflare') $('#tunnel-card').scrollIntoView({ block: 'start' });
   },
 
-  update(d) {
-    // The tunnel moves by itself; the form keeps what is typed.
-    DS.dom.morphHtml($('#tunnel-card'), tunnelHtml(d.cf));
-  },
-
   leave() {
     savebar.hide();
+    unmount();
   },
 
-  async on(type, event) {
+  on(type, event) {
     const t = event.target;
     if (type === 'submit') {
       if (t.id === 'settings-form') save(event);
-      else if (t.id === 'emails-form') {
-        event.preventDefault();
-        const button = event.submitter || $('[type="submit"]', t);
-        const emails = $('#cf-allowed').value.split(/[\s,;]+/).filter(Boolean);
-        clearErrors(t);
-        try {
-          await M.busy(button, () => api.put('/api/cloudflare/emails', { emails }));
-          toast('Saved: only these addresses may sign in from outside.');
-        } catch (error) {
-          if (!showFieldErrors(t, error.fields)) toastError(error, 'emails');
-        }
-      } else if (t.id === 'password-change') {
-        event.preventDefault();
-        const button = event.submitter || $('[type="submit"]', t);
-        clearErrors(t);
-        if (setError($('#pw-again'), $('#pw-again').value === $('#pw-next').value ? '' : 'The two new passwords are not the same.')) {
-          $('#pw-again').focus();
-          return;
-        }
-        try {
-          const r = await M.busy(button, () => api.post('/api/password', { current: $('#pw-current').value, password: $('#pw-next').value }));
-          t.reset();
-          toast(r.message);
-        } catch (error) {
-          if (!showFieldErrors(t, error.fields)) toastError(error, 'password');
-        }
-      }
       return;
     }
     if (type === 'input' || type === 'change') {
       if (t.closest('#settings-form')) syncChanges();
       return;
-    }
-    if (type !== 'click') return;
-    let el;
-    if ((el = t.closest('[data-act="cf-remove"]'))) {
-      const ok = await DS.overlay.confirm({
-        title: 'Remove the tunnel?',
-        text: 'CI-Plane deletes the tunnel, its DNS record and the Access applications on Cloudflare and stops cloudflared. GitHub can no longer hand it jobs, and this page is reachable on your network only.',
-        confirmLabel: 'Remove the tunnel', destructive: true, opener: el,
-        onConfirm: () => api.del('/api/cloudflare'),
-        errorText: 'The tunnel could not be removed. Check the API token on Cloudflare and try again.',
-      });
-      if (ok) toast('The tunnel was removed.');
     }
   },
 };

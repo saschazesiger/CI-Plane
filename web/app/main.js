@@ -1,7 +1,10 @@
 /*
- * The frame of the interface: session and sign-in, hash routes with
- * DS.motion.transition(), the drawer, the shared side sheet, live updates
- * over server-sent events, and the events every view gets delegated.
+ * The frame of the interface: hash routes with DS.motion.transition(), the
+ * drawer, the shared side sheet, live updates and the events every view gets
+ * delegated. Sign-in, the first password, the account capsule, sign-out and
+ * the event stream are the Z-Dash server's shell (/z-dash/server/shell.js):
+ * start() resolves once someone is signed in, on(topic) hears the change
+ * notices.
  *
  * A view is an object:
  *   title, nav           the document title and the drawer item it belongs to
@@ -14,6 +17,7 @@
  *   sheet(type, event)   the same inside the side sheet it opened
  *   leave()              before another view replaces it (optional)
  */
+import { start as startShell, on } from '/z-dash/server/shell.js';
 import * as api from './api.js';
 import { $, $$, M, esc, head, alertHtml, copyFrom, toast } from './ui.js';
 import overview from './overview.js';
@@ -77,7 +81,6 @@ function parse(hash) {
 function guarded(route) {
   const s = ctx.session;
   if (!s) return route;
-  if (s.needsPassword) return 'setup';
   if (!s.setupDone && route !== 'github' && route !== 'setup') return 'setup';
   return route;
 }
@@ -121,7 +124,7 @@ function show(next, route, params, data, error) {
   ctx.route = route;
   ctx.params = params;
   ctx.data = data;
-  const hideDrawer = !!ctx.session && (ctx.session.needsPassword || !ctx.session.setupDone);
+  const hideDrawer = !!ctx.session && !ctx.session.setupDone;
   app.toggleAttribute('data-drawer-hidden', hideDrawer);
   menuButton.hidden = hideDrawer;
   view.classList.toggle('ds-view--fill', !!next.fill && !error);
@@ -176,39 +179,30 @@ async function refresh(topics) {
   }
 }
 
-let stream = null;
-let offlineTimer = 0;
-const panel = $('.ds-panel');
-let banner = null;
+/*
+ * The shell's change notices: one call of refresh() per notice, whatever
+ * topics it names. A notice for every topic (an empty set: the stream came
+ * back, the tab woke, someone signed in again) refreshes the view and the
+ * session too.
+ */
+let notices = null;
 
-function connect() {
-  if (stream) return;
-  stream = api.live((topics) => refresh(topics), (up) => {
-    clearTimeout(offlineTimer);
-    if (up) {
-      showOffline(false);
-      refresh(new Set(['state', 'tasks', 'live']));
-    } else {
-      offlineTimer = setTimeout(() => showOffline(true), 4000);
-    }
-  });
-}
-
-function disconnect() {
-  if (stream) stream.close();
-  stream = null;
-}
-
-/* A message for the whole app while the server does not answer. */
-function showOffline(on) {
-  if (on === Boolean(banner?.isConnected)) return;
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.className = 'ds-banner';
-    DS.dom.morphHtml(banner, alertHtml('warning', '', 'CI-Plane does not answer. What you see stays as it was until it is back; the page reconnects by itself.', '', 'role="status"'));
+function onTopics(topics) {
+  if (!notices) {
+    notices = new Set();
+    queueMicrotask(() => {
+      const all = notices.has('*');
+      const these = notices;
+      notices = null;
+      if (all) reloadSession().catch(() => {});
+      refresh(all ? null : these);
+    });
   }
-  M.flip(panel, () => { if (on) panel.prepend(banner); else banner.remove(); }, { items: ':scope > *' });
+  if (!topics.size) notices.add('*');
+  for (const topic of topics) notices.add(topic);
 }
+
+for (const topic of ['state', 'tasks', 'live', 'cloudflare']) on(topic, onTopics);
 
 /* ── The side sheet ───────────────────────────────────────────────── */
 
@@ -291,88 +285,16 @@ document.addEventListener('input', (event) => {
 
 /* ── Session ──────────────────────────────────────────────────────── */
 
-const auth = $('#auth');
-const boot = $('#boot');
-const loginForm = $('#login-form');
-
-function showAccount(session) {
-  const account = $('#account');
-  account.hidden = !session.signedIn;
-  $('#demo-tag').hidden = !session.demo;
-  let name = 'Admin';
-  let email = 'Signed in with the password';
-  if (session.demo) {
-    name = 'Demo';
-    email = 'Nothing real is touched';
-  } else if (session.via === 'tunnel') {
-    name = session.email;
-    email = 'Signed in with Cloudflare Access';
-  }
-  $('#account-name').textContent = name;
-  $('#account-email').textContent = email;
-  const avatar = $('#account-avatar');
-  avatar.textContent = name.slice(0, 1).toUpperCase();
-  avatar.setAttribute('aria-label', `${name}, ${email}`);
-  avatar.setAttribute('data-tip', `${name}, ${email}`);
-  $('#sign-out').hidden = session.demo;
-}
-
+/**
+ * The shell's session (name, via, email, open, ...) with what CI-Plane adds
+ * from GET /api/setup: whether the setup assistant is finished, and the demo.
+ */
 async function reloadSession() {
-  ctx.session = await api.get('/api/session');
-  showAccount(ctx.session);
+  const [session, setup] = await Promise.all([api.get('/api/session'), api.get('/api/setup')]);
+  ctx.session = { ...session, setupDone: !!setup.done, demo: !!setup.demo };
+  $('#demo-tag').hidden = !ctx.session.demo;
   return ctx.session;
 }
-
-function showLogin(message = '') {
-  disconnect();
-  boot.hidden = true;
-  app.hidden = true;
-  auth.hidden = false;
-  DS.dom.morphHtml($('#auth-alert'), message ? alertHtml('warning', '', esc(message)) : '');
-  loginForm.reset();
-  $('#login-password').focus();
-}
-
-loginForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const input = $('#login-password');
-  const button = $('[type="submit"]', loginForm);
-  if (!input.value) {
-    DS.dom.morphHtml($('#auth-alert'), alertHtml('error', '', 'Enter the admin password.'));
-    input.focus();
-    return;
-  }
-  try {
-    await M.busy(button, () => api.post('/api/login', { password: input.value }));
-  } catch (error) {
-    DS.dom.morphHtml($('#auth-alert'), alertHtml('error', '', esc(error.message)));
-    input.select();
-    input.focus();
-    return;
-  }
-  auth.hidden = true;
-  start();
-});
-
-$('#sign-out').addEventListener('click', async () => {
-  if (ctx.session && ctx.session.via === 'tunnel') {
-    // Cloudflare Access ends its session at this address of the tunnel host.
-    location.assign('/cdn-cgi/access/logout');
-    return;
-  }
-  try {
-    await api.post('/api/logout');
-  } catch (error) {
-    // Signed out on this side either way.
-  }
-  showLogin('You are signed out.');
-});
-
-api.whenSignedOut(() => {
-  if (!auth.hidden) return;
-  ctx.session = null;
-  showLogin('Your session ended. Sign in again.');
-});
 
 /* ── Wiring ───────────────────────────────────────────────────────── */
 
@@ -399,27 +321,19 @@ const SKELETON = '<div class="ds-skeleton" role="status"><span class="ds-sr">Loa
   '<div class="ds-skeleton__card" aria-hidden="true"><span class="ds-skeleton__line ds-skeleton__line--title"></span><span class="ds-skeleton__line"></span>' +
   '<span class="ds-skeleton__line ds-skeleton__line--mid"></span></div></div>';
 
-/* The first load: a skeleton while the first view's data comes, then the view staggers in once. */
+/* The first load, once the shell has someone signed in: a skeleton while the first view's data comes, then the view
+   staggers in once. */
 async function start() {
-  let session;
-  try {
-    session = await reloadSession();
-  } catch (error) {
-    boot.hidden = true;
-    auth.hidden = false;
-    DS.dom.morphHtml($('#auth-alert'), alertHtml('error', 'CI-Plane does not answer', esc(error.message),
-      '<a class="ds-btn ds-btn--text ds-sm" href="">Try again</a>'));
-    return;
-  }
-  if (!session.signedIn && !session.needsPassword) {
-    showLogin();
-    return;
-  }
-  boot.hidden = true;
-  auth.hidden = true;
-  app.hidden = false;
-  const startedAt = Date.now();
+  await startShell();
   DS.dom.morphHtml(page, SKELETON, { replace: true });
+  const startedAt = Date.now();
+  try {
+    await reloadSession();
+  } catch (error) {
+    DS.dom.morphHtml(page, alertHtml('error', 'CI-Plane does not answer', esc(error.message),
+      '<a class="ds-btn ds-btn--text ds-sm" href="">Try again</a>'), { replace: true });
+    return;
+  }
   let { route, params } = parse(location.hash);
   const target = guarded(route);
   if (target !== route) {
@@ -439,14 +353,7 @@ async function start() {
   show(next, route, params, data, error);
   if (!error && next.mount) next.mount(data, params);
   M.staggerOnce(page);
-  if (session.signedIn) connect();
   document.documentElement.setAttribute('data-cp-ready', '');
-}
-
-/** Called after the first password was set: the session exists now. */
-export async function signedInNow() {
-  await reloadSession();
-  connect();
 }
 
 start();

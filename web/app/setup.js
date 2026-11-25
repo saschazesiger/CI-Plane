@@ -3,9 +3,15 @@
  * and the two assistants it shares with the pages: "Add worker" and "Add
  * repository or organisation". Each step explains itself, checks live, and
  * survives a reload: long operations run on the server as tasks.
+ *
+ * The first password is the Z-Dash server's shell (it asks before the app
+ * shows), so the first step only confirms it. The Cloudflare step is the
+ * shell's tunnel settings (mountTunnel), which follow their own state; the
+ * step turns green once GET /api/setup says the tunnel is up.
  */
+import { mountTunnel } from '/z-dash/server/tunnel.js';
 import * as api from './api.js';
-import { ctx, signedInNow } from './main.js';
+import { ctx } from './main.js';
 import {
   $, $$, M, esc, icon, head, ago, gb, plural, chip, jobChip, workerChip, empty, codeWithCopy, busyButton,
   alertHtml, taskSteps, toast, toastError, setError, showFieldErrors, clearErrors, priorityOptions, PRIORITY_HINT,
@@ -22,186 +28,40 @@ const STEPS = [
 ];
 
 /* What the user typed, kept across live re-renders and step changes. */
-const cf = { token: '', zones: null, zoneId: '', sub: 'ci', emails: '', editing: false };
 const gh = { kind: 'user', org: '', adding: false };
 const wk = { host: '', port: '22', name: '', tier: '1', priority: 'normal', result: null, error: '', attempts: 0, retryAt: 0, timer: 0, workerId: 0 };
 
 /* ── Step 1: password ─────────────────────────────────────────────── */
 
-function passwordHtml(d) {
-  if (ctx.session.needsPassword) {
-    return '<h2 class="ds-card__title">Choose the admin password</h2>' +
-      '<p class="ds-muted">You are the first visitor, so you choose the password. You sign in with it on this local address; from outside, Cloudflare Access signs you in instead (step 2).</p>' +
-      '<form class="ds-form" id="password-form" novalidate><div class="ds-form-grid ds-form-grid--2">' +
-        '<div class="ds-field"><label class="ds-field__label" for="pw-new">Password</label>' +
-          '<input class="ds-input" id="pw-new" name="password" type="password" autocomplete="new-password" minlength="10" data-field="password" aria-describedby="pw-new-hint" autofocus>' +
-          '<small class="ds-field__hint" id="pw-new-hint">At least 10 characters. A few random words are easy to type and hard to guess.</small></div>' +
-        '<div class="ds-field"><label class="ds-field__label" for="pw-repeat">Repeat the password</label>' +
-          '<input class="ds-input" id="pw-repeat" type="password" autocomplete="new-password"></div>' +
-      '</div><div class="ds-form-actions">' + busyButton('ds-btn ds-btn--filled', 'Set password and continue', 'Saving', 'Saved', 'type="submit"') +
-      '</div></form>';
-  }
-  let text = 'Sign in with it on this local address. Forgot it? Start CI-Plane with the environment variable CI_PLANE_ADMIN_PASSWORD set to a new one.';
-  if (ctx.session.demo) text = 'The demo needs no password: everybody who opens it is signed in.';
-  else if (ctx.session.via === 'tunnel') text = 'You are signed in through Cloudflare Access. On the local address, the admin password is needed.';
-  return '<h2 class="ds-card__title">Admin password</h2>' + alertHtml('success', 'The admin password is set', esc(text));
-}
-
-async function submitPassword(form, submitter) {
-  const pw = $('#pw-new', form);
-  const repeat = $('#pw-repeat', form);
-  clearErrors(form);
-  if (pw.value.length < 10) {
-    setError(pw, 'Use at least 10 characters.');
-    pw.focus();
-    return;
-  }
-  if (repeat.value !== pw.value) {
-    setError(repeat, 'The two passwords are not the same.');
-    repeat.focus();
-    return;
-  }
-  try {
-    await M.busy(submitter, () => api.post('/api/setup/password', { password: pw.value }));
-  } catch (error) {
-    if (error.status === 409) {
-      toast(error.message, { kind: 'info' });
-      location.reload();
-      return;
-    }
-    if (!showFieldErrors(form, error.fields)) toastError(error, 'password');
-    return;
-  }
-  await signedInNow();
-  toast('Password set. You are signed in.');
-  ctx.go('#/setup?step=2', { type: 'forward' });
+function passwordHtml() {
+  const s = ctx.session;
+  let text = `Sign in with it on this local address. Forgot it? Start CI-Plane with the environment variable ${s.env || 'CI_PLANE'}_ADMIN_PASSWORD set to a new one.`;
+  if (s.open) text = 'The demo needs no password: everybody who opens it is signed in.';
+  else if (s.via === 'tunnel') text = 'You are signed in through Cloudflare Access. On the local address, the admin password is needed.';
+  return '<h2 class="ds-card__title">Admin password</h2>' + alertHtml('success', 'The admin password is set', esc(text)) +
+    '<p class="ds-meta">Change it under Settings once the setup is finished.</p>';
 }
 
 /* ── Step 2: Cloudflare ───────────────────────────────────────────── */
 
-const TOKEN_PERMISSIONS = [
-  ['Account', 'Cloudflare Tunnel', 'Edit'],
-  ['Account', 'Access: Apps and Policies', 'Edit'],
-  ['Account', 'Access: Organizations, Identity Providers, and Groups', 'Edit'],
-  ['Zone', 'DNS', 'Edit'],
-  ['Zone', 'Zone', 'Read'],
-];
+/* The shell's tunnel settings while the step shows; they fetch, poll and redraw by themselves. */
+let tunnel = null;
 
-function cloudflareHtml(d) {
-  const st = d.status;
-  const task = d.task;
-  const running = task && task.state === 'running';
-  const intro = '<h2 class="ds-card__title">Connect Cloudflare</h2>' +
-    '<p class="ds-muted">GitHub has to reach CI-Plane over the internet to hand it jobs. A Cloudflare Tunnel gives CI-Plane a public address without opening a port on your network, and Cloudflare Access lets only the people you name open this page from outside.</p>';
-  if (running) {
-    return intro + `<div class="ds-card ds-card--filled" id="cf-task">${taskSteps(task)}</div>` +
-      '<p class="ds-meta">This takes about a minute. You may leave this page; the setup continues and shows here again.</p>';
-  }
-  if (st.configured && st.verified && !cf.editing) {
-    return intro + alertHtml('success', 'The tunnel is up', `CI-Plane is reachable at <a href="${esc(st.publicUrl)}" target="_blank" rel="noopener">${esc(st.publicUrl)}</a>. It asks for a Cloudflare login there, and GitHub's webhooks get through to /webhook.`) +
-      `<ul class="ds-kv-list"><li><span>Public address</span><strong>${esc(st.publicUrl)}</strong></li>` +
-      `<li><span>May sign in</span><strong>${esc(st.emails.join(', '))}</strong></li>` +
-      `<li><span>Tunnel</span><strong>${st.running ? 'Running' : 'Stopped'}, ${st.connected ? 'connected' : 'not connected'}</strong></li></ul>` +
-      '<div class="cp-row"><button class="ds-btn" type="button" data-act="cf-again">Set it up again ...</button></div>';
-  }
-  let problem = '';
-  if (task && task.state === 'failed') problem = `<div class="ds-card ds-card--filled">${taskSteps(task)}</div>`;
-  else if (st.configured && !st.verified) {
-    problem = alertHtml('warning', 'The tunnel is set up but not working', esc(st.error || 'It could not be reached from outside yet.') + ' Run the setup again to repair it.');
-  }
-  const zones = cf.zones;
-  const zone = zones && zones.find((z) => z.id === cf.zoneId);
-  const tokenDone = zones && zones.length;
-  const permissions = TOKEN_PERMISSIONS.map(([scope, what, level]) => `<li><span>${scope} · ${what}</span><strong>${level}</strong></li>`).join('');
-  return intro + problem +
-    '<form class="ds-form" id="cf-form" novalidate>' +
-      '<h3 class="ds-card__subtitle">1. Create an API token</h3>' +
-      '<p class="ds-muted">The button opens Cloudflare\'s token page with these permissions filled in. Pick your account and the domain CI-Plane should use, then choose Create token.</p>' +
-      `<ul class="ds-kv-list">${permissions}</ul>` +
-      `<div class="cp-row"><a class="ds-btn" href="${esc(d.tokenUrl)}" target="_blank" rel="noopener">${icon('external', 16)}Create the token on Cloudflare</a></div>` +
-      '<p class="ds-meta">No Zero Trust on your account yet? Cloudflare asks you to pick a plan on first use; the free plan is enough. CI-Plane keeps the token encrypted and needs it again only to repair or remove the tunnel.</p>' +
-      '<h3 class="ds-card__subtitle">2. Paste it here</h3>' +
-      '<div class="ds-field"><label class="ds-field__label" for="cf-token">API token</label><div class="ds-field__row">' +
-        `<input class="ds-input" id="cf-token" type="password" autocomplete="off" spellcheck="false" data-field="apiToken" value="${esc(cf.token)}" aria-describedby="cf-token-hint">` +
-        busyButton(tokenDone ? 'ds-btn' : 'ds-btn ds-btn--filled', 'Check token', 'Checking', 'Valid', 'data-act="cf-zones"') + '</div>' +
-        (tokenDone
-          ? `<small class="ds-field__hint ds-field__hint--success" id="cf-token-hint">${icon('checkCircle', 16)}<span>Valid: it may use ${plural(zones.length, 'domain')}.</span></small>`
-          : '<small class="ds-field__hint" id="cf-token-hint">Cloudflare shows the token once, right after you created it.</small>') + '</div>' +
-      (tokenDone ? '<h3 class="ds-card__subtitle">3. Choose the address and who may sign in</h3>' +
-        '<div class="ds-form-grid ds-form-grid--2">' +
-          '<div class="ds-field"><label class="ds-field__label" for="cf-zone">Domain</label>' +
-            `<select class="ds-input" id="cf-zone" data-field="zoneId">${zones.map((z) => `<option value="${esc(z.id)}"${z.id === cf.zoneId ? ' selected' : ''}>${esc(z.name)}</option>`).join('')}</select></div>` +
-          '<div class="ds-field"><label class="ds-field__label" for="cf-sub">Subdomain</label><div class="ds-input-group">' +
-            `<input class="ds-input" id="cf-sub" autocomplete="off" spellcheck="false" data-field="hostname" value="${esc(cf.sub)}" aria-describedby="cf-sub-hint">` +
-            `<span class="ds-input-group__suffix" aria-hidden="true">.${esc(zone ? zone.name : '')}</span></div>` +
-            `<small class="ds-field__hint" id="cf-sub-hint">CI-Plane will be at https://${esc(cf.sub || '...')}.${esc(zone ? zone.name : '')}. The name must not be in use yet.</small></div>` +
-        '</div>' +
-        '<div class="ds-field"><label class="ds-field__label" for="cf-emails">Who may sign in from outside</label>' +
-          `<textarea class="ds-input" id="cf-emails" data-field="emails" spellcheck="false" aria-describedby="cf-emails-hint" placeholder="you@example.com">${esc(cf.emails)}</textarea>` +
-          '<small class="ds-field__hint" id="cf-emails-hint">One e-mail address per line. Cloudflare sends a one-time code to these addresses; nobody else gets in.</small></div>' +
-        '<div class="ds-form-actions">' + busyButton('ds-btn ds-btn--filled', 'Set up the tunnel', 'Starting', 'Started', 'data-act="cf-setup"') +
-          (cf.editing ? '<button class="ds-btn ds-btn--text" type="button" data-act="cf-cancel">Cancel</button>' : '') + '</div>'
-        : '') +
-    '</form>';
+function cloudflareHtml() {
+  return '<h2 class="ds-card__title">Connect Cloudflare</h2>' +
+    '<p class="ds-muted">GitHub has to reach CI-Plane over the internet to hand it jobs. A Cloudflare Tunnel gives CI-Plane a public address without opening a port on your network, and Cloudflare Access lets only the people you name open this page from outside. Once the tunnel is up, CI-Plane points the webhooks of its GitHub Apps at it by itself.</p>' +
+    '<div id="cp-setup-tunnel"></div>';
 }
 
-function readCloudflare() {
-  const v = (id) => ($(id) ? $(id).value : undefined);
-  if (v('#cf-token') !== undefined) cf.token = v('#cf-token');
-  if (v('#cf-zone') !== undefined) cf.zoneId = v('#cf-zone');
-  if (v('#cf-sub') !== undefined) cf.sub = v('#cf-sub').trim().toLowerCase();
-  if (v('#cf-emails') !== undefined) cf.emails = v('#cf-emails');
+function mountCloudflare() {
+  unmountCloudflare();
+  const host = $('#cp-setup-tunnel');
+  if (host) tunnel = mountTunnel(host, { name: ctx.session.name, level: 3 });
 }
 
-async function checkToken(button) {
-  readCloudflare();
-  const form = $('#cf-form');
-  clearErrors(form);
-  if (!cf.token.trim()) {
-    setError($('#cf-token'), 'Paste the API token you created on Cloudflare.');
-    $('#cf-token').focus();
-    return;
-  }
-  try {
-    const r = await M.busy(button, () => api.post('/api/cloudflare/zones', { apiToken: cf.token.trim() }));
-    cf.zones = r.zones;
-    if (!r.zones.length) {
-      setError($('#cf-token'), 'The token works, but it may use no domain. Create it again and include the domain under Zone Resources.');
-      return;
-    }
-    if (!r.zones.some((z) => z.id === cf.zoneId)) cf.zoneId = r.zones[0].id;
-    if (!cf.emails && ctx.session.email) cf.emails = ctx.session.email;
-    rerender();
-    const sub = $('#cf-sub');
-    if (sub) sub.focus();
-  } catch (error) {
-    cf.zones = null;
-    if (!showFieldErrors(form, error.fields)) toastError(error, 'cf');
-  }
-}
-
-async function startTunnel(button) {
-  readCloudflare();
-  const form = $('#cf-form');
-  clearErrors(form);
-  const zone = (cf.zones || []).find((z) => z.id === cf.zoneId);
-  const emails = cf.emails.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean);
-  const bad = [
-    setError($('#cf-sub'), /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(cf.sub) ? '' : 'Use letters, digits and dashes, like ci.') && $('#cf-sub'),
-    setError($('#cf-emails'), emails.length ? '' : 'Enter at least one e-mail address: only these people may sign in from outside.') && $('#cf-emails'),
-  ].filter(Boolean);
-  if (bad.length) {
-    bad[0].focus();
-    return;
-  }
-  try {
-    await M.busy(button, () => api.post('/api/cloudflare/setup', { apiToken: cf.token.trim(), zoneId: cf.zoneId, hostname: `${cf.sub}.${zone.name}`, emails }), { done: false });
-  } catch (error) {
-    if (!showFieldErrors(form, error.fields)) toastError(error, 'cf');
-    return;
-  }
-  cf.editing = false;
-  ctx.refresh(new Set(['tasks']));
+function unmountCloudflare() {
+  if (tunnel) tunnel.destroy();
+  tunnel = null;
 }
 
 /* ── Step 3: GitHub ───────────────────────────────────────────────── */
@@ -507,7 +367,7 @@ function tryHtml(d) {
 
 const LOADERS = {
   password: async () => ({}),
-  cloudflare: () => api.get('/api/cloudflare'),
+  cloudflare: async () => ({}),
   github: () => api.get('/api/accounts'),
   worker: (params) => loadWorkerStep(params),
   job: async () => {
@@ -543,7 +403,6 @@ function navHtml(d) {
   const key = STEPS[d.step].key;
   const done = d.steps[key];
   const back = d.step > 0 ? `<button class="ds-btn ds-btn--text" type="button" data-step="${d.step}">${icon('arrowLeft', 16)}Back</button>` : '';
-  if (ctx.session.needsPassword) return '';
   if (d.step === STEPS.length - 1) {
     return `<div class="ds-form-actions">${busyButton(done ? 'ds-btn ds-btn--filled' : 'ds-btn', 'Finish setup', 'Finishing', 'Done', 'data-act="finish"')}${back}</div>`;
   }
@@ -560,7 +419,8 @@ function stepCard(d) {
 }
 
 function rerender() {
-  if (ctx.view === setupView && current) {
+  // The tunnel's step draws itself: a redraw of its card would take the tunnel settings away.
+  if (ctx.view === setupView && current && STEPS[current.step].key !== 'cloudflare') {
     DS.dom.morphHtml($('#step-card'), RENDER[STEPS[current.step].key](current.data));
   } else if (ctx.view === addWorkerView && current) {
     DS.dom.morphHtml($('#wk-card'), workerHtml(current, false));
@@ -582,14 +442,12 @@ async function finish(button) {
 export const setupView = {
   title: 'Setup',
   nav: 'setup',
-  topics: ['state', 'tasks'],
+  topics: ['state', 'tasks', 'cloudflare'],
 
   async load(params) {
-    let setup = { steps: {}, done: false };
-    if (!ctx.session.needsPassword) setup = await api.get('/api/setup');
+    const setup = await api.get('/api/setup');
     let step = Number(params.get('step')) - 1;
-    if (ctx.session.needsPassword) step = 0;
-    else if (!(step >= 0 && step < STEPS.length)) step = firstOpen(setup.steps);
+    if (!(step >= 0 && step < STEPS.length)) step = firstOpen(setup.steps);
     const data = await LOADERS[STEPS[step].key](params);
     current = { ...setup, step, data };
     return current;
@@ -598,23 +456,25 @@ export const setupView = {
   html(d) {
     const later = ctx.session.signedIn && !ctx.session.setupDone
       ? busyButton('ds-btn ds-btn--text', 'Finish later', 'Saving', 'Saved', 'data-act="finish-later"') : '';
-    const lead = ctx.session.needsPassword
-      ? 'Welcome. Five short steps take CI-Plane from a fresh start to your first job. It starts with a password, so nobody else on your network can change anything.'
-      : 'Five steps from a fresh start to the first job. Each step checks itself and turns green; you can leave and come back at any time.';
+    const lead = 'Five steps from a fresh start to the first job. Each step checks itself and turns green; you can leave and come back at any time.';
     return head('Set up CI-Plane', lead, later) + `<div id="steps-slot">${stepsHtml(d)}</div>` + stepCard(d) + `<div id="nav-slot">${navHtml(d)}</div>`;
   },
 
+  mount(d) {
+    if (STEPS[d.step].key === 'cloudflare') mountCloudflare();
+    else unmountCloudflare();
+  },
+
   update(d) {
-    if (ctx.session.needsPassword) return;
-    // Only the card and the marks: the fields keep what was typed and the focus.
+    // Only the card and the marks: the fields keep what was typed and the focus. The tunnel's card draws itself.
     DS.dom.morphHtml($('#steps-slot'), stepsHtml(d));
-    DS.dom.morphHtml($('#step-card'), RENDER[STEPS[d.step].key](d.data));
+    if (STEPS[d.step].key !== 'cloudflare') DS.dom.morphHtml($('#step-card'), RENDER[STEPS[d.step].key](d.data));
     DS.dom.morphHtml($('#nav-slot'), navHtml(d));
   },
 
   leave() {
     stopRetry();
-    cf.editing = false;
+    unmountCloudflare();
     gh.adding = false;
   },
 
@@ -628,13 +488,8 @@ function stepEvents(type, event, inSetup) {
   if (type === 'submit') {
     event.preventDefault();
     const submitter = event.submitter || $('[type="submit"]', t);
-    if (t.id === 'password-form') submitPassword(t, submitter);
     if (t.id === 'connect-form') checkWorker(submitter);
     if (t.id === 'add-form') addWorker(submitter, inSetup);
-    if (t.id === 'cf-form') {
-      if (cf.zones && cf.zones.length) startTunnel($('[data-act="cf-setup"]', t));
-      else checkToken($('[data-act="cf-zones"]', t));
-    }
     if (t.id === 'gh-form') startGitHub($('[data-act="gh-go"]', t), inSetup ? 'setup' : 'repositories');
     return;
   }
@@ -644,31 +499,9 @@ function stepEvents(type, event, inSetup) {
     if (gh.kind === 'org') $('#gh-org').focus();
     return;
   }
-  if (type === 'change' && t.id === 'cf-zone') {
-    readCloudflare();
-    rerender();
-    return;
-  }
   if (type === 'input') {
     if (t.id === 'gh-org') gh.org = t.value;
-    if (t.id === 'cf-sub') {
-      readCloudflare();
-      const zone = (cf.zones || []).find((z) => z.id === cf.zoneId);
-      const hint = $('#cf-sub-hint');
-      if (hint && zone) hint.textContent = `CI-Plane will be at https://${cf.sub || '...'}.${zone.name}. The name must not be in use yet.`;
-    }
-    if (t.id === 'cf-token' && cf.zones) {
-      cf.zones = null;
-      readCloudflare();
-      rerender();
-      $('#cf-token').focus();
-    }
     if (t.id === 'wk-host' && wk.timer) stopRetry();
-    return;
-  }
-  if (type === 'keydown' && event.key === 'Enter' && t.id === 'cf-token') {
-    event.preventDefault();
-    checkToken($('[data-act="cf-zones"]'));
     return;
   }
   if (type !== 'click') return;
@@ -681,10 +514,6 @@ function stepEvents(type, event, inSetup) {
   const act = t.closest('[data-act]');
   if (!act) return;
   switch (act.getAttribute('data-act')) {
-    case 'cf-zones': checkToken(act); break;
-    case 'cf-setup': startTunnel(act); break;
-    case 'cf-again': cf.editing = true; rerender(); $('#cf-token').focus(); break;
-    case 'cf-cancel': cf.editing = false; rerender(); break;
     case 'gh-go': startGitHub(act, inSetup ? 'setup' : 'repositories'); break;
     case 'gh-add': gh.adding = true; rerender(); break;
     case 'wk-stop': stopRetry(); rerender(); break;
