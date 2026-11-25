@@ -74,6 +74,7 @@ jobs:
       - name: Check and test
         if: steps.update.outputs.changed == 'true'
         run: |
+          go mod download "$MODULE"
           ZD="$(go list -m -f '{{.Dir}}' "$MODULE")/zdash/dist"
           export ZD
           go vet ./...
