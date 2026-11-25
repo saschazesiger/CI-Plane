@@ -207,9 +207,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	if s.d.Cloudflare != nil {
-		resp.Tunnel = s.d.Cloudflare.Status()
-	}
+	resp.Tunnel = s.d.App.Tunnel().Status()
 	resp.Alerts = s.alerts(sn, resp.Workers, resp.Tunnel)
 	writeJSON(w, http.StatusOK, resp)
 }

@@ -1,7 +1,10 @@
 package api
 
 import (
-	"bufio"
+	"github.com/saschazesiger/Z-Dash/server"
+	"github.com/saschazesiger/Z-Dash/server/cloudflare"
+	zsecret "github.com/saschazesiger/Z-Dash/server/secret"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -125,60 +128,19 @@ func (g *fakeGitHub) SetPublicURL(ctx context.Context, u string) error {
 }
 func (g *fakeGitHub) Health(id int64) AccountHealth { return AccountHealth{RateRemaining: 5000} }
 
-type fakeCloudflare struct {
-	mu     sync.Mutex
-	st     TunnelStatus
-	emails []string
-}
-
-func (c *fakeCloudflare) TokenURL() string { return "https://dash.cloudflare.com/profile/api-tokens" }
-func (c *fakeCloudflare) Zones(ctx context.Context, token string) ([]Zone, error) {
-	if token != "good-token" {
-		return nil, errors.New("Cloudflare did not accept this token")
-	}
-	return []Zone{{ID: "z1", Name: "example.com"}}, nil
-}
-func (c *fakeCloudflare) Setup(ctx context.Context, req TunnelSetup, progress func(string)) error {
-	progress("Creating the tunnel")
-	c.mu.Lock()
-	c.st = TunnelStatus{Configured: true, Hostname: req.Hostname, PublicURL: "https://" + req.Hostname, Emails: req.Emails, Running: true, Connected: true, Verified: true}
-	c.mu.Unlock()
-	return nil
-}
-func (c *fakeCloudflare) Status() TunnelStatus {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.st
-}
-func (c *fakeCloudflare) SetEmails(ctx context.Context, emails []string) error {
-	c.mu.Lock()
-	c.emails = emails
-	c.mu.Unlock()
-	return nil
-}
-func (c *fakeCloudflare) Remove(ctx context.Context) error {
-	c.mu.Lock()
-	c.st = TunnelStatus{}
-	c.mu.Unlock()
-	return nil
-}
-func (c *fakeCloudflare) Authenticate(r *http.Request) (string, error) {
-	if r.Header.Get("Cf-Access-Jwt-Assertion") == "valid" {
-		return "ada@example.com", nil
-	}
-	return "", errors.New("no valid Access token")
-}
-
 // --- rig -------------------------------------------------------------------------
 
 type rig struct {
 	t       *testing.T
 	st      *store.Store
+	app     *server.App
 	srv     *Server
 	local   http.Handler
+	tunnel  *cloudflare.Demo
+	relay   Relay
+	hooks   []string
 	workers *fakeWorkers
 	gh      *fakeGitHub
-	cf      *fakeCloudflare
 	cookie  *http.Cookie
 }
 
@@ -192,15 +154,56 @@ func newRig(t *testing.T, demo bool) *rig {
 	return newRigOn(t, st, demo, "")
 }
 
+// newRigOn builds CI-Plane on the Z-Dash server as main does, with a demo
+// tunnel and the webhook paths of the tunnel.
 func newRigOn(t *testing.T, st *store.Store, demo bool, reset string) *rig {
 	t.Helper()
 	world := sim.New()
-	r := &rig{t: t, st: st, workers: &fakeWorkers{status: map[int64]engine.WorkerStatus{}}, gh: &fakeGitHub{st: st}, cf: &fakeCloudflare{}}
-	r.srv = New(Deps{Store: st, Engine: engine.New(st, world, world), Workers: r.workers, GitHub: r.gh, Cloudflare: r.cf,
-		Version: "test", Demo: demo, ResetPassword: reset, Logf: t.Logf})
+	r := &rig{t: t, st: st, workers: &fakeWorkers{status: map[int64]engine.WorkerStatus{}}, gh: &fakeGitHub{st: st}}
+	r.tunnel = cloudflare.NewDemo("CI-Plane", []string{"/webhook"})
+	r.tunnel.Step = time.Millisecond
+	key := make([]byte, 32)
+	box, err := zsecret.New(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	webhook := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		r.hooks = append(r.hooks, req.Method+" "+req.URL.Path)
+		w.WriteHeader(http.StatusAccepted)
+	})
+	relay := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if r.relay == nil {
+			http.Error(w, "no relay", http.StatusServiceUnavailable)
+			return
+		}
+		r.relay.ServeHTTP(w, req)
+	})
+	r.app, err = server.New(server.Config{
+		Name: "CI-Plane", Slug: "ci-plane", Version: "test", DataDir: t.TempDir(), AdminPassword: reset, Open: demo,
+		Bypass:      map[string]http.Handler{"/webhook": Webhooks(webhook, relayFunc(relay))},
+		BypassLabel: "webhook",
+		KV:          store.ServerKV{St: st}, Sealer: box, Tunnel: r.tunnel, Logf: t.Logf,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.srv = New(Deps{App: r.app, Store: st, Engine: engine.New(st, world, world), Workers: r.workers, GitHub: r.gh,
+		Version: "test", Demo: demo, Logf: t.Logf})
 	t.Cleanup(r.srv.Close)
-	r.local = r.srv.Local()
+	r.local = r.app.Handler()
 	return r
+}
+
+// relayFunc makes a handler a Relay for Webhooks.
+type relayFunc http.HandlerFunc
+
+func (f relayFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) { f(w, r) }
+func (relayFunc) Check(context.Context, int64, string) RelayCheck    { return RelayCheck{} }
+func (relayFunc) Workflow() string                                   { return "" }
+
+// seedTunnel shows a tunnel that is set up, as after the server's setup.
+func (r *rig) seedTunnel(host string) {
+	r.tunnel.Seed(host, []string{"ada@example.com"})
 }
 
 type resp struct {
@@ -223,7 +226,7 @@ func (r *rig) do(h http.Handler, method, path string, body any, mod ...func(*htt
 	req.Host = "ci.local:8080"
 	req.RemoteAddr = "192.168.1.5:5555"
 	if method != http.MethodGet {
-		req.Header.Set("X-CI-Plane", "1")
+		req.Header.Set(server.CSRFHeader, "1")
 	}
 	if r.cookie != nil {
 		req.AddCookie(r.cookie)
@@ -236,7 +239,7 @@ func (r *rig) do(h http.Handler, method, path string, body any, mod ...func(*htt
 	out := resp{code: rec.Code, raw: rec.Body.String(), header: rec.Header()}
 	_ = json.Unmarshal(rec.Body.Bytes(), &out.body)
 	for _, c := range rec.Result().Cookies() {
-		if c.Name == cookieName {
+		if c.Name == "ci_plane_session" {
 			if c.MaxAge < 0 {
 				r.cookie = nil
 			} else {
@@ -265,8 +268,6 @@ func (r *rig) signIn() {
 	r.t.Helper()
 	r.expect(r.local_("POST", "/api/setup/password", map[string]string{"password": "correct horse battery"}), 200)
 }
-
-func noHeader(req *http.Request) { req.Header.Del("X-CI-Plane") }
 
 // --- login -----------------------------------------------------------------------
 
@@ -297,7 +298,7 @@ func TestFirstPasswordAndLogin(t *testing.T) {
 	r.expect(r.local_("GET", "/api/overview", nil), 401)
 	r.cookie = nil
 
-	r.expect(r.local_("POST", "/api/login", map[string]string{"password": "wrong password"}), 401)
+	r.expect(r.local_("POST", "/api/login", map[string]string{"password": "wrong password"}), 400)
 	r.expect(r.local_("POST", "/api/login", map[string]string{"password": "correct horse battery"}), 200)
 	r.expect(r.local_("GET", "/api/overview", nil), 200)
 
@@ -314,153 +315,7 @@ func TestFirstPasswordAndLogin(t *testing.T) {
 	r.expect(r.local_("GET", "/api/overview", nil), 401)
 }
 
-func TestSessionsSurviveARestart(t *testing.T) {
-	st, err := store.Open("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	r := newRigOn(t, st, false, "")
-	r.signIn()
-	r2 := newRigOn(t, st, false, "")
-	r2.cookie = r.cookie
-	r2.expect(r2.local_("GET", "/api/overview", nil), 200)
-}
-
-func TestLoginRateLimit(t *testing.T) {
-	r := newRig(t, false)
-	r.signIn()
-	r.cookie = nil
-	now := time.Now()
-	r.srv.auth.now = func() time.Time { return now }
-	for i := 0; i < 5; i++ {
-		r.expect(r.local_("POST", "/api/login", map[string]string{"password": "wrong password"}), 401)
-	}
-	// Locked: even the right password waits.
-	got := r.expect(r.local_("POST", "/api/login", map[string]string{"password": "correct horse battery"}), 429)
-	if !strings.Contains(got.body["error"].(string), "Wait") {
-		t.Fatalf("message: %v", got.body)
-	}
-	// Another client is not affected.
-	r.expect(r.local_("POST", "/api/login", map[string]string{"password": "correct horse battery"}, func(req *http.Request) { req.RemoteAddr = "192.168.1.6:1" }), 200)
-	r.cookie = nil
-	now = now.Add(31 * time.Second)
-	r.expect(r.local_("POST", "/api/login", map[string]string{"password": "correct horse battery"}), 200)
-}
-
-func TestPasswordResetFromEnvironment(t *testing.T) {
-	st, err := store.Open("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	r := newRigOn(t, st, false, "")
-	r.signIn()
-	old := r.cookie
-
-	r2 := newRigOn(t, st, false, "a password from the env")
-	r2.cookie = old
-	r2.expect(r2.local_("GET", "/api/overview", nil), 401) // everybody signed out
-	r2.cookie = nil
-	r2.expect(r2.local_("POST", "/api/login", map[string]string{"password": "correct horse battery"}), 401)
-	r2.expect(r2.local_("POST", "/api/login", map[string]string{"password": "a password from the env"}), 200)
-	if s := r2.expect(r2.local_("GET", "/api/session", nil), 200); s.body["needsPassword"] != false {
-		t.Fatal("a reset password must count as set")
-	}
-}
-
-func TestCrossSiteRequestsAreRefused(t *testing.T) {
-	r := newRig(t, false)
-	r.expect(r.local_("POST", "/api/setup/password", map[string]string{"password": "correct horse battery"}, noHeader), 403)
-	r.signIn()
-	r.expect(r.local_("PUT", "/api/settings", model.DefaultSettings(), noHeader), 403)
-	evil := func(req *http.Request) { req.Header.Set("Origin", "https://evil.example") }
-	r.expect(r.local_("PUT", "/api/settings", model.DefaultSettings(), evil), 403)
-	r.expect(r.local_("POST", "/api/logout", nil, evil), 403)
-	same := func(req *http.Request) { req.Header.Set("Origin", "http://ci.local:8080") }
-	r.expect(r.local_("PUT", "/api/settings", model.DefaultSettings(), same), 200)
-}
-
-func TestSecurityHeadersAndAssets(t *testing.T) {
-	r := newRig(t, false)
-	got := r.expect(r.local_("GET", "/", nil), 200)
-	for _, h := range []string{"Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options"} {
-		if got.header.Get(h) == "" {
-			t.Errorf("missing %s", h)
-		}
-	}
-	if !strings.Contains(got.header.Get("Content-Security-Policy"), "script-src 'self'") || strings.Contains(got.header.Get("Content-Security-Policy"), "unsafe-inline") {
-		t.Errorf("CSP: %s", got.header.Get("Content-Security-Policy"))
-	}
-	if !strings.Contains(got.raw, `type="module" src="app/main.js"`) {
-		t.Fatal("index.html does not load the app")
-	}
-	js := r.expect(r.local_("GET", "/app/main.js", nil), 200)
-	etag := js.header.Get("ETag")
-	if etag == "" || !strings.Contains(js.header.Get("Cache-Control"), "max-age") || !strings.HasPrefix(js.header.Get("Content-Type"), "text/javascript") {
-		t.Fatalf("asset headers: %v", js.header)
-	}
-	r.expect(r.local_("GET", "/app/main.js", nil, func(req *http.Request) { req.Header.Set("If-None-Match", etag) }), 304)
-	r.expect(r.local_("GET", "/vendor/z-dash/ds.min.js", nil), 200)
-	r.expect(r.local_("GET", "/vendor/z-dash/tools/verify.mjs", nil), 404)
-	r.expect(r.local_("GET", "/healthz", nil), 200)
-	r.expect(r.local_("GET", "/api/nothing", nil), 404)
-}
-
 // --- the tunnel listener ----------------------------------------------------------
-
-func TestTunnelListener(t *testing.T) {
-	r := newRig(t, false)
-	var hooks []string
-	webhook := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		hooks = append(hooks, req.Method+" "+req.URL.Path)
-		w.WriteHeader(http.StatusAccepted)
-	})
-	tun := r.srv.Tunnel(webhook)
-	call := func(method, path string, valid bool, body any) resp {
-		return r.do(tun, method, path, body, func(req *http.Request) {
-			req.Host = "ci.example.com"
-			req.RemoteAddr = "127.0.0.1:4000"
-			if valid {
-				req.Header.Set("Cf-Access-Jwt-Assertion", "valid")
-			}
-		})
-	}
-	// /webhook reaches the webhook handler only, whatever the method, without Access.
-	r.expect(call("POST", "/webhook", false, map[string]string{"x": "y"}), 202)
-	r.expect(call("GET", "/webhook", false, nil), 202)
-	if len(hooks) != 2 {
-		t.Fatalf("webhook calls: %v", hooks)
-	}
-	// Everything else needs a valid Access identity.
-	for _, p := range []string{"/", "/api/session", "/api/overview", "/app/main.js", "/webhook/x", "/healthz"} {
-		if got := call("GET", p, false, nil); got.code != 403 {
-			t.Errorf("%s without Access: %d", p, got.code)
-		}
-	}
-	if len(hooks) != 2 {
-		t.Fatalf("the webhook handler saw other requests: %v", hooks)
-	}
-	// With Access: signed in as that e-mail, without a password.
-	s := r.expect(call("GET", "/api/session", true, nil), 200)
-	if s.body["signedIn"] != true || s.body["email"] != "ada@example.com" || s.body["via"] != "tunnel" || s.body["needsPassword"] != false {
-		t.Fatalf("session through the tunnel: %v", s.body)
-	}
-	r.expect(call("GET", "/api/overview", true, nil), 200)
-	r.expect(call("GET", "/", true, nil), 200)
-	// The first-password and login endpoints are never served here.
-	r.expect(call("POST", "/api/setup/password", true, map[string]string{"password": "correct horse battery"}), 404)
-	r.expect(call("POST", "/api/login", true, map[string]string{"password": "correct horse battery"}), 404)
-	if r.srv.auth.hasPassword() {
-		t.Fatal("a password was set through the tunnel")
-	}
-	// The manifest's return URL is the tunnel's own https address.
-	r.cf.st = TunnelStatus{Configured: true, PublicURL: "https://ci.example.com"}
-	r.expect(call("POST", "/api/github/manifest", true, map[string]string{"org": ""}), 200)
-	if r.gh.returnURL != "https://ci.example.com/github/return" {
-		t.Fatalf("return URL: %s", r.gh.returnURL)
-	}
-}
 
 // --- mutations -------------------------------------------------------------------
 
@@ -712,38 +567,59 @@ func TestAccountsReposAndSettings(t *testing.T) {
 	}
 }
 
+// The tunnel's listener lets only the webhook paths through without
+// Cloudflare Access, each to its own handler.
+func TestWebhooksPassTheTunnel(t *testing.T) {
+	r := newRig(t, false)
+	tun := r.app.TunnelHandler()
+	call := func(method, path string) resp {
+		return r.do(tun, method, path, map[string]string{"x": "y"}, func(req *http.Request) { req.Host = "ci.example.com" })
+	}
+	r.expect(call("POST", "/webhook"), 202)
+	r.expect(call("GET", "/webhook"), 202)
+	if len(r.hooks) != 2 {
+		t.Fatalf("webhook calls: %v", r.hooks)
+	}
+	for _, p := range []string{"/", "/api/session", "/api/overview", "/webhookx"} {
+		if got := call("GET", p); got.code != 403 {
+			t.Errorf("%s without Access: %d", p, got.code)
+		}
+	}
+	if got := call("POST", "/webhook/x"); got.code != 404 {
+		t.Errorf("/webhook/x: %d", got.code)
+	}
+	if len(r.hooks) != 2 {
+		t.Fatalf("the webhook handler saw other requests: %v", r.hooks)
+	}
+}
+
 func TestCloudflareAndGitHub(t *testing.T) {
 	r := newRig(t, false)
 	r.signIn()
 	// GitHub needs the public address of the tunnel.
 	r.expect(r.local_("POST", "/api/github/manifest", map[string]string{"org": ""}), 409)
 
-	r.expect(r.local_("POST", "/api/cloudflare/zones", map[string]string{"apiToken": "bad"}), 502)
-	zones := r.expect(r.local_("POST", "/api/cloudflare/zones", map[string]string{"apiToken": "good-token"}), 200)
-	if len(zones.body["zones"].([]any)) != 1 {
-		t.Fatal("zones")
-	}
-	bad := r.expect(r.local_("POST", "/api/cloudflare/setup", map[string]any{"apiToken": "good-token", "zoneId": "z1", "hostname": "ci..x", "emails": []string{"nope"}}), 400)
-	if bad.body["fields"].(map[string]any)["emails"] == nil || bad.body["fields"].(map[string]any)["hostname"] == nil {
-		t.Fatalf("fields: %v", bad.body)
-	}
-	// An account exists, so its webhooks move to the new address.
+	// An account exists, so its webhooks follow the tunnel's address once it is up.
 	_ = r.st.Tx(func(tx *store.Tx) error {
 		return tx.SaveAccount(model.Account{ID: 1, Owner: "o", OwnerType: "User", Enabled: true})
 	})
-	started := r.expect(r.local_("POST", "/api/cloudflare/setup", map[string]any{"apiToken": "good-token", "zoneId": "z1", "hostname": "ci.example.com", "emails": []string{"Ada@Example.com, bob@example.com"}}), 200)
-	done := waitTask(t, r, started.body["task"].(map[string]any)["id"].(string))
-	if done["state"] != TaskDone {
-		t.Fatalf("setup: %v", done)
+	r.seedTunnel("ci.example.com")
+	r.srv.followTunnel(context.Background())
+	deadline := time.Now().Add(5 * time.Second)
+	for r.gh.publicURL == "" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
 	}
 	if r.gh.publicURL != "https://ci.example.com" {
 		t.Fatalf("SetPublicURL: %q", r.gh.publicURL)
 	}
-	if got := r.cf.Status().Emails; strings.Join(got, ",") != "ada@example.com,bob@example.com" {
-		t.Fatalf("emails: %v", got)
+	// Once moved, a restart does not ask GitHub again.
+	r.gh.publicURL = ""
+	r.srv.webhooksTried = time.Time{}
+	r.srv.followTunnel(context.Background())
+	time.Sleep(50 * time.Millisecond)
+	if r.gh.publicURL != "" {
+		t.Fatal("the webhooks were moved again to the same address")
 	}
-	r.expect(r.local_("PUT", "/api/cloudflare/emails", map[string]any{"emails": []string{}}), 400)
-	r.expect(r.local_("PUT", "/api/cloudflare/emails", map[string]any{"emails": []string{"x@example.com"}}), 200)
 
 	// The manifest's return URL is the address in use; GitHub's way back is a redirect into the page.
 	r.expect(r.local_("POST", "/api/github/manifest", map[string]string{"org": "not a name"}), 400)
@@ -771,16 +647,19 @@ func TestCloudflareAndGitHub(t *testing.T) {
 		t.Fatalf("setup state: %v", setup.body)
 	}
 	r.expect(r.local_("POST", "/api/setup/finish", nil), 200)
-	if s := r.expect(r.local_("GET", "/api/session", nil), 200); s.body["setupDone"] != true {
+	if s := r.expect(r.local_("GET", "/api/setup", nil), 200); s.body["done"] != true {
 		t.Fatal("setup not marked done")
 	}
-	r.expect(r.local_("DELETE", "/api/cloudflare", nil), 200)
+	// The tunnel's own API is the server's.
+	if st := r.expect(r.local_("GET", "/api/cloudflare", nil), 200); st.body["status"].(map[string]any)["publicUrl"] != "https://ci.example.com" {
+		t.Fatalf("tunnel: %v", st.body)
+	}
 }
 
 func TestDemoNeedsNoLogin(t *testing.T) {
 	r := newRig(t, true)
 	s := r.expect(r.local_("GET", "/api/session", nil), 200)
-	if s.body["signedIn"] != true || s.body["demo"] != true || s.body["needsPassword"] != false {
+	if s.body["signedIn"] != true || s.body["open"] != true || s.body["needsPassword"] != false {
 		t.Fatalf("demo session: %v", s.body)
 	}
 	r.expect(r.local_("GET", "/api/overview", nil), 200)
@@ -833,80 +712,3 @@ func TestOverviewAndJobs(t *testing.T) {
 }
 
 // --- live updates ----------------------------------------------------------------
-
-func TestEventsAreCoalesced(t *testing.T) {
-	r := newRig(t, true)
-	ts := httptest.NewServer(r.local)
-	defer ts.Close()
-	res, err := http.Get(ts.URL + "/api/events")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer res.Body.Close()
-	if res.Header.Get("Content-Type") != "text/event-stream" {
-		t.Fatalf("content type %s", res.Header.Get("Content-Type"))
-	}
-	lines := make(chan string, 100)
-	go func() {
-		sc := bufio.NewScanner(res.Body)
-		for sc.Scan() {
-			lines <- sc.Text()
-		}
-		close(lines)
-	}()
-	// Wait until the stream is registered, then send a burst.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		r.srv.hub.mu.Lock()
-		n := len(r.srv.hub.clients)
-		r.srv.hub.mu.Unlock()
-		if n == 1 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("stream not registered")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	for i := 0; i < 20; i++ {
-		r.srv.Changed()
-	}
-	r.srv.hub.notify("tasks")
-	var events []string
-	timeout := time.After(coalesce*3 + 500*time.Millisecond)
-loop:
-	for {
-		select {
-		case l, ok := <-lines:
-			if !ok {
-				break loop
-			}
-			if strings.HasPrefix(l, "data: ") {
-				events = append(events, strings.TrimPrefix(l, "data: "))
-			}
-		case <-timeout:
-			break loop
-		}
-	}
-	if len(events) != 1 || events[0] != `{"topics":["state","tasks"]}` {
-		t.Fatalf("a burst should be one message: %v", events)
-	}
-	// The engine's changes reach the stream too.
-	r.srv.d.Engine.OnChange()
-	select {
-	case l := <-lines:
-		for !strings.HasPrefix(l, "data: ") {
-			l = <-lines
-		}
-		if !strings.Contains(l, "state") {
-			t.Fatalf("engine change: %s", l)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("no message after an engine change")
-	}
-}
-
-func TestEventsNeedASession(t *testing.T) {
-	r := newRig(t, false)
-	r.expect(r.local_("GET", "/api/events", nil), 401)
-}

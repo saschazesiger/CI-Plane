@@ -11,6 +11,7 @@ import (
 
 	"github.com/saschazesiger/CI-Plane/internal/model"
 	"github.com/saschazesiger/CI-Plane/internal/store"
+	"github.com/saschazesiger/Z-Dash/server"
 )
 
 // --- accounts and repositories -----------------------------------------------
@@ -269,7 +270,7 @@ func (s *Server) runnerManifest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: msg, Fields: map[string]string{"org": msg}})
 		return
 	}
-	form, err := s.d.GitHub.RunnerManifest(req.Org, origin(r)+"/github/return")
+	form, err := s.d.GitHub.RunnerManifest(req.Org, server.Origin(r)+"/github/return")
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
 		return
@@ -486,166 +487,9 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 
 // --- Cloudflare --------------------------------------------------------------
 
-func (s *Server) publicURL() string {
-	if s.d.Cloudflare == nil {
-		return ""
-	}
-	return s.d.Cloudflare.Status().PublicURL
-}
-
-func (s *Server) cloudflareStatus(w http.ResponseWriter, r *http.Request) {
-	if s.d.Cloudflare == nil {
-		writeError(w, http.StatusServiceUnavailable, "Cloudflare is not available.")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":   s.d.Cloudflare.Status(),
-		"tokenUrl": s.d.Cloudflare.TokenURL(),
-		"task":     s.tasks.latest("cloudflare", "tunnel"),
-	})
-}
-
-func (s *Server) cloudflareZones(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		APIToken string `json:"apiToken"`
-	}
-	if !decode(w, r, &req) {
-		return
-	}
-	req.APIToken = strings.TrimSpace(req.APIToken)
-	if req.APIToken == "" {
-		msg := "Paste the API token you created on Cloudflare."
-		writeJSON(w, http.StatusBadRequest, apiError{Error: msg, Fields: map[string]string{"apiToken": msg}})
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	zones, err := s.d.Cloudflare.Zones(ctx, req.APIToken)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, apiError{Error: err.Error(), Fields: map[string]string{"apiToken": err.Error()}})
-		return
-	}
-	if zones == nil {
-		zones = []Zone{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"zones": zones})
-}
-
-func cleanEmails(in []string) ([]string, string) {
-	out := []string{}
-	seen := map[string]bool{}
-	for _, e := range in {
-		for _, part := range strings.FieldsFunc(e, func(r rune) bool { return r == ',' || r == ';' || r == ' ' || r == '\n' }) {
-			part = strings.ToLower(strings.TrimSpace(part))
-			if part == "" || seen[part] {
-				continue
-			}
-			if !emailRe.MatchString(part) {
-				return nil, part + " is not an e-mail address."
-			}
-			seen[part] = true
-			out = append(out, part)
-		}
-	}
-	if len(out) == 0 {
-		return nil, "Enter at least one e-mail address: only these people may sign in through Cloudflare."
-	}
-	if len(out) > 100 {
-		return nil, "Enter at most 100 addresses."
-	}
-	return out, ""
-}
-
-func (s *Server) cloudflareSetup(w http.ResponseWriter, r *http.Request) {
-	var req TunnelSetup
-	if !decode(w, r, &req) {
-		return
-	}
-	req.APIToken = strings.TrimSpace(req.APIToken)
-	req.Hostname = strings.ToLower(strings.TrimSpace(req.Hostname))
-	errs := map[string]string{}
-	st := s.d.Cloudflare.Status()
-	if req.APIToken == "" && !st.HasToken {
-		errs["apiToken"] = "Paste the API token you created on Cloudflare."
-	}
-	if req.ZoneID == "" {
-		errs["zoneId"] = "Choose the domain."
-	}
-	if !hostnRe.MatchString(req.Hostname) {
-		errs["hostname"] = "Use letters, digits and dashes for the subdomain, like ci."
-	}
-	emails, msg := cleanEmails(req.Emails)
-	if msg != "" {
-		errs["emails"] = msg
-	}
-	if len(errs) > 0 {
-		writeJSON(w, http.StatusBadRequest, apiError{Error: firstOf(errs), Fields: errs})
-		return
-	}
-	req.Emails = emails
-	task, _ := s.tasks.start("cloudflare", "tunnel", "Set up the tunnel to "+req.Hostname, 15*time.Minute,
-		func(ctx context.Context, progress func(string)) (string, error) {
-			defer s.hub.notify("state")
-			if err := s.d.Cloudflare.Setup(ctx, req, progress); err != nil {
-				return "", err
-			}
-			pub := s.d.Cloudflare.Status().PublicURL
-			if pub == "" {
-				pub = "https://" + req.Hostname
-			}
-			if s.d.GitHub != nil && s.hasAccounts() {
-				progress("Pointing the webhooks of the GitHub Apps to " + pub + "/webhook")
-				if err := s.d.GitHub.SetPublicURL(ctx, pub); err != nil {
-					return "", fmt.Errorf("the tunnel works, but the GitHub Apps still send their webhooks to the old address: %v. Run the setup again to retry", err)
-				}
-			}
-			return "The tunnel is up: " + pub + " asks for a Cloudflare login and /webhook answers.", nil
-		})
-	writeJSON(w, http.StatusOK, map[string]any{"task": task})
-}
-
-func (s *Server) hasAccounts() bool {
-	n := 0
-	_ = s.d.Store.View(func(tx *store.Tx) error {
-		as, err := tx.Accounts()
-		n = len(as)
-		return err
-	})
-	return n > 0
-}
-
-func (s *Server) cloudflareEmails(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Emails []string `json:"emails"`
-	}
-	if !decode(w, r, &req) {
-		return
-	}
-	emails, msg := cleanEmails(req.Emails)
-	if msg != "" {
-		writeJSON(w, http.StatusBadRequest, apiError{Error: msg, Fields: map[string]string{"emails": msg}})
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
-	defer cancel()
-	if err := s.d.Cloudflare.SetEmails(ctx, emails); err != nil {
-		writeJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
-		return
-	}
-	s.hub.notify("state")
-	writeJSON(w, http.StatusOK, map[string]any{"emails": emails})
-}
-
-func (s *Server) cloudflareRemove(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-	defer cancel()
-	if err := s.d.Cloudflare.Remove(ctx); err != nil {
-		writeJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
-		return
-	}
-	s.hub.notify("state")
-	writeJSON(w, http.StatusOK, map[string]string{"message": "The tunnel, its DNS record and the Access applications were deleted."})
-}
+// publicURL is the tunnel's address; the Z-Dash server sets the tunnel up
+// and serves its settings (/api/cloudflare).
+func (s *Server) publicURL() string { return s.d.App.Tunnel().PublicURL() }
 
 // --- GitHub ------------------------------------------------------------------
 
@@ -669,7 +513,7 @@ func (s *Server) githubManifest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "Set up the Cloudflare tunnel first: GitHub needs a public address to send jobs to.")
 		return
 	}
-	form, err := s.d.GitHub.Manifest(req.Org, pub, origin(r)+"/github/return")
+	form, err := s.d.GitHub.Manifest(req.Org, pub, server.Origin(r)+"/github/return")
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
 		return
@@ -766,12 +610,10 @@ func (s *Server) setupState(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	steps := map[string]bool{"password": s.d.Demo || s.auth.hasPassword() || via(r).Via == "tunnel",
+	steps := map[string]bool{"password": s.d.Demo || s.d.App.HasPassword() || server.Who(r).Via == "tunnel",
 		"cloudflare": false, "github": false, "worker": false, "job": false}
-	if s.d.Cloudflare != nil {
-		st := s.d.Cloudflare.Status()
-		steps["cloudflare"] = st.Configured && st.Verified
-	}
+	st := s.d.App.Tunnel().Status()
+	steps["cloudflare"] = st.Configured && st.Verified
 	for _, a := range sn.accounts {
 		if a.InstallationID != 0 {
 			steps["github"] = true
@@ -791,6 +633,6 @@ func (s *Server) setupFinish(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	s.hub.notify("state")
+	s.d.App.Notify("state")
 	writeJSON(w, http.StatusOK, map[string]bool{"done": true})
 }

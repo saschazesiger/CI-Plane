@@ -16,8 +16,13 @@
 package main
 
 import (
+	"crypto/rand"
+
+	"github.com/saschazesiger/CI-Plane/web"
+	"github.com/saschazesiger/Z-Dash/server"
+	zsecret "github.com/saschazesiger/Z-Dash/server/secret"
+
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -116,7 +121,22 @@ func run(logger *log.Logger) error {
 		extra   http.Handler
 		webhook http.Handler
 		box     *secret.Box
+		tunnel  server.Tunnel // nil: the server's real Cloudflare tunnel
+		sealer  server.Sealer
+		app     *server.App
 	)
+	// publicURL is the tunnel's address while it is connected; the relay
+	// asks for it long after the server is built.
+	publicURL := func() string {
+		if app == nil {
+			return ""
+		}
+		if st := app.Tunnel().Status(); st.Connected {
+			return st.PublicURL
+		}
+		return ""
+	}
+	dataDir := cfg.data
 	if cfg.demo {
 		d, err := demo.New(demo.Options{Seed: cfg.seed, Speed: cfg.speed, Freeze: cfg.freeze, Fresh: cfg.demoFresh, Logf: logger.Printf})
 		if err != nil {
@@ -124,10 +144,22 @@ func run(logger *log.Logger) error {
 		}
 		defer d.Close()
 		st, eng = d.Store, d.Engine
-		svc = Services{Workers: d.Workers, GitHub: d.GitHub, Cloudflare: d.Cloudflare}
+		svc = Services{Workers: d.Workers, GitHub: d.GitHub}
 		relay = d.Relay
 		runners = append(runners, d.Run)
 		extra = d.Pages
+		tunnel = d.Cloudflare
+		// The demo keeps nothing: a fresh directory for the server and a
+		// key of its own.
+		if dataDir, err = os.MkdirTemp("", "ci-plane-demo-"); err != nil {
+			return err
+		}
+		defer os.RemoveAll(dataDir)
+		key := make([]byte, 32)
+		_, _ = rand.Read(key)
+		if sealer, err = zsecret.New(key); err != nil {
+			return err
+		}
 	} else {
 		if err := os.MkdirAll(cfg.data, 0o700); err != nil {
 			return fmt.Errorf("create the data directory %s: %w", cfg.data, err)
@@ -139,7 +171,17 @@ func run(logger *log.Logger) error {
 		if box, err = secret.Load(cfg.data); err != nil {
 			return err
 		}
-		svc, err = buildServices(st, box, originOf(cfg.tunnelListen), logger.Printf)
+		// The same key as box (CI_PLANE_SECRET_KEY or secret.key), for the
+		// server's own secrets.
+		if sealer, err = zsecret.Load(cfg.data, os.Getenv("CI_PLANE_SECRET_KEY")); err != nil {
+			return err
+		}
+		if moved, err := migrateTunnel(st, box, sealer, "http://"+cfg.tunnelListen); err != nil {
+			return fmt.Errorf("move the tunnel's settings to the new format: %w", err)
+		} else if moved {
+			logger.Printf("The tunnel's settings were moved to the format of the Z-Dash server")
+		}
+		svc, err = buildServices(st, box, publicURL, logger.Printf)
 		if err != nil {
 			return err
 		}
@@ -151,81 +193,55 @@ func run(logger *log.Logger) error {
 		runners = append(runners, svc.Run...)
 	}
 
+	app, err = server.New(server.Config{
+		Name:          "CI-Plane",
+		Slug:          "ci-plane",
+		Version:       version,
+		DataDir:       dataDir,
+		Listen:        cfg.listen,
+		TunnelListen:  cfg.tunnelListen,
+		AdminPassword: cfg.adminPassword,
+		Open:          cfg.demo && !cfg.demoFresh,
+		// GitHub delivers its webhooks without a login; they carry its
+		// signature, and runs of the relay workflow their OIDC token.
+		Bypass:        map[string]http.Handler{"/webhook": api.Webhooks(webhook, relay)},
+		BypassLabel:   "webhook",
+		AccessSession: "24h",
+		Assets:        web.FS,
+		// The GitHub App manifest is a form posted to github.com.
+		CSP:    map[string]string{"form-action": "https://github.com"},
+		KV:     store.ServerKV{St: st},
+		Sealer: sealer,
+		Tunnel: tunnel,
+		Logf:   logger.Printf,
+	})
+	if err != nil {
+		return err
+	}
 	srv := api.New(api.Deps{
-		Store: st, Engine: eng, Workers: svc.Workers, GitHub: svc.GitHub, Cloudflare: svc.Cloudflare, Relay: relay, Box: box,
-		Hosts:   strings.Split(env("CI_PLANE_HOSTS", ""), ","),
-		Version: version, Demo: cfg.demo && !cfg.demoFresh, ResetPassword: cfg.adminPassword, Extra: extra,
-		Logf: logger.Printf,
+		App: app, Store: st, Engine: eng, Workers: svc.Workers, GitHub: svc.GitHub, Relay: relay, Box: box,
+		Version: version, Demo: cfg.demo && !cfg.demoFresh, Extra: extra, Logf: logger.Printf,
 	})
 	defer srv.Close()
 	runners = append(runners, srv.Run)
-
-	local := &http.Server{Addr: cfg.listen, Handler: srv.Local(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: time.Minute, IdleTimeout: 2 * time.Minute, ErrorLog: logger}
-	tunnel := &http.Server{Addr: cfg.tunnelListen, Handler: srv.Tunnel(webhook), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: time.Minute, IdleTimeout: 2 * time.Minute, ErrorLog: logger}
-
-	lnLocal, err := net.Listen("tcp", cfg.listen)
-	if err != nil {
-		return fmt.Errorf("listen on %s (CI_PLANE_LISTEN): %w", cfg.listen, err)
-	}
-	var lnTunnel net.Listener
-	if !cfg.demo {
-		if lnTunnel, err = net.Listen("tcp", cfg.tunnelListen); err != nil {
-			return fmt.Errorf("listen on %s (CI_PLANE_TUNNEL_LISTEN): %w", cfg.tunnelListen, err)
-		}
-	}
-
-	errc := make(chan error, 2)
-	go func() { errc <- serve(local, lnLocal) }()
-	if lnTunnel != nil {
-		go func() { errc <- serve(tunnel, lnTunnel) }()
-	}
 	for _, r := range runners {
 		go r(ctx)
 	}
-	banner(logger, cfg, lnLocal.Addr())
-
-	select {
-	case <-ctx.Done():
-	case err = <-errc:
-	}
+	banner(logger, cfg)
+	err = app.Run(ctx)
 	logger.Printf("Shutting down ...")
-	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	srv.Close() // ends the live streams, which would hold Shutdown up
-	_ = local.Shutdown(shutdown)
-	if lnTunnel != nil {
-		_ = tunnel.Shutdown(shutdown)
-	}
 	stop()
 	// Give the engine a moment to finish the step it is in.
 	time.Sleep(200 * time.Millisecond)
 	return err
 }
 
-// originOf is the URL cloudflared uses to reach the tunnel listener.
-func originOf(listen string) string {
-	host, port, err := net.SplitHostPort(listen)
-	if err != nil {
-		return "http://127.0.0.1:8081"
-	}
-	if host == "" || host == "0.0.0.0" || host == "::" {
-		host = "127.0.0.1"
-	}
-	return "http://" + net.JoinHostPort(host, port)
-}
-
-func serve(s *http.Server, ln net.Listener) error {
-	if err := s.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	return nil
-}
-
 // banner tells the person who started CI-Plane where to go next.
-func banner(logger *log.Logger, cfg config, addr net.Addr) {
-	url := "http://localhost:" + portOf(addr)
+func banner(logger *log.Logger, cfg config) {
+	port := portOf(cfg.listen)
+	url := "http://localhost:" + port
 	if host, _, _ := net.SplitHostPort(cfg.listen); host != "" && host != "0.0.0.0" && host != "::" {
-		url = "http://" + net.JoinHostPort(host, portOf(addr))
+		url = "http://" + net.JoinHostPort(host, port)
 	}
 	lines := []string{"", "  CI-Plane " + version}
 	switch {
@@ -238,7 +254,7 @@ func banner(logger *log.Logger, cfg config, addr net.Addr) {
 	}
 	open := "  Open " + url + " in your browser"
 	if host, _, _ := net.SplitHostPort(cfg.listen); host == "" || host == "0.0.0.0" || host == "::" {
-		open += " (from another machine: http://<this host's address>:" + portOf(addr) + ")"
+		open += " (from another machine: http://<this host's address>:" + port + ")"
 	}
 	lines = append(lines, "", open+".", "")
 	for _, l := range lines {
@@ -246,8 +262,8 @@ func banner(logger *log.Logger, cfg config, addr net.Addr) {
 	}
 }
 
-func portOf(addr net.Addr) string {
-	_, port, err := net.SplitHostPort(addr.String())
+func portOf(listen string) string {
+	_, port, err := net.SplitHostPort(listen)
 	if err != nil {
 		return "8080"
 	}

@@ -1,104 +1,82 @@
 package api
 
 import (
+	"github.com/saschazesiger/Z-Dash/server"
+
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
-	"net"
 	"net/http"
 	"net/url"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/saschazesiger/CI-Plane/internal/engine"
 	"github.com/saschazesiger/CI-Plane/internal/secret"
 	"github.com/saschazesiger/CI-Plane/internal/store"
-	"github.com/saschazesiger/CI-Plane/web"
 )
 
 // Deps is what the server is built from.
 type Deps struct {
-	Store      *store.Store
-	Engine     *engine.Engine
-	Workers    Workers
-	GitHub     GitHub
-	Cloudflare Cloudflare
-	Relay      Relay       // runs the runners of the pools; may be nil
-	Box        *secret.Box // reserved for secrets the API itself may store later; may be nil
-	Version    string
+	// App is the Z-Dash server CI-Plane runs on: it serves the interface,
+	// signs people in (the password locally, Cloudflare Access through the
+	// tunnel), sets up the tunnel and carries the live updates. New
+	// registers CI-Plane's routes on it.
+	App     *server.App
+	Store   *store.Store
+	Engine  *engine.Engine
+	Workers Workers
+	GitHub  GitHub
+	Relay   Relay       // runs the runners of the pools; may be nil
+	Box     *secret.Box // reserved for secrets the API itself may store later; may be nil
+	Version string
 
-	// Demo skips the login: every visitor is signed in.
+	// Demo marks the demo: the setup assistant counts the password as done.
 	Demo bool
-	// ResetPassword, if set, becomes the admin password at start
-	// (CI_PLANE_ADMIN_PASSWORD) and signs everybody out.
-	ResetPassword string
-	// Hosts are extra names the local listener answers to (CI_PLANE_HOSTS).
-	Hosts []string
-	// Assets is the web interface; nil means the embedded one.
-	Assets fs.FS
-	// Extra is mounted under /demo/ on both listeners (the pages that stand
-	// in for GitHub in demo mode); nil in production.
+	// Extra is mounted under /demo/ (the pages that stand in for GitHub in
+	// demo mode); nil in production.
 	Extra http.Handler
 	// Logf receives diagnostics; nil discards them.
 	Logf func(format string, args ...any)
 }
 
-// Server serves the interface and its API.
+// Server is CI-Plane's API on the Z-Dash server.
 type Server struct {
 	d      Deps
-	auth   *auth
-	hub    *hub
 	tasks  *tasks
-	assets *assets
 	ctx    context.Context // lives as long as the server; tasks run in it
 	cancel context.CancelFunc
 
 	syncMu sync.Mutex // one GitHub sync at a time
+
+	webhooksTried time.Time // the last time followTunnel asked GitHub; it waits a minute between tries
 }
 
-// New builds a server. It hooks itself to the engine's OnChange (keeping
-// a handler that was set before) for live updates.
+// New registers CI-Plane's routes on d.App. It hooks itself to the
+// engine's OnChange (keeping a handler that was set before) for live
+// updates.
 func New(d Deps) *Server {
 	if d.Logf == nil {
 		d.Logf = func(string, ...any) {}
-	}
-	if d.Assets == nil {
-		d.Assets = web.FS
 	}
 	if d.Version == "" {
 		d.Version = "dev"
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Server{d: d, hub: newHub(), ctx: ctx, cancel: cancel}
-	s.tasks = newTasks(ctx, func() { s.hub.notify("tasks") })
-	s.auth = newAuth(d.Store, d.Logf)
-	if d.ResetPassword != "" {
-		if err := s.auth.setPassword(d.ResetPassword); err != nil {
-			d.Logf("CI_PLANE_ADMIN_PASSWORD: %v", err)
-		} else {
-			s.auth.dropSessions("")
-			d.Logf("The admin password was set from CI_PLANE_ADMIN_PASSWORD; everybody was signed out")
-		}
-	}
-	a, err := loadAssets(d.Assets)
-	if err != nil {
-		d.Logf("web interface: %v", err)
-	}
-	s.assets = a
+	s := &Server{d: d, ctx: ctx, cancel: cancel}
+	s.tasks = newTasks(ctx, func() { d.App.Notify("tasks") })
 	if d.Engine != nil {
 		prev := d.Engine.OnChange
 		d.Engine.OnChange = func() {
 			if prev != nil {
 				prev()
 			}
-			s.hub.notify("state")
+			d.App.Notify("state")
 		}
 	}
+	s.routes()
 	return s
 }
 
@@ -114,270 +92,133 @@ func (s *Server) Run(ctx context.Context) {
 		case <-s.ctx.Done():
 			return
 		case <-t.C:
-			s.hub.notify("live")
+			s.d.App.Notify("live")
+			s.followTunnel(ctx)
 		}
 	}
 }
 
-// Close stops running tasks and live streams.
-func (s *Server) Close() {
-	s.cancel()
-	s.hub.close()
+// followTunnel points the webhooks of the GitHub Apps at the tunnel's
+// address when it changed: the Z-Dash server sets the tunnel up (and
+// repairs or moves it) on its own, so CI-Plane follows what it reports
+// rather than a step of its own setup. The address the webhooks point at is
+// kept, so a restart does not ask GitHub again.
+func (s *Server) followTunnel(ctx context.Context) {
+	st := s.d.App.Tunnel().Status()
+	if s.d.GitHub == nil || !st.Configured || !st.Verified || st.PublicURL == "" || st.Job.Running {
+		return
+	}
+	var have string
+	_ = s.d.Store.View(func(tx *store.Tx) error {
+		b, err := tx.Get("github.webhookBase")
+		have = string(b)
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
+		return err
+	})
+	if have == st.PublicURL {
+		return
+	}
+	if !s.hasAccounts() {
+		_ = s.d.Store.Tx(func(tx *store.Tx) error { return tx.Set("github.webhookBase", []byte(st.PublicURL)) })
+		return
+	}
+	if time.Since(s.webhooksTried) < time.Minute {
+		return
+	}
+	s.webhooksTried = time.Now()
+	pub := st.PublicURL
+	s.tasks.start("github", "webhooks", "Point the webhooks of the GitHub Apps to "+pub+"/webhook", 5*time.Minute,
+		func(ctx context.Context, progress func(string)) (string, error) {
+			progress("Pointing the webhooks of the GitHub Apps to " + pub + "/webhook")
+			if err := s.d.GitHub.SetPublicURL(ctx, pub); err != nil {
+				return "", fmt.Errorf("the GitHub Apps still send their webhooks to the old address: %v. CI-Plane tries again in a moment", err)
+			}
+			if err := s.d.Store.Tx(func(tx *store.Tx) error { return tx.Set("github.webhookBase", []byte(pub)) }); err != nil {
+				return "", err
+			}
+			return "The GitHub Apps send their webhooks to " + pub + "/webhook.", nil
+		})
 }
+
+// Close stops running tasks.
+func (s *Server) Close() { s.cancel() }
 
 // Changed tells the interface that something it shows changed.
-func (s *Server) Changed() { s.hub.notify("state") }
+func (s *Server) Changed() { s.d.App.Notify("state") }
 
-// identity says who sent a request.
-type identity struct {
-	Via   string // "local" or "tunnel"
-	Email string // from Cloudflare Access; empty on the local listener
-}
-
-type ctxKey int
-
-const identityKey ctxKey = 1
-
-func via(r *http.Request) identity {
-	if id, ok := r.Context().Value(identityKey).(identity); ok {
-		return id
-	}
-	return identity{Via: "local"}
-}
-
-// Local is the handler of the listener on the local network: interface, API,
-// first-run password, health check.
-func (s *Server) Local() http.Handler {
-	mux := http.NewServeMux()
-	s.routes(mux)
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		io.WriteString(w, "ok\n")
-	})
-	mux.HandleFunc("POST /api/login", s.guard(s.login))
-	mux.HandleFunc("POST /api/setup/password", s.guard(s.firstPassword))
-	return s.localHost(s.headers(mux))
-}
-
-// localHost refuses requests whose Host header is a public-looking name.
-// That is what a DNS rebinding attack looks like: a website the admin has
-// open points its own name at this address to talk to CI-Plane as if it were
-// the same site. Addresses, single-label and private names are fine; other
-// names are listed in CI_PLANE_HOSTS.
-func (s *Server) localHost(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.d.Demo && !localName(r.Host, s.d.Hosts) {
-			http.Error(w, "CI-Plane does not know the name "+strconv.Quote(r.Host)+". Open it by its IP address, or add the name to the environment variable CI_PLANE_HOSTS.", http.StatusForbidden)
-			return
-		}
-		h.ServeHTTP(w, r)
-	})
-}
-
-func localName(hostport string, extra []string) bool {
-	host := hostport
-	if h, _, err := net.SplitHostPort(hostport); err == nil {
-		host = h
-	}
-	host = strings.ToLower(strings.TrimSuffix(strings.Trim(host, "[]"), "."))
-	if host == "" || net.ParseIP(host) != nil || !strings.Contains(host, ".") {
-		return host != ""
-	}
-	for _, suffix := range []string{".localhost", ".local", ".lan", ".internal", ".home.arpa", ".home", ".intranet", ".ts.net"} {
-		if strings.HasSuffix(host, suffix) {
-			return true
-		}
-	}
-	for _, e := range extra {
-		if strings.EqualFold(strings.TrimSpace(e), host) {
-			return true
-		}
-	}
-	return false
-}
-
-// Tunnel is the handler of the listener that only cloudflared reaches.
-// /webhook goes to the webhook handler and nowhere else; every other request
-// needs a valid Cloudflare Access identity, which signs the user in.
-func (s *Server) Tunnel(webhook http.Handler) http.Handler {
-	mux := http.NewServeMux()
-	s.routes(mux)
-	inner := s.headers(mux)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/webhook" {
-			if webhook == nil {
-				http.Error(w, "webhooks are not set up", http.StatusServiceUnavailable)
-				return
-			}
-			webhook.ServeHTTP(w, r)
-			return
-		}
-		// Runs of the relay workflow collect their runner here. It lives
-		// below /webhook because Cloudflare Access lets that path through
-		// without a login; the run's OIDC token is its proof.
-		if r.URL.Path == "/webhook/relay" {
-			if s.d.Relay == nil {
-				http.Error(w, "pools of other providers are not available here", http.StatusServiceUnavailable)
-				return
-			}
-			s.d.Relay.ServeHTTP(w, r)
-			return
-		}
-		var email string
-		var err error
-		if s.d.Cloudflare != nil {
-			email, err = s.d.Cloudflare.Authenticate(r)
-		} else {
-			err = errors.New("Cloudflare is not set up")
-		}
-		if err != nil || email == "" {
-			s.d.Logf("tunnel: refused %s %q: %v", r.Method, r.URL.Path, err)
-			setSecurityHeaders(w)
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.WriteHeader(http.StatusForbidden)
-			io.WriteString(w, "Forbidden: sign in through Cloudflare Access with an allowed e-mail address.\n")
-			return
-		}
-		ctx := context.WithValue(r.Context(), identityKey, identity{Via: "tunnel", Email: email})
-		inner.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-// routes registers what both listeners serve.
-func (s *Server) routes(mux *http.ServeMux) {
-	mux.Handle("/", s.assets) // GET and HEAD only, checked by the handler
-	mux.HandleFunc("GET /github/return", s.githubReturn)
+// routes registers CI-Plane's API. Every /api/ route is for signed-in people
+// and passes the server's CSRF guard; /github/return and /demo/ are pages a
+// browser reaches by a navigation, without a session.
+func (s *Server) routes() {
+	app := s.d.App
+	app.Public("GET /github/return", s.githubReturn)
 	if s.d.Extra != nil {
-		mux.Handle("/demo/", s.d.Extra)
+		app.Public("/demo/", s.d.Extra.ServeHTTP)
 	}
 
-	mux.HandleFunc("GET /api/session", s.session)
-	mux.HandleFunc("POST /api/logout", s.guard(s.logout))
-	mux.HandleFunc("GET /api/events", s.private(s.events))
-	mux.HandleFunc("POST /api/password", s.private(s.changePassword))
+	app.HandleFunc("GET /api/setup", s.setupState)
+	app.HandleFunc("POST /api/setup/finish", s.setupFinish)
 
-	mux.HandleFunc("GET /api/setup", s.private(s.setupState))
-	mux.HandleFunc("POST /api/setup/finish", s.private(s.setupFinish))
+	app.HandleFunc("GET /api/overview", s.overview)
+	app.HandleFunc("GET /api/pools", s.listPools)
+	app.HandleFunc("POST /api/pools", s.addPool)
+	app.HandleFunc("PATCH /api/pools/{id}", s.editPool)
+	app.HandleFunc("DELETE /api/pools/{id}", s.removePool)
+	app.HandleFunc("POST /api/pools/{id}/check", s.checkPool)
+	app.HandleFunc("POST /api/pools/{id}/resume", s.resumePool)
+	app.HandleFunc("GET /api/jobs", s.listJobs)
+	app.HandleFunc("GET /api/jobs/{id}", s.getJob)
 
-	mux.HandleFunc("GET /api/overview", s.private(s.overview))
-	mux.HandleFunc("GET /api/pools", s.private(s.listPools))
-	mux.HandleFunc("POST /api/pools", s.private(s.addPool))
-	mux.HandleFunc("PATCH /api/pools/{id}", s.private(s.editPool))
-	mux.HandleFunc("DELETE /api/pools/{id}", s.private(s.removePool))
-	mux.HandleFunc("POST /api/pools/{id}/check", s.private(s.checkPool))
-	mux.HandleFunc("POST /api/pools/{id}/resume", s.private(s.resumePool))
-	mux.HandleFunc("GET /api/jobs", s.private(s.listJobs))
-	mux.HandleFunc("GET /api/jobs/{id}", s.private(s.getJob))
+	app.HandleFunc("GET /api/workers", s.listWorkers)
+	app.HandleFunc("GET /api/workers/commands", s.workerCommands)
+	app.HandleFunc("POST /api/workers/check", s.checkWorker)
+	app.HandleFunc("POST /api/workers", s.addWorker)
+	app.HandleFunc("POST /api/workers/order", s.orderWorkers)
+	app.HandleFunc("GET /api/workers/{id}", s.getWorker)
+	app.HandleFunc("PATCH /api/workers/{id}", s.editWorker)
+	app.HandleFunc("DELETE /api/workers/{id}", s.removeWorker)
+	app.HandleFunc("POST /api/workers/{id}/cleanup", s.cleanupWorker)
+	app.HandleFunc("POST /api/workers/{id}/prepare", s.prepareWorker)
 
-	mux.HandleFunc("GET /api/workers", s.private(s.listWorkers))
-	mux.HandleFunc("GET /api/workers/commands", s.private(s.workerCommands))
-	mux.HandleFunc("POST /api/workers/check", s.private(s.checkWorker))
-	mux.HandleFunc("POST /api/workers", s.private(s.addWorker))
-	mux.HandleFunc("POST /api/workers/order", s.private(s.orderWorkers))
-	mux.HandleFunc("GET /api/workers/{id}", s.private(s.getWorker))
-	mux.HandleFunc("PATCH /api/workers/{id}", s.private(s.editWorker))
-	mux.HandleFunc("DELETE /api/workers/{id}", s.private(s.removeWorker))
-	mux.HandleFunc("POST /api/workers/{id}/cleanup", s.private(s.cleanupWorker))
-	mux.HandleFunc("POST /api/workers/{id}/prepare", s.private(s.prepareWorker))
+	app.HandleFunc("GET /api/accounts", s.listAccounts)
+	app.HandleFunc("PATCH /api/accounts/{id}", s.editAccount)
+	app.HandleFunc("DELETE /api/accounts/{id}", s.removeAccount)
+	app.HandleFunc("POST /api/accounts/{id}/sync", s.syncAccount)
+	app.HandleFunc("GET /api/runner-accounts", s.listRunnerAccounts)
+	app.HandleFunc("POST /api/runner-accounts/manifest", s.runnerManifest)
+	app.HandleFunc("DELETE /api/runner-accounts/{id}", s.removeRunnerAccount)
+	app.HandleFunc("POST /api/runner-accounts/{id}/sync", s.syncRunnerAccount)
+	app.HandleFunc("PATCH /api/repos/{id}", s.editRepo)
+	app.HandleFunc("DELETE /api/repos/{id}", s.removeRepo)
 
-	mux.HandleFunc("GET /api/accounts", s.private(s.listAccounts))
-	mux.HandleFunc("PATCH /api/accounts/{id}", s.private(s.editAccount))
-	mux.HandleFunc("DELETE /api/accounts/{id}", s.private(s.removeAccount))
-	mux.HandleFunc("POST /api/accounts/{id}/sync", s.private(s.syncAccount))
-	mux.HandleFunc("GET /api/runner-accounts", s.private(s.listRunnerAccounts))
-	mux.HandleFunc("POST /api/runner-accounts/manifest", s.private(s.runnerManifest))
-	mux.HandleFunc("DELETE /api/runner-accounts/{id}", s.private(s.removeRunnerAccount))
-	mux.HandleFunc("POST /api/runner-accounts/{id}/sync", s.private(s.syncRunnerAccount))
-	mux.HandleFunc("PATCH /api/repos/{id}", s.private(s.editRepo))
-	mux.HandleFunc("DELETE /api/repos/{id}", s.private(s.removeRepo))
+	app.HandleFunc("GET /api/settings", s.getSettings)
+	app.HandleFunc("POST /api/settings/validate", s.validateSettings)
+	app.HandleFunc("PUT /api/settings", s.saveSettings)
 
-	mux.HandleFunc("GET /api/settings", s.private(s.getSettings))
-	mux.HandleFunc("POST /api/settings/validate", s.private(s.validateSettings))
-	mux.HandleFunc("PUT /api/settings", s.private(s.saveSettings))
+	app.HandleFunc("POST /api/github/manifest", s.githubManifest)
+	app.HandleFunc("POST /api/github/complete", s.githubComplete)
+	app.HandleFunc("POST /api/github/installed", s.githubInstalled)
+	app.HandleFunc("POST /api/github/sync", s.githubSync)
 
-	mux.HandleFunc("GET /api/cloudflare", s.private(s.cloudflareStatus))
-	mux.HandleFunc("POST /api/cloudflare/zones", s.private(s.cloudflareZones))
-	mux.HandleFunc("POST /api/cloudflare/setup", s.private(s.cloudflareSetup))
-	mux.HandleFunc("PUT /api/cloudflare/emails", s.private(s.cloudflareEmails))
-	mux.HandleFunc("DELETE /api/cloudflare", s.private(s.cloudflareRemove))
-
-	mux.HandleFunc("POST /api/github/manifest", s.private(s.githubManifest))
-	mux.HandleFunc("POST /api/github/complete", s.private(s.githubComplete))
-	mux.HandleFunc("POST /api/github/installed", s.private(s.githubInstalled))
-	mux.HandleFunc("POST /api/github/sync", s.private(s.githubSync))
-
-	mux.HandleFunc("GET /api/tasks", s.private(s.listTasks))
-	mux.HandleFunc("GET /api/tasks/{id}", s.private(s.getTask))
-
-	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotFound, "This API address does not exist.")
-	})
+	app.HandleFunc("GET /api/tasks", s.listTasks)
+	app.HandleFunc("GET /api/tasks/{id}", s.getTask)
 }
 
-// --- middleware --------------------------------------------------------------
-
-const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; " +
-	"connect-src 'self'; form-action 'self' https://github.com; frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
-
-func setSecurityHeaders(w http.ResponseWriter) {
-	h := w.Header()
-	h.Set("Content-Security-Policy", csp)
-	h.Set("X-Content-Type-Options", "nosniff")
-	h.Set("Referrer-Policy", "same-origin")
-	h.Set("X-Frame-Options", "DENY")
-	h.Set("Cross-Origin-Opener-Policy", "same-origin")
-	h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-}
-
-func (s *Server) headers(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		setSecurityHeaders(w)
-		if strings.HasPrefix(r.URL.Path, "/api/") {
-			w.Header().Set("Cache-Control", "no-store")
+// githubReturn is where GitHub sends the browser back to, after creating an
+// app (?code&state) and after installing it (?installation_id). The page
+// finishes the step itself, with a signed-in request, so this answer needs
+// no session (the SameSite=Strict cookie is not sent on a navigation that
+// comes from github.com).
+func (s *Server) githubReturn(w http.ResponseWriter, r *http.Request) {
+	q := url.Values{}
+	for _, k := range []string{"code", "state", "installation_id", "setup_action"} {
+		if v := r.URL.Query().Get(k); v != "" {
+			q.Set(k, v)
 		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// guard refuses state-changing requests that may come from another site:
-// they must carry the header X-CI-Plane, which a cross-site form cannot set
-// and a cross-site script cannot send without a CORS approval we never give,
-// and an Origin, when the browser sends one, must be this host.
-func (s *Server) guard(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			if r.Header.Get("X-CI-Plane") != "1" {
-				writeError(w, http.StatusForbidden, "This request was refused: it did not come from the CI-Plane interface. Reload the page and try again.")
-				return
-			}
-			if o := r.Header.Get("Origin"); o != "" {
-				u, err := url.Parse(o)
-				if err != nil || !strings.EqualFold(u.Host, r.Host) {
-					writeError(w, http.StatusForbidden, "This request was refused: it came from another website.")
-					return
-				}
-			}
-		}
-		h(w, r)
 	}
-}
-
-// private is guard plus a signed-in user.
-func (s *Server) private(h http.HandlerFunc) http.HandlerFunc {
-	return s.guard(func(w http.ResponseWriter, r *http.Request) {
-		if !s.signedIn(r) {
-			writeError(w, http.StatusUnauthorized, "You are not signed in. Reload the page and sign in.")
-			return
-		}
-		h(w, r)
-	})
-}
-
-func (s *Server) signedIn(r *http.Request) bool {
-	if s.d.Demo || via(r).Via == "tunnel" {
-		return true
-	}
-	return s.auth.check(r)
+	http.Redirect(w, r, "/#/github?"+q.Encode(), http.StatusSeeOther)
 }
 
 // --- JSON helpers ------------------------------------------------------------
@@ -430,21 +271,37 @@ func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	return id, true
 }
 
-// origin is the address the browser uses for this server: the tunnel's
-// public https address, or the local one.
-func origin(r *http.Request) string {
-	scheme := "http"
-	if r.TLS != nil || via(r).Via == "tunnel" {
-		scheme = "https"
-	}
-	return scheme + "://" + r.Host
+// Webhooks answers the paths Cloudflare Access lets through without a login
+// (the server's bypass path /webhook): GitHub's webhooks, checked by their
+// signature, and below them /webhook/relay, where runs of the relay
+// workflow collect their runner with the run's OIDC token as proof.
+func Webhooks(webhook http.Handler, relay Relay) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/webhook":
+			if webhook == nil {
+				http.Error(w, "webhooks are not set up", http.StatusServiceUnavailable)
+				return
+			}
+			webhook.ServeHTTP(w, r)
+		case "/webhook/relay":
+			if relay == nil {
+				http.Error(w, "pools of other providers are not available here", http.StatusServiceUnavailable)
+				return
+			}
+			relay.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
 }
 
-// clientIP is the address a request came from, for rate limits.
-func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
+func (s *Server) hasAccounts() bool {
+	n := 0
+	_ = s.d.Store.View(func(tx *store.Tx) error {
+		as, err := tx.Accounts()
+		n = len(as)
+		return err
+	})
+	return n > 0
 }

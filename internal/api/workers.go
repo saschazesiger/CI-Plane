@@ -26,7 +26,7 @@ func (s *Server) changedWorkers() {
 	if s.d.Engine != nil {
 		s.d.Engine.Kick()
 	}
-	s.hub.notify("state")
+	s.d.App.Notify("state")
 }
 
 func (s *Server) listWorkers(w http.ResponseWriter, r *http.Request) {

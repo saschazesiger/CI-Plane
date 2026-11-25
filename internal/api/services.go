@@ -2,6 +2,8 @@
 package api
 
 import (
+	"github.com/saschazesiger/Z-Dash/server/cloudflare"
+
 	"context"
 	"errors"
 	"net/http"
@@ -96,57 +98,9 @@ type GitHub interface {
 	Health(accountID int64) AccountHealth
 }
 
-// Zone is a domain in a Cloudflare account the token may use.
-type Zone struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"` // example.com
-	AccountID   string `json:"accountId"`
-	AccountName string `json:"accountName"`
-}
-
-// TunnelSetup is what the assistant collects.
-type TunnelSetup struct {
-	APIToken string   `json:"apiToken"`
-	ZoneID   string   `json:"zoneId"`
-	Hostname string   `json:"hostname"` // ci.example.com
-	Emails   []string `json:"emails"`   // who may sign in through Cloudflare Access
-}
-
-// TunnelStatus is the live view of the tunnel.
-type TunnelStatus struct {
-	Configured bool     `json:"configured"`
-	Hostname   string   `json:"hostname"`
-	PublicURL  string   `json:"publicUrl"` // https://hostname
-	Emails     []string `json:"emails"`
-	Running    bool     `json:"running"`   // cloudflared process is up
-	Connected  bool     `json:"connected"` // it has connections to Cloudflare
-	Verified   bool     `json:"verified"`  // seen from outside: / asks for a login, /webhook answers
-	Error      string   `json:"error"`     // what is wrong, empty if fine
-	HasToken   bool     `json:"hasToken"`  // the API token is still stored
-}
-
-// Cloudflare manages the tunnel and the login through Cloudflare Access.
-type Cloudflare interface {
-	// TokenURL opens Cloudflare's "create token" page with the needed
-	// permissions filled in.
-	TokenURL() string
-	// Zones lists the domains a token may use; it also validates the token.
-	Zones(ctx context.Context, apiToken string) ([]Zone, error)
-	// Setup creates tunnel, DNS record, routing and the Access
-	// applications, starts cloudflared and verifies from outside. progress
-	// receives one short line per step as it begins.
-	Setup(ctx context.Context, req TunnelSetup, progress func(step string)) error
-	// Status never blocks.
-	Status() TunnelStatus
-	// SetEmails replaces who may sign in.
-	SetEmails(ctx context.Context, emails []string) error
-	// Remove deletes tunnel, DNS record and Access applications and stops
-	// cloudflared.
-	Remove(ctx context.Context) error
-	// Authenticate checks the Cloudflare Access token of a request that came
-	// through the tunnel and returns the e-mail of the user.
-	Authenticate(r *http.Request) (email string, err error)
-}
+// TunnelStatus is the live view of the tunnel, as the Z-Dash server reports
+// it (configured, publicUrl, connected, verified, error ...).
+type TunnelStatus = cloudflare.Status
 
 // Relay runs the runners of the pools on machines of GitHub and of other
 // providers.

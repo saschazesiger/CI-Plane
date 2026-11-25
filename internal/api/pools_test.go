@@ -30,8 +30,8 @@ func (f *fakeRelay) Workflow() string { return "name: CI-Plane relay\n" }
 func TestRelayPathPassesTheTunnelWithoutAccess(t *testing.T) {
 	r := newRig(t, false)
 	relay := &fakeRelay{}
-	r.srv.d.Relay = relay
-	tun := r.srv.Tunnel(http.NotFoundHandler())
+	r.relay = relay
+	tun := r.app.TunnelHandler()
 	// No Access token: only the relay path is let through, and only to the relay.
 	if got := r.do(tun, "POST", "/webhook/relay", nil); got.code != 200 || relay.hits != 1 {
 		t.Fatalf("relay path: %d %s, %d hits", got.code, got.raw, relay.hits)
@@ -40,11 +40,6 @@ func TestRelayPathPassesTheTunnelWithoutAccess(t *testing.T) {
 		if got := r.do(tun, "POST", p, nil); got.code == 200 || relay.hits != 1 {
 			t.Errorf("%s: %d, %d hits", p, got.code, relay.hits)
 		}
-	}
-	// Not on the local listener.
-	r.signIn()
-	if got := r.local_("POST", "/webhook/relay", nil); got.code == 200 || relay.hits != 1 {
-		t.Errorf("local listener served the relay: %d", got.code)
 	}
 }
 

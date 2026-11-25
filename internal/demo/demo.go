@@ -6,6 +6,8 @@
 package demo
 
 import (
+	"github.com/saschazesiger/Z-Dash/server/cloudflare"
+
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -38,7 +40,7 @@ type Demo struct {
 	World      *sim.World
 	Workers    *Workers
 	GitHub     *GitHub
-	Cloudflare *Cloudflare
+	Cloudflare *cloudflare.Demo // the tunnel, as the Z-Dash server shows it
 	Relay      *Relay
 	Pages      http.Handler // the stand-in GitHub pages, mounted under /demo/
 
@@ -76,7 +78,7 @@ func New(opts Options) (*Demo, error) {
 	d.Relay = &Relay{}
 	d.Workers = &Workers{d: d}
 	d.GitHub = &GitHub{d: d, states: map[string]manifestState{}, installed: map[int64]bool{}, webhooks: map[int64]int64{}}
-	d.Cloudflare = &Cloudflare{d: d}
+	d.Cloudflare = cloudflare.NewDemo("CI-Plane", []string{"/webhook"})
 	d.Pages = d.pages()
 	eng := d.Engine
 	d.World.Deliver = func(ev engine.JobEvent) {
@@ -311,7 +313,7 @@ func (d *Demo) seed() error {
 		d.hosts[w.ID].other = seedWorkers[i].other
 		d.World.SetStatus(w.ID, d.hosts[w.ID].status(nil, set))
 	}
-	d.Cloudflare.seedConfigured()
+	d.Cloudflare.Seed("ci.acme-labs.dev", []string{"ada@acme-labs.dev", "ops@acme-labs.dev"})
 	return nil
 }
 
