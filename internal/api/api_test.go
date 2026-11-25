@@ -120,6 +120,13 @@ func (g *fakeGitHub) Sync(ctx context.Context, id int64) error {
 func (g *fakeGitHub) Remove(ctx context.Context, id int64) (string, error) {
 	return "https://github.com/settings/apps/x", g.st.Tx(func(tx *store.Tx) error { return tx.DeleteAccount(id) })
 }
+// webhookURL is the address SetPublicURL was last given.
+func (g *fakeGitHub) webhookURL() string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.publicURL
+}
+
 func (g *fakeGitHub) SetPublicURL(ctx context.Context, u string) error {
 	g.mu.Lock()
 	g.publicURL = u
@@ -605,19 +612,31 @@ func TestCloudflareAndGitHub(t *testing.T) {
 	})
 	r.seedTunnel("ci.example.com")
 	r.srv.followTunnel(context.Background())
-	deadline := time.Now().Add(5 * time.Second)
-	for r.gh.publicURL == "" && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+	// The task ends once the address is stored as moved.
+	tasks := r.expect(r.local_("GET", "/api/tasks", nil), 200)
+	var id string
+	for _, x := range tasks.body["tasks"].([]any) {
+		if task := x.(map[string]any); task["kind"] == "github" {
+			id = task["id"].(string)
+		}
 	}
-	if r.gh.publicURL != "https://ci.example.com" {
-		t.Fatalf("SetPublicURL: %q", r.gh.publicURL)
+	if id == "" {
+		t.Fatalf("no task moves the webhooks: %v", tasks.body)
+	}
+	if done := waitTask(t, r, id); done["state"] != TaskDone {
+		t.Fatalf("webhooks: %v", done)
+	}
+	if got := r.gh.webhookURL(); got != "https://ci.example.com" {
+		t.Fatalf("SetPublicURL: %q", got)
 	}
 	// Once moved, a restart does not ask GitHub again.
+	r.gh.mu.Lock()
 	r.gh.publicURL = ""
+	r.gh.mu.Unlock()
 	r.srv.webhooksTried = time.Time{}
 	r.srv.followTunnel(context.Background())
 	time.Sleep(50 * time.Millisecond)
-	if r.gh.publicURL != "" {
+	if got := r.gh.webhookURL(); got != "" {
 		t.Fatal("the webhooks were moved again to the same address")
 	}
 
