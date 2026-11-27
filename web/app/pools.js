@@ -47,7 +47,19 @@ export const kindGlyph = (kind) => (KINDS[kind] || KINDS.custom)[1];
 const hm = (ms) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 const minutes = (sec) => `${Math.round((sec / 60) * 10) / 10} min`;
 const sentence = (text) => (/[.!?]$/.test(text) ? text : `${text}.`);
-const budgetUsed = (p) => p.budgetMin > 0 && p.usedMin >= p.budgetMin;
+const budgetKind = (p) => p.budgetKind || 'minutes';
+const ownerOf = (repo) => (repo || '').split('/')[0];
+/** US dollars: $12, $0.54, $1,200.50. */
+const usd = (v) => {
+  const cents = Math.round((v || 0) * 100);
+  return `$${(cents / 100).toLocaleString('en', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+};
+const usage = (p) => p.usage || { machines: [], budgets: [] };
+/** The budget on GitHub that stops usage and is closest to being used up. */
+function tightest(p) {
+  const fill = (b) => (b.amountUsd ? b.consumedUsd / b.amountUsd : b.consumedUsd > 0 ? 1 : 0);
+  return (usage(p).budgets || []).filter((b) => b.stop).sort((x, y) => fill(y) - fill(x))[0] || null;
+}
 
 /** The first day of next month, when a used-up budget starts again. */
 function nextMonth() {
@@ -68,7 +80,8 @@ export function poolChip(p, d) {
   if (!p.enabled) return chip('', 'Switched off', 'ban');
   if (!d.publicUrl) return chip('error', 'Tunnel not connected', 'wifiOff');
   if (p.paused) return chip('warning', `Paused until ${hm(p.pausedUntil)}`, 'clock');
-  if (budgetUsed(p)) return chip('warning', 'Budget used up', 'wallet');
+  if (p.budgetWaits) return chip('warning', 'Waits for GitHub', 'alert');
+  if (p.budgetStop) return chip('warning', 'Budget used up', 'wallet');
   return chip('ok', 'On', 'check');
 }
 
@@ -77,13 +90,92 @@ function plainMeter(value, label, text) {
   return `<span class="ds-meter" role="meter" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(value * 100)}" aria-valuetext="${esc(text)}" style="--ds-share: ${value.toFixed(3)}"></span>`;
 }
 
+/** The budget of a pool in the row: what it used of what it may, with a meter where there is a limit. */
+function budgetMeterHtml(p) {
+  const kind = budgetKind(p);
+  if (kind === 'dollars') {
+    const text = `${usd(p.spentUsd)} of ${usd(p.budgetUsd)}`;
+    return `<span class="ds-meta">Cost ${esc(text)}</span>${meter(share(p.spentUsd, p.budgetUsd), `Cost of ${p.name} this month`, text)}`;
+  }
+  const b = kind === 'github' ? tightest(p) : null;
+  if (b) {
+    const text = `${usd(b.consumedUsd)} of ${usd(b.amountUsd)}`;
+    return `<span class="ds-meta">Budget ${esc(text)}</span>${meter(b.amountUsd ? share(b.consumedUsd, b.amountUsd) : 1, `Budget on GitHub of ${b.entity}`, text)}`;
+  }
+  if (kind === 'minutes' && p.budgetMin) {
+    const text = `${p.usedMin} of ${p.budgetMin}`;
+    return `<span class="ds-meta">Minutes ${esc(text)}</span>${meter(share(p.usedMin, p.budgetMin), `Runner minutes of ${p.name} this month`, `${text} minutes`)}`;
+  }
+  return `<span class="ds-meta">Minutes ${p.usedMin}${kind === 'free' ? ', included only' : ''}</span>`;
+}
+
 function poolMetersHtml(p) {
   const runners = `${p.active} of ${p.max}`;
-  const used = p.budgetMin ? `${p.usedMin} of ${p.budgetMin}` : `${p.usedMin}`;
   return '<span class="cp-meters">' +
     `<span class="cp-meter"><span class="ds-meta">Runners ${esc(runners)}</span>${plainMeter(share(p.active, p.max), `Runners of ${p.name} now`, runners)}</span>` +
-    `<span class="cp-meter"><span class="ds-meta">Minutes ${esc(used)}</span>${p.budgetMin ? meter(share(p.usedMin, p.budgetMin), `Runner minutes of ${p.name} this month`, `${used} minutes`) : ''}</span>` +
+    `<span class="cp-meter">${budgetMeterHtml(p)}</span>` +
     '<span class="cp-meter"></span></span>';
+}
+
+/** The monthly budget of a pool in words. */
+function budgetText(p) {
+  switch (budgetKind(p)) {
+    case 'dollars': return `${usd(p.budgetUsd)}, as GitHub bills the minutes of ${p.repo}`;
+    case 'free': return `Only the minutes included in the plan of ${ownerOf(p.repo)}`;
+    case 'github': return `The budgets set on GitHub for ${ownerOf(p.repo)}`;
+    default: return p.budgetMin ? `${p.budgetMin.toLocaleString('en')} runner minutes` : 'No limit';
+  }
+}
+
+/** When a used-up budget lets the pool take jobs again. */
+function againText(p) {
+  const kind = budgetKind(p);
+  const raise = kind === 'github' ? ', or when the budget is raised on GitHub' : kind === 'free' ? '' : ', or when you raise its budget';
+  return `It takes jobs again on ${nextMonth()}${raise}.`;
+}
+
+/** The lines of "This month" that are about the budget. */
+function budgetLinesHtml(p) {
+  const kind = budgetKind(p);
+  const u = usage(p);
+  const bar = (v) => `<span class="ds-meter${v >= 1 ? ' ds-tone-error' : v >= 0.85 ? ' ds-tone-warning' : ''}" aria-hidden="true" style="--ds-share: ${Math.min(v, 1).toFixed(3)}"></span>`;
+  const minutesLine = (limit) => `<li><span>Runner minutes</span><strong>${p.usedMin.toLocaleString('en')}${limit ? ` of ${limit.toLocaleString('en')}${p.budgetStop ? ', used up' : ''}` : kind === 'minutes' ? ', no limit' : ''}</strong>` +
+    `${limit ? bar(share(p.usedMin, limit)) : ''}</li>`;
+  let html = '';
+  switch (kind) {
+    case 'dollars':
+      html += `<li><span>Cost</span><strong>${usd(p.spentUsd)} of ${usd(p.budgetUsd)}${p.budgetStop && !p.budgetWaits ? ', used up' : ''}</strong>${bar(share(p.spentUsd, p.budgetUsd))}</li>`;
+      break;
+    case 'free':
+      html += `<li><span>Billed for Actions minutes of ${esc(ownerOf(p.repo))}</span><strong>${u.at ? (u.accountNetUsd >= 0.005 ? `${usd(u.accountNetUsd)}: the included minutes are used up` : 'Nothing: within the included minutes') : 'Not read yet'}</strong></li>`;
+      break;
+    case 'github': {
+      const list = u.budgets || [];
+      html += list.length
+        ? list.map((b) => `<li><span>Budget of ${esc(b.entity)} for ${esc(b.sku)}</span><strong>${usd(b.consumedUsd)} of ${usd(b.amountUsd)}${b.stop ? (b.consumedUsd > 0 && b.consumedUsd >= b.amountUsd ? ', used up' : '') : ', only alerts'}</strong>` +
+          `${bar(b.amountUsd ? share(b.consumedUsd, b.amountUsd) : b.consumedUsd > 0 ? 1 : 0)}</li>`).join('')
+        : `<li><span>Budgets on GitHub</span><strong>${u.at ? 'None covers these minutes' : 'Not read yet'}</strong></li>`;
+      break;
+    }
+    default:
+  }
+  return html + minutesLine(kind === 'minutes' ? p.budgetMin : 0);
+}
+
+/** What GitHub counted, per machine, or why CI-Plane counts alone. */
+function githubCountHtml(p) {
+  const u = usage(p);
+  if (!u.at) {
+    return p.kind === 'github'
+      ? '<p class="ds-meta">CI-Plane counts the minutes of the runners it starts here itself until it can read GitHub\'s billing.</p>'
+      : '<p class="ds-meta">CI-Plane counts the minutes of the runners it starts here itself; the provider\'s bill may round them differently.</p>';
+  }
+  const mins = (v) => (Math.round(v * 10) / 10).toLocaleString('en');
+  const rows = (u.machines || []).map((m) => `<tr><td><code>${esc(m.sku)}</code></td><td class="ds-num">${mins(m.minutes)}</td><td class="ds-num">${usd(m.grossUsd)}</td><td class="ds-num">${usd(m.netUsd)}</td></tr>`).join('');
+  return `<p class="ds-meta">GitHub counts ${mins(u.minutes)} minutes of ${esc(p.repo)} this month, CI-Plane ${p.ownMin.toLocaleString('en')}: the higher one counts, as GitHub shows its numbers a few hours late. Read from GitHub ${esc(ago(u.at))}.</p>` +
+    (rows ? '<div class="ds-table-wrap"><table class="ds-table ds-density-tight"><caption class="ds-sr">Machines this month, as GitHub bills them</caption><thead><tr>' +
+      '<th scope="col">Machine</th><th scope="col" class="ds-num">Minutes</th><th scope="col" class="ds-num">List price</th><th scope="col" class="ds-num">Billed</th></tr></thead>' +
+      `<tbody>${rows}</tbody></table></div>` : '');
 }
 
 export function poolRowHtml(p, d, withTier = false) {
@@ -133,9 +225,15 @@ function poolSheetHtml(p, d, workflowOpen) {
       `${esc(sentence(p.pauseReason || 'A runner did not start'))} CI-Plane tries it again by itself then; if that fails too, it pauses for ${span(p.nextPauseSec * 1000)}.`,
       busyButton('ds-btn ds-btn--text ds-sm', 'Try again now', 'Starting', 'Started', 'data-act="pool-resume"'));
   }
-  if (budgetUsed(p)) {
-    notes += alertHtml('warning', 'The budget of this month is used up',
-      `${p.name} takes no jobs until ${nextMonth()}. Raise the monthly budget to use it before.`);
+  if (p.budgetWaits) {
+    notes += alertHtml('warning', 'Waits for its usage from GitHub', `${esc(sentence(p.budgetStop))} It takes jobs again once CI-Plane can read it.`,
+      busyButton('ds-btn ds-btn--text ds-sm', 'Check', 'Checking', 'Checked', 'data-act="pool-check"'));
+  } else if (p.budgetStop) {
+    notes += alertHtml('warning', 'The budget of this month is used up', `${esc(sentence(p.budgetStop))} ${esc(againText(p))}`);
+  }
+  if (usage(p).error && !p.budgetWaits) {
+    notes += alertHtml(budgetKind(p) === 'minutes' ? '' : 'warning', 'CI-Plane cannot read GitHub\'s numbers', esc(sentence(usage(p).error)) +
+      (budgetKind(p) === 'minutes' ? ' Meanwhile it counts the minutes itself.' : ` It goes on with the last reading, from ${esc(ago(usage(p).at))}, for up to three hours.`));
   }
   const facts = [
     ['Provider', esc(kindName(p.kind))],
@@ -146,10 +244,9 @@ function poolSheetHtml(p, d, workflowOpen) {
     ['Runners at the same time', String(p.max)],
     ['Machine for standard jobs', `<code>${esc(p.standard)}</code>`],
     ['Machine for large jobs', p.large ? `<code>${esc(p.large)}</code>` : '<span class="ds-muted">None: large jobs never go here</span>'],
-    ['Monthly budget', p.budgetMin ? `${p.budgetMin.toLocaleString('en')} minutes` : 'No limit'],
+    ['Monthly budget', esc(budgetText(p))],
     ['Added', day(p.createdAt)],
   ];
-  const used = p.budgetMin ? share(p.usedMin, p.budgetMin) : 0;
   return '<div class="ds-stack">' +
     `<div class="cp-row">${poolChip(p, d)}<span class="ds-tag ds-tone-neutral">${kindName(p.kind)}</span></div>` +
     notes + `<div class="ds-stack" id="pool-check" aria-live="polite">${checkHtml(p)}</div>` +
@@ -163,10 +260,9 @@ function poolSheetHtml(p, d, workflowOpen) {
     '<h3 class="ds-card__subtitle">This month</h3>' +
     '<ul class="ds-kv-list ds-kv-list--bars">' +
       `<li><span>Runners now</span><strong>${p.active} of ${p.max}</strong><span class="ds-meter" aria-hidden="true" style="--ds-share: ${share(p.active, p.max).toFixed(3)}"></span></li>` +
-      `<li><span>Runner minutes</span><strong>${p.usedMin.toLocaleString('en')}${p.budgetMin ? ` of ${p.budgetMin.toLocaleString('en')}${budgetUsed(p) ? ', used up' : ''}` : ', no limit'}</strong>` +
-        `${p.budgetMin ? `<span class="ds-meter${used >= 1 ? ' ds-tone-error' : used >= 0.85 ? ' ds-tone-warning' : ''}" aria-hidden="true" style="--ds-share: ${used.toFixed(3)}"></span>` : ''}</li>` +
+      budgetLinesHtml(p) +
     '</ul>' +
-    '<p class="ds-meta">CI-Plane counts the minutes of the runners it starts here itself; the provider\'s bill may round them differently.</p>' +
+    githubCountHtml(p) +
     `<dl class="ds-facts ds-facts--rows">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` +
     workflowHtml(d, workflowOpen) +
     '</div>';
@@ -278,7 +374,8 @@ const dlg = { pool: null, step: 'kind', kind: '', values: null };
 const preset = (kind) => (ctx.data.presets || []).find((x) => x.kind === kind) || { kind, label: kindName(kind), name: '', standard: '', large: '', hint: '', docs: '' };
 
 function valuesFrom(p) {
-  return { name: p.name, accountId: p.accountId, repo: p.repo, tier: p.tier, afterSec: p.afterSec, max: p.max, standard: p.standard, large: p.large, budgetMin: p.budgetMin };
+  return { name: p.name, accountId: p.accountId, repo: p.repo, tier: p.tier, afterSec: p.afterSec, max: p.max, standard: p.standard, large: p.large,
+    budgetKind: budgetKind(p), budgetMin: p.budgetMin, budgetUsd: p.budgetUsd };
 }
 
 function kindStepHtml() {
@@ -294,6 +391,69 @@ function kindStepHtml() {
 function field(id, key, label, control, hint = '') {
   return `<div class="ds-field"><label class="ds-field__label" for="${id}">${label}</label>${control}` +
     (hint ? `<small class="ds-field__hint" id="${id}-hint">${hint}</small>` : '') + '</div>';
+}
+
+const BUDGET_KINDS = [
+  ['minutes', 'Runner minutes', 'CI-Plane counts them, and takes GitHub\'s count where it is higher.'],
+  ['dollars', 'US dollars', 'What GitHub bills for the minutes of the repository, priced per machine.'],
+  ['free', 'Only the included minutes', 'Stops once GitHub bills anything for the Actions minutes of the account this month.'],
+  ['github', 'The budgets set on GitHub', 'Stops when a budget on GitHub that stops usage is used up. Organisations only.'],
+];
+
+/** The repository the form has chosen, with its owner's type and whether a token is stored for it. */
+function chosenRepo() {
+  const value = $('#pool-repo')?.value || '';
+  return (ctx.data.repos || []).find((r) => `${r.accountId}|${r.fullName}` === value) || null;
+}
+
+/** The budget's fields for a pool of GitHub-hosted runners: its kind, its amount and how CI-Plane reads GitHub's billing. */
+function budgetFieldsHtml(v) {
+  const kind = v.budgetKind || 'minutes';
+  const minutesInput = `<div class="ds-input-group"><input class="ds-input" id="pool-budget" data-field="budgetMin" type="number" min="0" step="1" inputmode="numeric" value="${v.budgetMin || ''}" placeholder="No limit" aria-describedby="pool-budget-hint"><span class="ds-input-group__suffix" aria-hidden="true">minutes</span></div>`;
+  if (dlg.kind !== 'github') {
+    return field('pool-budget', 'budgetMin', 'Monthly budget (optional)', minutesInput,
+      'Runner minutes per calendar month; CI-Plane counts them. Used up, the pool takes no jobs until next month.');
+  }
+  const repo = dlg.pool ? (ctx.data.repos || []).find((r) => r.accountId === v.accountId && r.fullName.toLowerCase() === (v.repo || '').toLowerCase()) : null;
+  const stored = repo ? repo.hasUsageToken : false;
+  return '<fieldset class="ds-fieldset" id="pool-budget-set"><legend class="ds-fieldset__legend">Monthly budget</legend>' +
+    '<div class="ds-radios" role="radiogroup" aria-label="What limits the pool each month" id="pool-budget-kind" data-field="budgetKind" tabindex="-1">' +
+    BUDGET_KINDS.map(([k, label, hint]) => `<label class="ds-radio"><input type="radio" name="pool-budget-kind" value="${k}"${k === kind ? ' checked' : ''}>` +
+      `<span><strong>${label}</strong><small>${hint}</small></span></label>`).join('') +
+    '</div>' +
+    `<div class="ds-form-grid ds-form-grid--2">` +
+      `<div class="ds-field" id="pool-budget-min-field"${kind === 'minutes' ? '' : ' hidden'}><label class="ds-field__label" for="pool-budget">Runner minutes per month</label>${minutesInput}` +
+        '<small class="ds-field__hint" id="pool-budget-hint">Empty or 0: no limit.</small></div>' +
+      `<div class="ds-field" id="pool-budget-usd-field"${kind === 'dollars' ? '' : ' hidden'}><label class="ds-field__label" for="pool-budget-usd">US dollars per month</label>` +
+        `<div class="ds-input-group"><span class="ds-input-group__prefix" aria-hidden="true">$</span><input class="ds-input" id="pool-budget-usd" data-field="budgetUsd" type="number" min="1" max="1000000" step="1" inputmode="numeric" value="${v.budgetUsd || ''}" aria-describedby="pool-budget-usd-hint"></div>` +
+        '<small class="ds-field__hint" id="pool-budget-usd-hint">What GitHub bills after the included minutes.</small></div>' +
+    '</div>' +
+    '<p class="ds-meta" id="pool-billing-org" hidden>CI-Plane reads the billing with the app of the account: on GitHub it needs the organisation permission <strong>Administration: Read-only</strong>. Apps CI-Plane creates now ask for it.</p>' +
+    '<div class="ds-field" id="pool-token-field" hidden><label class="ds-field__label" for="pool-token">Token to read the billing</label>' +
+      `<input class="ds-input" id="pool-token" data-field="usageToken" type="password" autocomplete="off" spellcheck="false" placeholder="${stored ? 'Stored; enter a new one to replace it' : 'github_pat_...'}" aria-describedby="pool-token-hint">` +
+      '<small class="ds-field__hint" id="pool-token-hint">GitHub lets no app read the billing of a personal account. Create a fine-grained token of the account with the account permission ' +
+      `<strong>Plan: Read-only</strong> and nothing else: <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">new token on GitHub${icon('external', 16)}</a>. ` +
+      'CI-Plane keeps it encrypted. With a budget of minutes it is optional, and shows GitHub\'s numbers.</small></div>' +
+    '</fieldset>';
+}
+
+/** Shows the fields that belong to the chosen budget and to the owner of the chosen repository. */
+function syncBudgetFields() {
+  if (dlg.kind !== 'github' || !$('#pool-budget-set')) return;
+  const kind = $('input[name="pool-budget-kind"]:checked')?.value || 'minutes';
+  const repo = chosenRepo();
+  const user = repo && repo.ownerType === 'User';
+  $('#pool-budget-min-field').hidden = kind !== 'minutes';
+  $('#pool-budget-usd-field').hidden = kind !== 'dollars';
+  $('#pool-billing-org').hidden = !(repo && repo.ownerType === 'Organization' && kind !== 'minutes');
+  $('#pool-token-field').hidden = !user;
+  $('#pool-token').placeholder = user && repo.hasUsageToken ? 'Stored; enter a new one to replace it' : 'github_pat_...';
+  const follow = $('input[name="pool-budget-kind"][value="github"]');
+  follow.disabled = !!user;
+  if (user && follow.checked) {
+    $('input[name="pool-budget-kind"][value="dollars"]').checked = true;
+    syncBudgetFields();
+  }
 }
 
 function formStepHtml() {
@@ -351,13 +511,13 @@ function formStepHtml() {
     '<div class="ds-form-grid ds-form-grid--2">' +
       field('pool-max', 'max', 'Runners at the same time', `<input class="ds-input" id="pool-max" data-field="max" type="number" min="1" max="100" step="1" inputmode="numeric" value="${esc(v.max)}" aria-describedby="pool-max-hint">`,
         'Your plan with the provider may have a lower limit.') +
-      field('pool-budget', 'budgetMin', 'Monthly budget (optional)', `<div class="ds-input-group"><input class="ds-input" id="pool-budget" data-field="budgetMin" type="number" min="0" step="1" inputmode="numeric" value="${v.budgetMin || ''}" placeholder="No limit" aria-describedby="pool-budget-hint"><span class="ds-input-group__suffix" aria-hidden="true">minutes</span></div>`,
-        'Runner minutes per calendar month; CI-Plane counts them. Used up, the pool takes no jobs until next month.') +
+      (dlg.kind === 'github' ? '' : budgetFieldsHtml(v)) +
       field('pool-standard', 'standard', 'Machine for standard jobs', `<input class="ds-input" id="pool-standard" data-field="standard" autocomplete="off" spellcheck="false" value="${esc(v.standard)}" aria-describedby="pool-standard-hint">`,
         'The runs-on label of the machine, like ubuntu-latest.') +
       field('pool-large', 'large', 'Machine for large jobs (optional)', `<input class="ds-input" id="pool-large" data-field="large" autocomplete="off" spellcheck="false" value="${esc(v.large)}" aria-describedby="pool-large-hint">`,
         'Leave it empty, and jobs with the label large never go to this pool.') +
-    '</div>';
+    '</div>' +
+    (dlg.kind === 'github' ? budgetFieldsHtml(v) : '');
 }
 
 function dialogActionsHtml() {
@@ -373,6 +533,7 @@ function renderDialog() {
   $('#pool-dialog-title').textContent = dlg.pool ? `Edit ${dlg.pool.name}` : dlg.step === 'kind' ? 'Add a pool: who runs the machines?' : `Add a pool: ${preset(dlg.kind).label}`;
   DS.dom.morphHtml($('#pool-dialog-body'), dlg.step === 'kind' ? kindStepHtml() : formStepHtml());
   DS.dom.morphHtml($('#pool-dialog-actions'), dialogActionsHtml());
+  syncBudgetFields();
 }
 
 /** What the form shows now, as the API takes it. */
@@ -389,7 +550,10 @@ function readPoolForm() {
     max: num('#pool-max'),
     standard: $('#pool-standard').value.trim(),
     large: $('#pool-large').value.trim(),
+    budgetKind: dlg.kind === 'github' ? ($('input[name="pool-budget-kind"]:checked')?.value || 'minutes') : 'minutes',
     budgetMin: num('#pool-budget'),
+    budgetUsd: $('#pool-budget-usd') ? num('#pool-budget-usd') : 0,
+    usageToken: $('#pool-token') && !$('#pool-token-field').hidden ? $('#pool-token').value.trim() : '',
   };
 }
 
@@ -409,7 +573,8 @@ async function submitPool(event) {
     const kind = $('input[name="pool-kind"]:checked', form)?.value || dlg.kind;
     if (!dlg.values || kind !== dlg.kind) {
       const x = preset(kind);
-      dlg.values = { name: x.name, accountId: dlg.values?.accountId || 0, repo: dlg.values?.repo || '', tier: MAX_TIER, afterSec: 180, max: 5, standard: x.standard, large: x.large, budgetMin: 0 };
+      dlg.values = { name: x.name, accountId: dlg.values?.accountId || 0, repo: dlg.values?.repo || '', tier: MAX_TIER, afterSec: 180, max: 5, standard: x.standard, large: x.large,
+        budgetKind: 'minutes', budgetMin: 0, budgetUsd: 0 };
     }
     dlg.kind = kind;
     dlg.step = 'form';
@@ -433,7 +598,7 @@ async function submitPool(event) {
   // The list and the sheet show it at once; the check says whether its repository is ready.
   const d = ctx.data;
   const i = d.pools.findIndex((p) => p.id === saved.id);
-  const shown = { active: 0, usedMin: 0, nextPauseSec: 60, ...(i >= 0 ? d.pools[i] : {}), ...saved, paused: false };
+  const shown = { active: 0, usedMin: 0, ownMin: 0, spentUsd: 0, budgetStop: '', budgetWaits: false, nextPauseSec: 60, ...(i >= 0 ? d.pools[i] : {}), ...saved, paused: false };
   if (i >= 0) d.pools[i] = shown;
   else d.pools.push(shown);
   ps.checks.delete(saved.id);
@@ -447,6 +612,7 @@ const poolForm = $('#pool-form');
 poolForm.addEventListener('submit', submitPool);
 poolForm.addEventListener('change', (event) => {
   if (event.target.name === 'pool-use') $('#pool-wait-field').hidden = event.target.value !== 'wait';
+  if (event.target.name === 'pool-budget-kind' || event.target.id === 'pool-repo') syncBudgetFields();
 });
 poolForm.addEventListener('click', (event) => {
   if (!event.target.closest('[data-pool-back]')) return;
