@@ -22,11 +22,12 @@ func TestPoolUsageOfAnOrganisation(t *testing.T) {
 		{Product: "packages", SKU: "packages_storage", Quantity: 1, UnitType: "GigabyteHours", GrossAmount: 2, NetAmount: 2, RepositoryName: "acme/relay"},
 	}
 	e.gh.budgetList["acme"] = []ghBudget{
-		{ID: "b1", Amount: 50, Stop: true, Scope: "organization", Entity: "acme", Consumed: 12, ProductSKU: "actions"},
-		{ID: "b2", Amount: 5, Stop: true, Scope: "repository", Entity: "acme/relay", Consumed: 5, ProductSKU: "actions_linux"},
+		{ID: "b1", Type: "ProductPricing", Amount: 50, Stop: true, Scope: "organization", Entity: "acme", Consumed: 12, ProductSKU: "actions"},
+		{ID: "b2", Type: "SkuPricing", Amount: 5, Stop: true, Scope: "repository", Entity: "acme/relay", Consumed: 5, ProductSKU: "actions_linux"},
+		{ID: "b7", Type: "SkuPricing", Amount: 5, Stop: true, Scope: "organization", Entity: "acme", Consumed: 5, ProductSKU: "actions_windows"}, // not a machine of the pool
 		{ID: "b3", Amount: 5, Stop: true, Scope: "repository", Entity: "acme/api", Consumed: 5, ProductSKU: "actions"},
 		{ID: "b4", Amount: 9, Stop: true, Scope: "organization", Entity: "acme", Consumed: 9, ProductSKU: "copilot"},
-		{ID: "b5", Amount: 9, Stop: true, Scope: "organization", Entity: "acme", Consumed: 9, ProductSKU: "actions_storage"},
+		{ID: "b5", Type: "SkuPricing", Amount: 9, Stop: true, Scope: "organization", Entity: "acme", Consumed: 9, ProductSKU: "actions_storage"},
 		{ID: "b6", Amount: 9, Stop: true, Scope: "cost_center", Entity: "lab", Consumed: 9, ProductSKU: "actions"},
 	}
 	p := model.Pool{ID: 3, Name: "GitHub", Kind: model.PoolGitHub, AccountID: 61, Repo: "acme/relay", BudgetKind: model.BudgetGitHub}

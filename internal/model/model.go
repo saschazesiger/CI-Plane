@@ -524,8 +524,13 @@ func (p Pool) UsesBilling() bool { return p.Budget() != BudgetMinutes }
 type PoolUsage struct {
 	Month string `json:"month"` // like 2026-11; the numbers belong to it
 	At    int64  `json:"at"`    // when they were read; 0 = never
+	Tried int64  `json:"tried"` // when the last reading began, whether it worked or not
 	// Of the relay repository.
-	Minutes  float64        `json:"minutes"`
+	Minutes float64 `json:"minutes"`
+	// RateUSD is the list price of a minute of the relay repository in the
+	// latest reading that had minutes, this month or before: the price of
+	// the minutes GitHub does not show yet.
+	RateUSD  float64        `json:"rateUsd"`
 	GrossUSD float64        `json:"grossUsd"` // at the list price
 	NetUSD   float64        `json:"netUsd"`   // billed, after the included minutes
 	Machines []MachineUsage `json:"machines"` // per SKU, most minutes first

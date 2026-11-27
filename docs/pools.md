@@ -180,25 +180,34 @@ measure.
 
 **US dollars** are what GitHub bills after the included minutes, as its usage report says, per machine at its own
 price. GitHub shows its numbers a few hours late, so CI-Plane adds the minutes it counted that GitHub does not show yet,
-at the average list price of the month so far: the pool rather stops a little early than late.
+at the average list price of the latest reading that had minutes, this month's or an earlier one: the pool rather
+stops a little early than late. Before GitHub has shown any minute of the relay repository, CI-Plane knows no price,
+and the first hours of a new pool are not limited.
 
 **Only the included minutes** uses the minutes of the owner's plan and nothing else. GitHub does not say how many are
 left, only whether it bills anything yet, so the pool stops at the first cent, a few hours late at most (the delay
 of GitHub's report). The minutes of larger runners are never included: such a pool stops at its first large job.
 
 **The budgets set on GitHub** follows the budgets of the organisation (*Settings → Billing and licensing → Budgets and
-alerts*): those of the organisation, its enterprise and the relay repository that are for Actions and stop usage when
-used up. Budgets that only alert are shown, not followed; those of cost centres are left out, as CI-Plane cannot see
-what they cover. Without this, GitHub would stop the runs itself, and the pool would [pause](#-when-a-pool-fails) after
-failed starts, longer each time.
+alerts*): those of the organisation, its enterprise and the relay repository that stop usage when used up, for all of
+Actions or for a machine (SKU) the relay repository used this month. Budgets that only alert are shown, not followed;
+those of cost centres are left out, as CI-Plane cannot see what they cover. Without this, GitHub would stop the runs
+itself, and the pool would [pause](#-when-a-pool-fails) after failed starts, longer each time.
+
+A budget of $0 that stops usage (GitHub's default for paid usage) is used up at the first cent billed. Should GitHub
+stop the runs right at the end of the included minutes and bill nothing, neither *only the included minutes* nor this
+kind sees it: the pool then pauses after its failed starts, as without a budget.
 
 The pool shows this month's minutes, the cost, the budgets on GitHub, and GitHub's minutes and price per machine.
+
+GitHub bills by repository. A pool whose budget rests on the billing needs a relay repository of its own; two pools
+that share one count their minutes themselves.
 
 ### 🔎 Reading GitHub's billing
 
 For pools of GitHub-hosted runners, CI-Plane reads GitHub's usage report of the relay repository's owner every 15
-minutes, at once for a pool that is new or changed and when a month begins, and every 5 minutes while that fails. It
-only reads; nothing changes on GitHub.
+minutes, at once for a pool that is new or changed and when a month begins, and every 5 minutes while that fails for
+a budget that rests on it. It only reads; nothing changes on GitHub.
 
 - **Organisation**: the app of the [account for runners](#-accounts-for-runners) reads it. GitHub asks for the
   organisation permission *Administration: Read-only*. Apps CI-Plane creates for organisations ask for it; to add it

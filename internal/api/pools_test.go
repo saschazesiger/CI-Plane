@@ -299,7 +299,8 @@ func TestPoolBudgetKinds(t *testing.T) {
 		t.Fatalf("not a token: %s", bad.raw)
 	}
 	// A budget of minutes needs none.
-	r.expect(r.local_("POST", "/api/pools", pool("Minutes", 3, "jo/relay", map[string]any{"budgetMin": 100})), 200)
+	minutes := r.expect(r.local_("POST", "/api/pools", pool("Minutes", 3, "jo/relay", map[string]any{"budgetMin": 100})), 200)
+	r.expect(r.local_("DELETE", "/api/pools/"+strconv.FormatInt(int64(minutes.body["pool"].(map[string]any)["id"].(float64)), 10), nil), 200)
 	added = r.expect(r.local_("POST", "/api/pools", pool("Jo", 3, "jo/relay", map[string]any{"budgetKind": "dollars", "budgetUsd": 20, "usageToken": " github_pat_0123456789abcdefghij "})), 200)
 	jo := added.body["pool"].(map[string]any)
 	if strings.Contains(added.raw, "github_pat_") {
@@ -352,4 +353,28 @@ func TestPoolBudgetKinds(t *testing.T) {
 			t.Fatalf("stop: %v", x["budgetStop"])
 		}
 	}
+}
+
+func TestABillingBudgetNeedsARepositoryOfItsOwn(t *testing.T) {
+	r := newRig(t, false)
+	r.srv.d.Relay = &fakeRelay{}
+	r.signIn()
+	if err := r.st.Tx(func(tx *store.Tx) error {
+		if err := tx.SaveRunnerAccount(model.Account{ID: 2, Slug: "ci-plane-runners-acme", Owner: "acme", OwnerType: "Organization", InstallationID: 6}); err != nil {
+			return err
+		}
+		return tx.SetRunnerRepos(2, []model.Repo{{ID: 7, FullName: "acme/relay", Private: true}})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := func(name, kind string) map[string]any {
+		return map[string]any{"name": name, "kind": "github", "accountId": 2, "repo": "acme/relay", "standard": "ubuntu-latest", "budgetKind": kind, "budgetUsd": 5}
+	}
+	r.expect(r.local_("POST", "/api/pools", body("Small", "minutes")), 200)
+	bad := r.expect(r.local_("POST", "/api/pools", body("Large", "dollars")), 400)
+	if !strings.Contains(bad.raw, "The pool Small uses this repository too") {
+		t.Fatalf("second pool in dollars: %s", bad.raw)
+	}
+	r.expect(r.local_("POST", "/api/pools", body("Large", "minutes")), 200)
+	r.expect(r.local_("PATCH", "/api/pools/1", map[string]any{"name": "Small"}), 200)
 }

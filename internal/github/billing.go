@@ -32,6 +32,7 @@ type usageItem struct {
 
 type ghBudget struct {
 	ID         string  `json:"id"`
+	Type       string  `json:"budget_type"` // ProductPricing or SkuPricing
 	Amount     int     `json:"budget_amount"`
 	Stop       bool    `json:"prevent_further_usage"`
 	Scope      string  `json:"budget_scope"`
@@ -112,7 +113,11 @@ func (s *Service) PoolUsage(ctx context.Context, p model.Pool, year int, month t
 		if !a.IsOrg() {
 			return u, errors.New("GitHub has no way to read the budgets of a personal account: choose another kind of budget for this pool")
 		}
-		if u.Budgets, err = s.budgets(ctx, a, owner, p.Repo); err != nil {
+		skus := map[string]bool{}
+		for _, m := range u.Machines {
+			skus[strings.ToLower(m.SKU)] = true
+		}
+		if u.Budgets, err = s.budgets(ctx, a, owner, p.Repo, skus); err != nil {
 			return u, err
 		}
 	}
@@ -121,9 +126,10 @@ func (s *Service) PoolUsage(ctx context.Context, p model.Pool, year int, month t
 
 // budgets reads the budgets of an organisation that cover the Actions
 // minutes of repo: those of the organisation, of its enterprise, and of the
-// repository. Budgets of cost centres are left out, as CI-Plane cannot see
-// what they cover.
-func (s *Service) budgets(ctx context.Context, a model.Account, org, repo string) ([]model.GitHubBudget, error) {
+// repository; for all of Actions, or for a SKU among skus, the machines the
+// repository used this month. Budgets of cost centres are left out, as
+// CI-Plane cannot see what they cover.
+func (s *Service) budgets(ctx context.Context, a model.Account, org, repo string, skus map[string]bool) ([]model.GitHubBudget, error) {
 	out := []model.GitHubBudget{}
 	for page := 1; page <= maxBudgetPages; page++ {
 		var resp struct {
@@ -136,8 +142,13 @@ func (s *Service) budgets(ctx context.Context, a model.Account, org, repo string
 		}
 		for _, b := range resp.Budgets {
 			sku := strings.ToLower(b.ProductSKU)
-			if !strings.Contains(sku, "actions") || strings.Contains(sku, "storage") {
-				continue
+			switch {
+			case strings.EqualFold(b.Type, "SkuPricing"):
+				if !skus[sku] {
+					continue // another machine, or storage
+				}
+			case sku != "actions":
+				continue // another product
 			}
 			switch strings.ToLower(b.Scope) {
 			case "organization", "enterprise":

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -834,5 +835,104 @@ func TestUsageOfOtherProvidersIsNotRead(t *testing.T) {
 	r.pass(3)
 	if n := r.world.Reads(p.ID); n != 0 {
 		t.Fatalf("read %d times", n)
+	}
+}
+
+// slowBilling holds the first reading until it is let go.
+type slowBilling struct {
+	started, release chan struct{}
+	calls            int
+	mu               sync.Mutex
+}
+
+func (b *slowBilling) PoolUsage(_ context.Context, p model.Pool, year int, month time.Month) (model.PoolUsage, error) {
+	b.mu.Lock()
+	b.calls++
+	first := b.calls == 1
+	b.mu.Unlock()
+	if first {
+		close(b.started)
+		<-b.release
+		return model.PoolUsage{}, fmt.Errorf("the old token is not accepted")
+	}
+	return model.PoolUsage{NetUSD: 1}, nil
+}
+
+func TestAReadingThatBeganBeforeANewTokenIsDropped(t *testing.T) {
+	r := newPoolRig(t)
+	b := &slowBilling{started: make(chan struct{}), release: make(chan struct{})}
+	r.eng.Billing = b
+	p := r.pool("GitHub", 1, func(p *model.Pool) { p.BudgetKind, p.BudgetUSD = model.BudgetDollars, 5 })
+	must(t, r.st.Tx(func(tx *store.Tx) error {
+		q, err := tx.Pool(p.ID)
+		if err != nil {
+			return err
+		}
+		q.Usage = model.PoolUsage{Month: "2023-11", At: 1, Tried: 1} // an earlier reading
+		return tx.SavePool(q)
+	}))
+	r.eng.Tick(context.Background())
+	<-b.started
+	// Meanwhile the person enters a new token: the reading is dropped.
+	must(t, r.st.Tx(func(tx *store.Tx) error {
+		q, err := tx.Pool(p.ID)
+		if err != nil {
+			return err
+		}
+		q.Usage = model.PoolUsage{}
+		return tx.SavePool(q)
+	}))
+	r.eng.Tick(context.Background()) // reads with the new token at once
+	for i := 0; ; i++ {
+		b.mu.Lock()
+		n := b.calls
+		b.mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		if i > 500 {
+			t.Fatal("not read again after the token changed")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond) // the second reading is stored
+	close(b.release)
+	r.eng.Wait()
+	got := r.poolRow(p.ID).Usage
+	if got.Error != "" || got.NetUSD != 1 || got.At == 0 {
+		t.Fatalf("usage: %+v", got)
+	}
+}
+
+func TestPoolsThatShareARepositoryCountTheirMinutesThemselves(t *testing.T) {
+	r := billingRig(t)
+	a := r.pool("Small", 1)
+	b := r.pool("Large", 1)
+	r.world.SetUsage(a.ID, model.PoolUsage{Minutes: 5000}, nil)
+	r.pass(3)
+	if r.world.Reads(a.ID)+r.world.Reads(b.ID) != 0 {
+		t.Fatal("the billing of a shared repository was read for a budget of minutes")
+	}
+}
+
+func TestDollarsPriceMinutesGitHubDoesNotShowWithTheLastKnownPrice(t *testing.T) {
+	r := billingRig(t)
+	p := r.pool("GitHub", 1, func(p *model.Pool) { p.BudgetKind, p.BudgetUSD = model.BudgetDollars, 1 })
+	r.world.SetUsage(p.ID, model.PoolUsage{Minutes: 100, GrossUSD: 50, NetUSD: 0}, nil) // $0.50 a minute
+	r.pass(2)
+	// A new month: GitHub shows nothing yet, CI-Plane counts 3 minutes at the price it knows.
+	r.world.SetUsage(p.ID, model.PoolUsage{}, nil)
+	now := time.UnixMilli(r.clock.Load()).UTC()
+	r.clock.Store(time.Date(now.Year(), now.Month()+1, 1, 0, 0, 1, 0, time.UTC).UnixMilli())
+	r.pass(2)
+	r.queue("acme/api", 30)
+	r.run(40)
+	if got := r.poolRow(p.ID).Usage; got.RateUSD != 0.5 || got.Minutes != 0 {
+		t.Fatalf("usage: %+v", got)
+	}
+	c := r.queue("acme/api", 1)
+	r.pass(2)
+	if j := r.job(c); j.State != model.JobQueued || !strings.Contains(j.Reason, "has cost $1.50 of its $1 this month") {
+		t.Fatalf("priced at the last known price: %s %q", j.State, j.Reason)
 	}
 }

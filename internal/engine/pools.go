@@ -140,16 +140,17 @@ func PoolMinutes(p model.Pool, runners []model.Runner, now int64) float64 {
 
 // PoolSpent is what a pool has cost this month in US dollars: what GitHub
 // bills for its relay repository, and, for the minutes CI-Plane counted
-// that GitHub does not show yet, their price as GitHub listed it so far
-// (before included minutes: better a little early than a little late).
+// that GitHub does not show yet, their price as GitHub listed it in the
+// latest reading with minutes (before included minutes: better a little
+// early than a little late).
 func PoolSpent(p model.Pool, runners []model.Runner, now int64) float64 {
 	u := p.Usage
 	if u.Month != monthOf(now) || u.At == 0 {
 		return 0
 	}
 	spent := u.NetUSD
-	if own := float64(poolUsedSec(p, runners, now)) / 60; own > u.Minutes && u.Minutes > 0 {
-		spent += (own - u.Minutes) * u.GrossUSD / u.Minutes
+	if own := float64(poolUsedSec(p, runners, now)) / 60; own > u.Minutes {
+		spent += (own - u.Minutes) * u.RateUSD
 	}
 	return spent
 }
@@ -216,14 +217,26 @@ func (e *Engine) readUsage(ctx context.Context, s *snapshot) {
 		return
 	}
 	month := monthOf(s.now)
+	repos := map[string]int{}
+	for _, p := range s.pools {
+		repos[strings.ToLower(p.Repo)]++
+	}
 	for _, p := range s.pools {
 		if p.Kind != model.PoolGitHub || (p.AccountID == 0 && !p.UsesBilling()) {
+			continue
+		}
+		if repos[strings.ToLower(p.Repo)] > 1 && !p.UsesBilling() {
+			// GitHub's numbers are those of the repository: with two pools
+			// in it, each would count the other's minutes too.
+			if !dropped(p.Usage) {
+				e.dropUsage(p.ID)
+			}
 			continue
 		}
 		// The key changes with what the reading depends on, so that a
 		// changed pool and a new month are read at once.
 		base := fmt.Sprintf("usage:%d:%d:%s:%s:%s", p.ID, p.AccountID, p.Repo, p.Budget(), month)
-		key, fresh := base, p.Usage.At == 0 && p.Usage.Error == ""
+		key, fresh := base, dropped(p.Usage)
 		if fresh {
 			key += ":new" // the reading was dropped, as when a token was entered
 		}
@@ -233,7 +246,7 @@ func (e *Engine) readUsage(ctx context.Context, s *snapshot) {
 			u, err := e.Billing.PoolUsage(ctx, p, t.Year(), t.Month())
 			e.saveUsage(p, u, err, at)
 			next := usageEvery
-			if err != nil {
+			if err != nil && p.UsesBilling() {
 				next = usageRetry
 			}
 			if !fresh {
@@ -249,6 +262,25 @@ func (e *Engine) readUsage(ctx context.Context, s *snapshot) {
 	}
 }
 
+// dropUsage forgets what was read of a pool's usage.
+func (e *Engine) dropUsage(poolID int64) {
+	err := e.st.Tx(func(tx *store.Tx) error {
+		p, err := tx.Pool(poolID)
+		if err != nil {
+			return ignoreMissing(err)
+		}
+		p.Usage = model.PoolUsage{}
+		return tx.SavePool(p)
+	})
+	if err != nil {
+		e.logf("engine: usage of pool %d: %v", poolID, err)
+	}
+}
+
+// dropped reports whether a pool has no reading of its usage, not even a
+// failed one: it is new, or was changed.
+func dropped(u model.PoolUsage) bool { return u.At == 0 && u.Error == "" }
+
 // saveUsage stores a reading of a pool's usage, unless the pool changed
 // meanwhile in what the reading depends on, and says when it changes
 // whether the pool takes jobs.
@@ -259,6 +291,11 @@ func (e *Engine) saveUsage(read model.Pool, u model.PoolUsage, readErr error, at
 			return ignoreMissing(err)
 		}
 		if p.AccountID != read.AccountID || p.Repo != read.Repo || p.Budget() != read.Budget() {
+			return nil
+		}
+		// A reading that began before a newer one, or before the person
+		// dropped the last one (a new token), is no news.
+		if p.Usage.Tried >= at || dropped(p.Usage) && !dropped(read.Usage) {
 			return nil
 		}
 		runners, err := tx.ActiveRunners()
@@ -279,9 +316,14 @@ func (e *Engine) saveUsage(read model.Pool, u model.PoolUsage, readErr error, at
 			if p.Usage.FailingSince == 0 {
 				p.Usage.FailingSince = at
 			}
-			p.Usage.Error = readErr.Error()
+			p.Usage.Error, p.Usage.Tried = readErr.Error(), at
 		} else {
-			u.At, u.Error, u.FailingSince = at, "", 0
+			u.At, u.Tried, u.Error, u.FailingSince = at, at, "", 0
+			if u.Minutes > 0 {
+				u.RateUSD = u.GrossUSD / u.Minutes
+			} else {
+				u.RateUSD = p.Usage.RateUSD
+			}
 			p.Usage = u
 		}
 		after := ""

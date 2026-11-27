@@ -166,9 +166,11 @@ function budgetLinesHtml(p) {
 function githubCountHtml(p) {
   const u = usage(p);
   if (!u.at) {
-    return p.kind === 'github'
-      ? '<p class="ds-meta">CI-Plane counts the minutes of the runners it starts here itself until it can read GitHub\'s billing.</p>'
-      : '<p class="ds-meta">CI-Plane counts the minutes of the runners it starts here itself; the provider\'s bill may round them differently.</p>';
+    if (p.kind !== 'github') return '<p class="ds-meta">CI-Plane counts the minutes of the runners it starts here itself; the provider\'s bill may round them differently.</p>';
+    const shared = (ctx.data.pools || []).some((o) => o.id !== p.id && o.repo.toLowerCase() === p.repo.toLowerCase());
+    if (shared) return `<p class="ds-meta">CI-Plane counts the minutes of the runners it starts here itself: another pool uses ${esc(p.repo)} too, and GitHub bills by repository.</p>`;
+    return '<p class="ds-meta">CI-Plane counts the minutes of the runners it starts here itself' +
+      (u.error ? `. To see GitHub's count and price per machine: ${esc(sentence(u.error))}</p>` : ' until it has read GitHub\'s billing.</p>');
   }
   const mins = (v) => (Math.round(v * 10) / 10).toLocaleString('en');
   const rows = (u.machines || []).map((m) => `<tr><td><code>${esc(m.sku)}</code></td><td class="ds-num">${mins(m.minutes)}</td><td class="ds-num">${usd(m.grossUsd)}</td><td class="ds-num">${usd(m.netUsd)}</td></tr>`).join('');
@@ -231,9 +233,9 @@ function poolSheetHtml(p, d, workflowOpen) {
   } else if (p.budgetStop) {
     notes += alertHtml('warning', 'The budget of this month is used up', `${esc(sentence(p.budgetStop))} ${esc(againText(p))}`);
   }
-  if (usage(p).error && !p.budgetWaits) {
-    notes += alertHtml(budgetKind(p) === 'minutes' ? '' : 'warning', 'CI-Plane cannot read GitHub\'s numbers', esc(sentence(usage(p).error)) +
-      (budgetKind(p) === 'minutes' ? ' Meanwhile it counts the minutes itself.' : ` It goes on with the last reading, from ${esc(ago(usage(p).at))}, for up to three hours.`));
+  if (usage(p).error && !p.budgetWaits && budgetKind(p) !== 'minutes') {
+    notes += alertHtml('warning', 'CI-Plane cannot read GitHub\'s numbers',
+      `${esc(sentence(usage(p).error))} It goes on with the last reading, from ${esc(ago(usage(p).at))}, for up to three hours.`);
   }
   const facts = [
     ['Provider', esc(kindName(p.kind))],

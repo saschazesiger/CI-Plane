@@ -415,6 +415,19 @@ func checkPool(tx *store.Tx, p model.Pool) (map[string]string, error) {
 	case p.Budget() == model.BudgetGitHub && !a.IsOrg():
 		errs["budgetKind"] = "GitHub has no way to read the budgets of a personal account. Choose a budget in dollars, or included minutes only."
 	}
+	// GitHub bills by repository: a pool whose budget rests on it needs a
+	// relay repository of its own, or it would count another pool's minutes.
+	for _, o := range pools {
+		if o.ID == p.ID || !strings.EqualFold(o.Repo, p.Repo) || errs["budgetKind"] != "" {
+			continue
+		}
+		switch {
+		case p.UsesBilling():
+			errs["budgetKind"] = fmt.Sprintf("The pool %s uses this repository too, and GitHub bills by repository. Give this pool a relay repository of its own, or limit it by minutes.", o.Name)
+		case o.UsesBilling():
+			errs["repo"] = fmt.Sprintf("The budget of the pool %s rests on GitHub's billing of this repository. Choose another repository for this pool.", o.Name)
+		}
+	}
 	return errs, nil
 }
 
