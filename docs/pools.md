@@ -97,7 +97,7 @@ from the [repository integration](github.md#-the-github-app), the accounts whose
 | | Repository integration (**Repositories**) | Account for runners (**Pools**) |
 |---|---|---|
 | What for | jobs arrive, runners are registered | runners of pools are started there |
-| Permissions of its app | *Actions*, *Metadata*, self-hosted runners or *Administration* | *Actions: read and write*, *Metadata: read*, nothing else |
+| Permissions of its app | *Actions*, *Metadata*, self-hosted runners or *Administration* | *Actions: read and write*, *Metadata: read*; on an organisation also *Administration: read-only*, to read the [billing](#-reading-githubs-billing) |
 | Webhook | `workflow_job` | none |
 | Its repositories | listed under **Repositories**, their jobs run on CI-Plane | listed under **Pools** only; CI-Plane runs none of their jobs |
 
@@ -129,13 +129,13 @@ the job has waited as long as *Use* asks.
 |---|---|---|---|---|
 | GitHub | 9 | for jobs that have waited 3 minutes | 5 | 0 (no limit) |
 
-**Free minutes first.** Your plan includes 2,000 minutes a month. A GitHub pool in tier 1, used at once, with a
-budget of 2,000 minutes, takes jobs before any worker until the month's minutes are counted as used; then the
-workers take over until the first day of the next month.
+**Free minutes first.** A GitHub pool in tier 1, used at once, with the budget *only the included minutes*, takes
+jobs before any worker until GitHub starts to bill the account for Actions minutes; then the workers take over until
+the first day of the next month.
 
 | Pool | Tier | Use | Runners at the same time | Budget |
 |---|---|---|---|---|
-| GitHub | 1 | at once | 5 | 2,000 minutes |
+| GitHub | 1 | at once | 5 | only the included minutes |
 
 A job whose last start failed on a pool tries anything else first, as on a worker.
 
@@ -151,20 +151,68 @@ A job whose last start failed on a pool tries anything else first, as on a worke
 | Runners at the same time | 5 | 1 to 100 | Your plan or provider may have its own limit of parallel jobs. |
 | Machine for standard jobs | see [Providers](#-providers) | a `runs-on` label | |
 | Machine for large jobs | see [Providers](#-providers) | a `runs-on` label, or empty | Empty: large jobs do not go to this pool. |
-| Budget | 0 (no limit) | 0 to 10,000,000 minutes a month | See [below](#-budget). |
+| Budget | runner minutes, 0 (no limit) | runner minutes (0 to 10,000,000), US dollars (1 to 1,000,000), only the included minutes, the budgets set on GitHub | Per calendar month. All but minutes are for GitHub-hosted runners only. See [below](#-budget). |
+| Token to read the billing | | a fine-grained token with *Plan: Read-only* | Only for a relay repository of a personal account. See [below](#-reading-githubs-billing). |
 | On | on | | Off: the pool takes no new jobs; its runners finish. |
 
 A pool with runners on it cannot be removed: switch it off, wait until they are done, then remove it.
 
 ## 🧮 Budget
 
-The budget is the runner time a pool may use per calendar month, in UTC. CI-Plane counts it itself: from the moment
-a runner is online until it is gone, every started minute, per runner. A runner that never came online counts
-nothing. The provider's bill may differ a little: it also covers the half minute a machine needs to start the runner.
+The budget limits what a pool uses per calendar month, in UTC. When it is used up, the pool takes no new jobs until
+the first day of the next month or until the budget allows it again; runners already on it finish. The event *… has
+used …* or *… has cost …* appears on the overview, and a waiting job's reason says why the pool is left out. There
+are four kinds:
 
-When the budget is used up, the pool takes no new jobs until the next month or until you raise the budget; runners
-already on it finish. The event *… has used its … minutes of this month* appears on the overview. The pool shows the
-minutes used this month, running runners included.
+| Budget | The pool stops when | For |
+|---|---|---|
+| **Runner minutes** | its runners have used this many minutes this month | every provider |
+| **US dollars** | GitHub bills this much for the Actions minutes of its relay repository this month, priced per machine | GitHub-hosted runners |
+| **Only the included minutes** | GitHub bills the owner anything for Actions minutes this month, in any repository | GitHub-hosted runners |
+| **The budgets set on GitHub** | a budget on GitHub that stops usage and covers the relay repository's Actions minutes is used up | GitHub-hosted runners of organisations |
+
+**Runner minutes** are what CI-Plane counts itself: from the moment a runner is online until it is gone, every
+started minute, per runner. A runner that never came online counts nothing. For a pool of GitHub-hosted runners whose
+billing CI-Plane can read, GitHub's count of the relay repository counts when it is higher: it also has the half
+minute a machine needs to start the runner. Every minute counts the same, whatever the machine: for a pool with a
+[larger runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), dollars are the better
+measure.
+
+**US dollars** are what GitHub bills after the included minutes, as its usage report says, per machine at its own
+price. GitHub shows its numbers a few hours late, so CI-Plane adds the minutes it counted that GitHub does not show yet,
+at the average list price of the month so far: the pool rather stops a little early than late.
+
+**Only the included minutes** uses the minutes of the owner's plan and nothing else. GitHub does not say how many are
+left, only whether it bills anything yet, so the pool stops at the first cent, a few hours late at most (the delay
+of GitHub's report). The minutes of larger runners are never included: such a pool stops at its first large job.
+
+**The budgets set on GitHub** follows the budgets of the organisation (*Settings → Billing and licensing → Budgets and
+alerts*): those of the organisation, its enterprise and the relay repository that are for Actions and stop usage when
+used up. Budgets that only alert are shown, not followed; those of cost centres are left out, as CI-Plane cannot see
+what they cover. Without this, GitHub would stop the runs itself, and the pool would [pause](#-when-a-pool-fails) after
+failed starts, longer each time.
+
+The pool shows this month's minutes, the cost, the budgets on GitHub, and GitHub's minutes and price per machine.
+
+### 🔎 Reading GitHub's billing
+
+For pools of GitHub-hosted runners, CI-Plane reads GitHub's usage report of the relay repository's owner every 15
+minutes, at once for a pool that is new or changed and when a month begins, and every 5 minutes while that fails. It
+only reads; nothing changes on GitHub.
+
+- **Organisation**: the app of the [account for runners](#-accounts-for-runners) reads it. GitHub asks for the
+  organisation permission *Administration: Read-only*. Apps CI-Plane creates for organisations ask for it; to add it
+  to an earlier one, open the app on GitHub (*the organisation's Settings → Developer settings → GitHub Apps → Edit →
+  Permissions & events*), set **Administration** under *Organization permissions* to *Read-only*, save, and accept
+  the new permission on the installation's page. The pool's message links there.
+- **Personal account**: GitHub lets no app read it. Create a
+  [fine-grained token](https://github.com/settings/personal-access-tokens/new) of the account with the account
+  permission **Plan: Read-only** and nothing else, and enter it in the pool. CI-Plane keeps it encrypted; it is never
+  shown again. When it expires, the pool says so; enter a new one. GitHub has no budgets of personal accounts to read.
+
+A budget of minutes works without the billing: the pool then counts by itself. The other kinds rest on it, so the
+pool takes no jobs while CI-Plane has no reading of this month, or the last one is older than three hours (an outage of
+GitHub passes; a permission that was taken away does not). **Check** and the pool's sheet say why.
 
 ## ⏸️ When a pool fails
 
@@ -191,7 +239,8 @@ The pool shows why it pauses and until when, and a waiting job's reason says so:
 
 - The workflow is missing, disabled, or not on the default branch.
 - The GitHub App may not start workflows (*Actions: read* only).
-- The minutes or the spending limit of the account are used up, or the provider has no machine with that label.
+- The minutes or the spending limit of the account are used up, or the provider has no machine with that label. A
+  [budget](#-budget) in dollars, of the included minutes, or that follows the budgets on GitHub stops the pool before.
 - GitHub cannot reach CI-Plane's address, so runs cannot collect their runner.
 
 ## 🧱 The same environment everywhere

@@ -148,7 +148,9 @@ worker first.
 or another provider. It has a tier like a worker. Inside a tier the workers go first, so a pool in tier 1 is used
 before the workers of tier 2 (to use up free minutes first), and a pool in tier 9 only when no worker has room
 (overflow). A pool has room while fewer runners than its limit are on it, its monthly budget is not used up, it is
-not pausing after failed starts, and the job has waited as long as the pool asks.
+not pausing after failed starts, and the job has waited as long as the pool asks. The budget of a pool of GitHub-hosted runners can
+rest on GitHub's billing (dollars, the included minutes, or the budgets set on GitHub), which the engine reads every 15
+minutes and keeps with the pool ([Budget](pools.md#-budget)).
 
 **Priority.** Each worker has a CPU priority for its runners: *normal*, *low* or *background*. It decides who gets
 the CPU when a server is busy, and makes it safe to add a server that mainly does other work.

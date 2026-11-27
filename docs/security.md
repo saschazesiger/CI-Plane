@@ -71,7 +71,8 @@ So:
 
 ## 🔐 Secrets at rest
 
-The GitHub Apps' private keys, webhook secrets and client secrets, the Cloudflare API token, the tunnel token, and
+The GitHub Apps' private keys, webhook secrets and client secrets, the tokens that read the billing of personal
+accounts for [pools](pools.md#-reading-githubs-billing), the Cloudflare API token, the tunnel token, and
 CI-Plane's SSH private key are encrypted with AES-256-GCM before they go into the database.
 
 The key is `secret.key` in the data directory, created on first start (`/data/secret.key`, mode 600), or the value

@@ -63,9 +63,8 @@ Once one is tried, it could get a preset with its default labels, as Blacksmith 
 
 ## 💡 Other ideas 📝
 
-- **Real minutes instead of counted ones.** A pool's budget is counted by CI-Plane from the dispatch to the end of
-  the runner ([Budget](pools.md#-budget)). GitHub's billing API could give the real minutes of the relay repository's
-  owner; other providers would need their own API.
+- **Real minutes of other providers.** Pools of GitHub-hosted runners follow GitHub's billing ([Budget](pools.md#-budget));
+  those of Blacksmith and others are counted by CI-Plane, as their providers would need their own API.
 - **A registry login per pool.** A private runner image that needs a login cannot be pulled on a pool's machine
   today. A login stored encrypted per pool, handed to the run with the configuration, would allow it.
 - **Cloud VMs as workers.** Start a VM at a cloud provider when the queue grows, add it as a worker, remove it when

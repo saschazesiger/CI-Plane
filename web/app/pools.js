@@ -657,7 +657,7 @@ function connectFormHtml() {
       `<li>GitHub shows the app CI-Plane prepared for ${org ? 'the organisation' : 'your account'}. Choose <strong>Create GitHub App</strong>.</li>` +
       '<li>GitHub asks where to install it. Choose only the private repository for the relay workflow, for example ci-plane-relay, then <strong>Install</strong>.</li>' +
       '<li>GitHub sends you back here. Add a pool with that repository.</li></ol></div>' +
-    '<p class="ds-meta">The app may start and read workflows (Actions: read and write) and nothing else. It has no webhook and no access to runners, so CI-Plane runs no jobs of this account through it.</p>' +
+    `<p class="ds-meta">The app may start and read workflows (Actions: read and write)${org ? ', and read the organisation\'s billing for the budgets of pools (Administration: read-only)' : ''}, nothing else. It has no webhook and no access to runners, so CI-Plane runs no jobs of this account through it.</p>` +
     '<div class="ds-form-actions"><button class="ds-btn ds-btn--text" type="button" data-act="ra-cancel">Cancel</button>' +
       `${busyButton('ds-btn ds-btn--filled', 'Continue on GitHub', 'Preparing', 'Opening', 'type="submit"')}</div>` +
     '</form>';
