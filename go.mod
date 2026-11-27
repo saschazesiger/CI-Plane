@@ -3,7 +3,7 @@ module github.com/saschazesiger/CI-Plane
 go 1.27.3
 
 require (
-	github.com/saschazesiger/Z-Dash/server v0.0.0-20261125203622-146b8eaf3da8
+	github.com/saschazesiger/Z-Dash/server v0.0.0-20261127101355-a96e28030746
 	golang.org/x/crypto v0.59.0
 	modernc.org/sqlite v1.62.0
 )
