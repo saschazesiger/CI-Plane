@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/saschazesiger/CI-Plane/internal/engine"
 	"github.com/saschazesiger/CI-Plane/internal/model"
@@ -121,4 +122,12 @@ type RelayCheck struct {
 	// AddURL opens GitHub's editor with the relay workflow filled in, when
 	// it is missing from the repository.
 	AddURL string `json:"addUrl,omitempty"`
+}
+
+// UsageTokenName is the name of the secret that holds the token of a
+// person that reads the billing of a personal account, for the pools whose
+// runs the app of accountID starts. GitHub lets no app read the billing of
+// a personal account.
+func UsageTokenName(accountID int64) string {
+	return "github:" + strconv.FormatInt(accountID, 10) + ":usage-token"
 }

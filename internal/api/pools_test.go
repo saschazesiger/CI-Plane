@@ -4,10 +4,13 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/saschazesiger/CI-Plane/internal/model"
+	"github.com/saschazesiger/CI-Plane/internal/secret"
 	"github.com/saschazesiger/CI-Plane/internal/store"
 )
 
@@ -221,4 +224,132 @@ func TestRunnerAccountsAndTheirPools(t *testing.T) {
 		t.Fatalf("integration account after DELETE on runner-accounts: %v", err)
 	}
 	r.expect(r.local_("DELETE", "/api/runner-accounts/99", nil), 404)
+}
+
+func TestPoolBudgetKinds(t *testing.T) {
+	r := newRig(t, false)
+	r.srv.d.Relay = &fakeRelay{}
+	box, err := secret.New(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.srv.d.Box = box
+	r.signIn()
+	if err := r.st.Tx(func(tx *store.Tx) error {
+		if err := tx.SaveRunnerAccount(model.Account{ID: 2, Slug: "ci-plane-runners-acme", Owner: "acme", OwnerType: "Organization", InstallationID: 6}); err != nil {
+			return err
+		}
+		if err := tx.SetRunnerRepos(2, []model.Repo{{ID: 7, FullName: "acme/relay", Private: true}}); err != nil {
+			return err
+		}
+		if err := tx.SaveRunnerAccount(model.Account{ID: 3, Slug: "ci-plane-runners-jo", Owner: "jo", OwnerType: "User", InstallationID: 8}); err != nil {
+			return err
+		}
+		return tx.SetRunnerRepos(3, []model.Repo{{ID: 9, FullName: "jo/relay", Private: true}})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pool := func(name string, accountID int64, repo string, more map[string]any) map[string]any {
+		b := map[string]any{"name": name, "kind": "github", "accountId": accountID, "repo": repo, "standard": "ubuntu-latest"}
+		for k, v := range more {
+			b[k] = v
+		}
+		return b
+	}
+	field := func(got resp, name string) string {
+		t.Helper()
+		f, _ := got.body["fields"].(map[string]any)
+		s, _ := f[name].(string)
+		return s
+	}
+
+	bad := r.expect(r.local_("POST", "/api/pools", pool("A", 2, "acme/relay", map[string]any{"budgetKind": "euros"})), 400)
+	if !strings.Contains(field(bad, "budgetKind"), "Choose what limits") {
+		t.Fatalf("unknown kind: %s", bad.raw)
+	}
+	bad = r.expect(r.local_("POST", "/api/pools", pool("A", 2, "acme/relay", map[string]any{"budgetKind": "dollars", "budgetUsd": 0})), 400)
+	if !strings.Contains(field(bad, "budgetUsd"), "1 to 1,000,000") {
+		t.Fatalf("no dollars: %s", bad.raw)
+	}
+	b := pool("A", 2, "acme/relay", map[string]any{"budgetKind": "free"})
+	b["kind"] = "blacksmith"
+	bad = r.expect(r.local_("POST", "/api/pools", b), 400)
+	if !strings.Contains(field(bad, "budgetKind"), "Only GitHub-hosted runners") {
+		t.Fatalf("billing of another provider: %s", bad.raw)
+	}
+
+	// An organisation: the app reads its billing, no token needed (and none kept).
+	added := r.expect(r.local_("POST", "/api/pools", pool("Org", 2, "acme/relay", map[string]any{"budgetKind": "github", "usageToken": "github_pat_0123456789abcdefghij"})), 200)
+	org := added.body["pool"].(map[string]any)
+	if org["budgetKind"] != "github" {
+		t.Fatalf("org: %s", added.raw)
+	}
+
+	// A personal account: no budgets on GitHub to follow, and a token is needed.
+	bad = r.expect(r.local_("POST", "/api/pools", pool("Jo", 3, "jo/relay", map[string]any{"budgetKind": "github"})), 400)
+	if !strings.Contains(field(bad, "budgetKind"), "budgets of a personal account") {
+		t.Fatalf("budgets of a person: %s", bad.raw)
+	}
+	bad = r.expect(r.local_("POST", "/api/pools", pool("Jo", 3, "jo/relay", map[string]any{"budgetKind": "dollars", "budgetUsd": 20})), 400)
+	if !strings.Contains(field(bad, "usageToken"), "Enter a token of jo with the permission Plan: read-only") {
+		t.Fatalf("without a token: %s", bad.raw)
+	}
+	bad = r.expect(r.local_("POST", "/api/pools", pool("Jo", 3, "jo/relay", map[string]any{"budgetKind": "dollars", "budgetUsd": 20, "usageToken": "github pat"})), 400)
+	if !strings.Contains(field(bad, "usageToken"), "does not look like a token") {
+		t.Fatalf("not a token: %s", bad.raw)
+	}
+	// A budget of minutes needs none.
+	r.expect(r.local_("POST", "/api/pools", pool("Minutes", 3, "jo/relay", map[string]any{"budgetMin": 100})), 200)
+	added = r.expect(r.local_("POST", "/api/pools", pool("Jo", 3, "jo/relay", map[string]any{"budgetKind": "dollars", "budgetUsd": 20, "usageToken": " github_pat_0123456789abcdefghij "})), 200)
+	jo := added.body["pool"].(map[string]any)
+	if strings.Contains(added.raw, "github_pat_") {
+		t.Fatalf("the token is shown: %s", added.raw)
+	}
+	if err := r.st.View(func(tx *store.Tx) error {
+		if tok, err := box.Get(tx, UsageTokenName(3)); err != nil || string(tok) != "github_pat_0123456789abcdefghij" {
+			t.Errorf("token of jo: %q %v", tok, err)
+		}
+		if _, err := box.Get(tx, UsageTokenName(2)); err == nil {
+			t.Error("a token kept for an organisation")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// What the engine read shows; the pool waits while it cannot be read.
+	id := int64(jo["id"].(float64))
+	if err := r.st.Tx(func(tx *store.Tx) error {
+		p, err := tx.Pool(id)
+		if err != nil {
+			return err
+		}
+		p.Usage = model.PoolUsage{Month: time.Now().UTC().Format("2006-01"), At: time.Now().UnixMilli(), Minutes: 300, GrossUSD: 1.8, NetUSD: 1.234,
+			Machines: []model.MachineUsage{{SKU: "actions_linux", Minutes: 300, GrossUSD: 1.8, NetUSD: 1.234}}}
+		return tx.SavePool(p)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	list := r.expect(r.local_("GET", "/api/pools", nil), 200)
+	var v map[string]any
+	for _, x := range list.body["pools"].([]any) {
+		if x.(map[string]any)["name"] == "Jo" {
+			v = x.(map[string]any)
+		}
+	}
+	if v["usedMin"] != float64(300) || v["ownMin"] != float64(0) || v["spentUsd"] != 1.23 || v["budgetStop"] != "" ||
+		v["ownerType"] != "User" || v["hasUsageToken"] != true || v["usage"].(map[string]any)["machines"].([]any)[0].(map[string]any)["sku"] != "actions_linux" {
+		t.Fatalf("view: %v", v)
+	}
+	// A change of the kind drops what was read: the engine reads it anew.
+	changed := r.expect(r.local_("PATCH", "/api/pools/"+strconv.FormatInt(id, 10), map[string]any{"budgetKind": "free"}), 200)
+	if u := changed.body["pool"].(map[string]any)["usage"].(map[string]any); u["at"] != float64(0) {
+		t.Fatalf("usage kept: %s", changed.raw)
+	}
+	list = r.expect(r.local_("GET", "/api/pools", nil), 200)
+	for _, x := range list.body["pools"].([]any) {
+		if x := x.(map[string]any); x["name"] == "Jo" && !strings.Contains(x["budgetStop"].(string), "waits for its usage from GitHub") {
+			t.Fatalf("stop: %v", x["budgetStop"])
+		}
+	}
 }

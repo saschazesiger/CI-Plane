@@ -30,7 +30,7 @@ type Deps struct {
 	Workers Workers
 	GitHub  GitHub
 	Relay   Relay       // runs the runners of the pools; may be nil
-	Box     *secret.Box // reserved for secrets the API itself may store later; may be nil
+	Box     *secret.Box // the tokens that read the billing of personal accounts; may be nil
 	Version string
 
 	// Demo marks the demo: the setup assistant counts the password as done.

@@ -207,6 +207,9 @@ type Engine struct {
 	// Relay, if set, runs the runners of the pools (model.Pool). Set it
 	// before Run.
 	Relay Hosts
+	// Billing, if set, reads what GitHub bills for the pools of
+	// GitHub-hosted runners. Set it before Run.
+	Billing Billing
 
 	now  func() int64
 	kick chan struct{}

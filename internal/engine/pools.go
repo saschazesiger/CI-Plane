@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/saschazesiger/CI-Plane/internal/model"
@@ -39,6 +40,23 @@ type Hosts interface {
 	// Status returns the live view of a worker; it never blocks.
 	Status(workerID int64) WorkerStatus
 }
+
+// Billing reads what GitHub bills for the Actions minutes of a pool.
+type Billing interface {
+	// PoolUsage reads the usage of a month (UTC). The error says what to do.
+	PoolUsage(ctx context.Context, p model.Pool, year int, month time.Month) (model.PoolUsage, error)
+}
+
+// How often GitHub's billing is read. GitHub updates it a few times an
+// hour at most, so more often would show nothing new.
+const (
+	usageEvery = 15 * time.Minute
+	usageRetry = 5 * time.Minute
+	// usageStale is how old the last reading may be before a budget that
+	// rests on GitHub's billing stops the pool: long enough for an outage
+	// of GitHub to pass, short enough not to run far past a budget.
+	usageStale = 3 * time.Hour
+)
 
 // ErrPassing marks a failed start that says nothing about where it was
 // tried: a rate limit, a network error, an error of GitHub's own. It is not
@@ -108,6 +126,182 @@ func poolRunners(runners []model.Runner, p model.Pool) []model.Runner {
 // monthOf is the calendar month of a time, in UTC: budgets start anew with it.
 func monthOf(ms int64) string { return time.UnixMilli(ms).UTC().Format("2006-01") }
 
+// PoolMinutes is how many runner minutes a pool has used this month: the
+// higher of CI-Plane's own count and GitHub's. GitHub's count lags by up
+// to a few hours but also has what CI-Plane does not see, like the time a
+// machine takes to start.
+func PoolMinutes(p model.Pool, runners []model.Runner, now int64) float64 {
+	own := float64(poolUsedSec(p, runners, now)) / 60
+	if u := p.Usage; u.Month == monthOf(now) && u.At > 0 {
+		return max(own, u.Minutes)
+	}
+	return own
+}
+
+// PoolSpent is what a pool has cost this month in US dollars: what GitHub
+// bills for its relay repository, and, for the minutes CI-Plane counted
+// that GitHub does not show yet, their price as GitHub listed it so far
+// (before included minutes: better a little early than a little late).
+func PoolSpent(p model.Pool, runners []model.Runner, now int64) float64 {
+	u := p.Usage
+	if u.Month != monthOf(now) || u.At == 0 {
+		return 0
+	}
+	spent := u.NetUSD
+	if own := float64(poolUsedSec(p, runners, now)) / 60; own > u.Minutes && u.Minutes > 0 {
+		spent += (own - u.Minutes) * u.GrossUSD / u.Minutes
+	}
+	return spent
+}
+
+// PoolBudget says why the budget of a pool lets it take no jobs now, or ""
+// if it does. A budget that rests on GitHub's billing also stops the pool
+// while CI-Plane has no recent reading of it: better a pool that waits
+// than a bill nobody wanted.
+func PoolBudget(p model.Pool, runners []model.Runner, now int64) string {
+	u := p.Usage
+	if UsageMissing(p, now) {
+		why := "it has not been read this month yet"
+		if u.Error != "" {
+			why = "CI-Plane cannot read it: " + strings.TrimRight(u.Error, ".")
+		}
+		return fmt.Sprintf("%s waits for its usage from GitHub, as its budget rests on it; %s", p.Name, why)
+	}
+	switch p.Budget() {
+	case model.BudgetMinutes:
+		if p.BudgetMin > 0 && PoolMinutes(p, runners, now) >= float64(p.BudgetMin) {
+			return fmt.Sprintf("%s has used its %s of this month", p.Name, count(p.BudgetMin, "minute"))
+		}
+	case model.BudgetDollars:
+		if spent := PoolSpent(p, runners, now); spent >= float64(p.BudgetUSD) {
+			return fmt.Sprintf("%s has cost %s of its %s this month", p.Name, dollars(spent), dollars(float64(p.BudgetUSD)))
+		}
+	case model.BudgetFree:
+		if u.AccountNetUSD >= 0.005 {
+			owner, _, _ := strings.Cut(p.Repo, "/")
+			return fmt.Sprintf("%s only uses included minutes, and those of %s are used up this month (%s billed)", p.Name, owner, dollars(u.AccountNetUSD))
+		}
+	case model.BudgetGitHub:
+		for _, b := range u.Budgets {
+			if b.UsedUp() {
+				return fmt.Sprintf("%s follows the budgets on GitHub, and the budget of %s for %s is used up (%s of %s)",
+					p.Name, b.Entity, b.SKU, dollars(b.ConsumedUSD), dollars(float64(b.AmountUSD)))
+			}
+		}
+	}
+	return ""
+}
+
+// UsageMissing reports whether a pool's budget rests on GitHub's billing
+// and CI-Plane has no recent reading of it.
+func UsageMissing(p model.Pool, now int64) bool {
+	u := p.Usage
+	return p.UsesBilling() && (u.Month != monthOf(now) || u.At == 0 || now-u.At > usageStale.Milliseconds())
+}
+
+// dollars says an amount of US dollars.
+func dollars(v float64) string {
+	if v == float64(int64(v)) {
+		return fmt.Sprintf("$%d", int64(v))
+	}
+	return fmt.Sprintf("$%.2f", v)
+}
+
+// readUsage reads GitHub's billing of the pools of GitHub-hosted runners
+// now and then, and at once for a pool that is new, was changed, or
+// begins a month. A reading is only shown and compared: nothing on GitHub
+// changes, so it needs no intent.
+func (e *Engine) readUsage(ctx context.Context, s *snapshot) {
+	if e.Billing == nil {
+		return
+	}
+	month := monthOf(s.now)
+	for _, p := range s.pools {
+		if p.Kind != model.PoolGitHub || (p.AccountID == 0 && !p.UsesBilling()) {
+			continue
+		}
+		// The key changes with what the reading depends on, so that a
+		// changed pool and a new month are read at once.
+		base := fmt.Sprintf("usage:%d:%d:%s:%s:%s", p.ID, p.AccountID, p.Repo, p.Budget(), month)
+		key, fresh := base, p.Usage.At == 0 && p.Usage.Error == ""
+		if fresh {
+			key += ":new" // the reading was dropped, as when a token was entered
+		}
+		e.spawn(ctx, key, time.Minute, func(ctx context.Context) time.Duration {
+			at := e.now()
+			t := time.UnixMilli(at).UTC()
+			u, err := e.Billing.PoolUsage(ctx, p, t.Year(), t.Month())
+			e.saveUsage(p, u, err, at)
+			next := usageEvery
+			if err != nil {
+				next = usageRetry
+			}
+			if !fresh {
+				return next
+			}
+			// The next reading is the regular one; a reading that is
+			// dropped again is due at once.
+			e.mu.Lock()
+			e.notBefore[base] = at + next.Milliseconds()
+			e.mu.Unlock()
+			return 0
+		})
+	}
+}
+
+// saveUsage stores a reading of a pool's usage, unless the pool changed
+// meanwhile in what the reading depends on, and says when it changes
+// whether the pool takes jobs.
+func (e *Engine) saveUsage(read model.Pool, u model.PoolUsage, readErr error, at int64) {
+	err := e.st.Tx(func(tx *store.Tx) error {
+		p, err := tx.Pool(read.ID)
+		if err != nil {
+			return ignoreMissing(err)
+		}
+		if p.AccountID != read.AccountID || p.Repo != read.Repo || p.Budget() != read.Budget() {
+			return nil
+		}
+		runners, err := tx.ActiveRunners()
+		if err != nil {
+			return err
+		}
+		// Only the budget itself is told: a missing reading has an event
+		// of its own.
+		before := ""
+		if !UsageMissing(p, at) {
+			before = PoolBudget(p, runners, at)
+		}
+		if readErr != nil {
+			if p.Usage.Error == "" && p.UsesBilling() {
+				event(tx, model.LevelWarn, "pool.usage", fmt.Sprintf("CI-Plane cannot read the usage of %s from GitHub: %s. "+
+					"Its budget rests on it, so it takes no jobs once the last reading is %s old", p.Name, strings.TrimRight(readErr.Error(), "."), span(int(usageStale.Seconds()))), 0, "", p.WorkerID())
+			}
+			if p.Usage.FailingSince == 0 {
+				p.Usage.FailingSince = at
+			}
+			p.Usage.Error = readErr.Error()
+		} else {
+			u.At, u.Error, u.FailingSince = at, "", 0
+			p.Usage = u
+		}
+		after := ""
+		if !UsageMissing(p, at) {
+			after = PoolBudget(p, runners, at)
+		}
+		switch {
+		case before == "" && after != "":
+			event(tx, model.LevelWarn, "pool.budget", after+"; it takes jobs again next month, or when its budget allows it", 0, "", p.WorkerID())
+		case before != "" && after == "":
+			event(tx, model.LevelInfo, "pool.budget", p.Name+" takes jobs again: its budget allows it", 0, "", p.WorkerID())
+		}
+		return tx.SavePool(p)
+	})
+	if err != nil {
+		e.logf("engine: usage of pool %d: %v", read.ID, err)
+	}
+	e.changed()
+}
+
 // poolUsedSec is the runner time a pool has used this month: what its
 // finished runners took, and what the given ones on it have taken so far.
 // Time counts from the moment a runner is online: one that never came
@@ -150,8 +344,8 @@ func (s *snapshot) pickPool(j model.Job, z model.Size, active map[int64]int, wor
 			say(p.Name + " cannot be used while the Cloudflare tunnel is not connected")
 		case p.PausedUntil > s.now:
 			say(fmt.Sprintf("%s pauses until %s after %s", p.Name, clock(p.PausedUntil), failedStarts(p.Fails)))
-		case p.BudgetMin > 0 && poolUsedSec(p, s.runners, s.now) >= int64(p.BudgetMin)*60:
-			say(fmt.Sprintf("%s has used its %s of this month", p.Name, count(p.BudgetMin, "minute")))
+		case PoolBudget(p, s.runners, s.now) != "":
+			say(PoolBudget(p, s.runners, s.now))
 		case active[p.ID] >= p.Max:
 			say(inUse(p.Max, p.Name))
 		case p.Fails > 0 && active[p.ID] > 0:
@@ -274,11 +468,10 @@ func poolUsed(tx *store.Tx, r model.Runner, now int64) error {
 	if month := monthOf(now); p.Month != month {
 		p.Month, p.UsedSec = month, 0
 	}
-	before := p.UsedSec
+	before := PoolBudget(p, nil, now)
 	p.UsedSec += sec
-	if limit := int64(p.BudgetMin) * 60; limit > 0 && before < limit && p.UsedSec >= limit {
-		event(tx, model.LevelWarn, "pool.budget", fmt.Sprintf("%s has used its %s of this month; it takes jobs again next month, or when you raise its budget",
-			p.Name, count(p.BudgetMin, "minute")), 0, "", p.WorkerID())
+	if after := PoolBudget(p, nil, now); before == "" && after != "" {
+		event(tx, model.LevelWarn, "pool.budget", after+"; it takes jobs again next month, or when you raise its budget", 0, "", p.WorkerID())
 	}
 	return tx.SavePool(p)
 }

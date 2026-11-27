@@ -786,8 +786,9 @@ func TestRunnerManifestAndComplete(t *testing.T) {
 	if name, _ := m["name"].(string); len(name) > maxAppName || !strings.HasPrefix(name, "CI-Plane runners") {
 		t.Fatalf("name %q (%d)", name, len(name))
 	}
-	// It may start workflows and nothing else, and hears nothing from GitHub.
-	if perms := m["default_permissions"]; fmt.Sprint(perms) != fmt.Sprint(map[string]any{"actions": "write", "metadata": "read"}) {
+	// It may start workflows and read the billing of the organisation,
+	// nothing else, and hears nothing from GitHub.
+	if perms := m["default_permissions"]; fmt.Sprint(perms) != fmt.Sprint(map[string]any{"actions": "write", "metadata": "read", "organization_administration": "read"}) {
 		t.Fatalf("permissions %v", perms)
 	}
 	for _, k := range []string{"hook_attributes", "default_events"} {
@@ -841,6 +842,14 @@ func TestRunnerManifestAndComplete(t *testing.T) {
 	form2, err := e.s.RunnerManifest("", "https://ci.example.com/github/return")
 	if err != nil {
 		t.Fatal(err)
+	}
+	// A personal account has no administration to read.
+	var m2 map[string]any
+	if err := json.Unmarshal([]byte(form2.Manifest), &m2); err != nil {
+		t.Fatal(err)
+	}
+	if perms := m2["default_permissions"]; fmt.Sprint(perms) != fmt.Sprint(map[string]any{"actions": "write", "metadata": "read"}) {
+		t.Fatalf("permissions of a personal account %v", perms)
 	}
 	e.gh.conversions["code-r2"] = map[string]any{
 		"id": 5252, "slug": "ci-plane-runners-solo", "owner": map[string]any{"login": "solo", "type": "User"},

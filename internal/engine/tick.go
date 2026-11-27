@@ -102,6 +102,7 @@ func (e *Engine) Tick(ctx context.Context) {
 			return
 		}
 	}
+	e.readUsage(ctx, s)
 	dirty = e.schedule(s) || dirty
 	e.rerunLost(ctx)
 	e.reconcileForge(ctx, s)

@@ -469,9 +469,15 @@ type Pool struct {
 	Max       int    `json:"max"`      // runners at the same time
 	Standard  string `json:"standard"` // runs-on label of the machine for standard jobs
 	Large     string `json:"large"`    // the same for large jobs; empty = they do not go here
+	// BudgetKind says what limits the pool per calendar month (UTC): one of
+	// the budget kinds; empty is BudgetMinutes.
+	BudgetKind string `json:"budgetKind"`
 	// BudgetMin is how many minutes of runner time the pool may use per
-	// calendar month (UTC); 0 = no limit. CI-Plane counts them itself.
+	// month under BudgetMinutes; 0 = no limit.
 	BudgetMin int `json:"budgetMin"`
+	// BudgetUSD is how many US dollars the pool may cost per month under
+	// BudgetDollars, as GitHub bills them.
+	BudgetUSD int `json:"budgetUsd"`
 
 	// Kept by the engine.
 	Month       string `json:"month"`       // the month UsedSec belongs to, like 2026-11
@@ -480,6 +486,85 @@ type Pool struct {
 	PausedUntil int64  `json:"pausedUntil"` // no runner is started before; 0 = not paused
 	PauseReason string `json:"pauseReason"` // why the last start failed
 	CreatedAt   int64  `json:"createdAt"`
+	// Usage is what GitHub counts of the pool's Actions minutes, read now
+	// and then; only for pools of GitHub-hosted runners.
+	Usage PoolUsage `json:"usage"`
+}
+
+// The budget kinds of a pool. All but BudgetMinutes rest on what GitHub
+// bills, so they are for pools of GitHub-hosted runners only.
+const (
+	BudgetMinutes = "minutes" // runner minutes; CI-Plane counts them, GitHub's count too where it can read it
+	BudgetDollars = "dollars" // US dollars billed for the relay repository's Actions minutes
+	BudgetFree    = "free"    // only the minutes included in the owner's plan: stop once anything is billed
+	BudgetGitHub  = "github"  // the budgets set on GitHub that stop usage
+)
+
+// ValidBudgetKind reports whether k is one of the budget kinds.
+func ValidBudgetKind(k string) bool {
+	return k == BudgetMinutes || k == BudgetDollars || k == BudgetFree || k == BudgetGitHub
+}
+
+// Budget is the kind of the pool's budget, BudgetMinutes for pools of
+// earlier versions.
+func (p Pool) Budget() string {
+	if p.BudgetKind == "" {
+		return BudgetMinutes
+	}
+	return p.BudgetKind
+}
+
+// UsesBilling reports whether the pool's budget rests on GitHub's billing,
+// so that it takes no jobs while CI-Plane cannot read it.
+func (p Pool) UsesBilling() bool { return p.Budget() != BudgetMinutes }
+
+// PoolUsage is GitHub's account of the Actions minutes of a pool in one
+// month: those of its relay repository, priced per machine, and what the
+// owner pays for Actions minutes as a whole.
+type PoolUsage struct {
+	Month string `json:"month"` // like 2026-11; the numbers belong to it
+	At    int64  `json:"at"`    // when they were read; 0 = never
+	// Of the relay repository.
+	Minutes  float64        `json:"minutes"`
+	GrossUSD float64        `json:"grossUsd"` // at the list price
+	NetUSD   float64        `json:"netUsd"`   // billed, after the included minutes
+	Machines []MachineUsage `json:"machines"` // per SKU, most minutes first
+	// AccountNetUSD is what the owner is billed for Actions minutes this
+	// month, over all repositories: above zero, the included minutes are
+	// used up.
+	AccountNetUSD float64 `json:"accountNetUsd"`
+	// Budgets are the budgets on GitHub that cover the relay repository's
+	// Actions minutes; read only for BudgetGitHub.
+	Budgets []GitHubBudget `json:"budgets"`
+	// Error says why the last reading failed, and since when readings fail;
+	// the numbers above are those of the last one that worked.
+	Error        string `json:"error"`
+	FailingSince int64  `json:"failingSince"`
+}
+
+// MachineUsage is the Actions minutes of one SKU, like actions_linux.
+type MachineUsage struct {
+	SKU      string  `json:"sku"`
+	Minutes  float64 `json:"minutes"`
+	GrossUSD float64 `json:"grossUsd"`
+	NetUSD   float64 `json:"netUsd"`
+}
+
+// GitHubBudget is a budget set on GitHub.
+type GitHubBudget struct {
+	ID          string  `json:"id"`
+	Scope       string  `json:"scope"`  // organization, repository, enterprise
+	Entity      string  `json:"entity"` // the organisation or repository it is for
+	SKU         string  `json:"sku"`    // the product or SKU, like actions
+	AmountUSD   int     `json:"amountUsd"`
+	ConsumedUSD float64 `json:"consumedUsd"`
+	Stop        bool    `json:"stop"` // GitHub stops usage once it is used up
+}
+
+// UsedUp reports whether GitHub stops usage under this budget now. A
+// budget of 0 dollars stops at the first cent billed.
+func (b GitHubBudget) UsedUp() bool {
+	return b.Stop && b.ConsumedUSD > 0 && b.ConsumedUSD >= float64(b.AmountUSD)
 }
 
 // WorkerID is the id the runners of the pool carry as their worker: pools

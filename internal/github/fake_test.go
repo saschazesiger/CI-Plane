@@ -85,6 +85,14 @@ type fakeGH struct {
 	conversions     map[string]map[string]any
 	fail            map[string][]int // "METHOD path" -> status codes to answer first
 	lastJIT         map[string]any
+	// billing: the usage reports by "organizations/x" or "users/x", the
+	// budgets of organisations, whether apps may read them ("Administration:
+	// read"), and the token of a person that reads a user's.
+	usage        map[string][]usageItem
+	budgetList   map[string][]ghBudget
+	billingApps  bool
+	userToken    string
+	usageQueries []string
 }
 
 func newFake(t *testing.T) *fakeGH {
@@ -94,6 +102,7 @@ func newFake(t *testing.T) *fakeGH {
 		installations: map[int64]int64{}, instOwner: map[int64]string{}, runners: map[string][]*fakeRunner{},
 		nextRunner: 100, runs: map[string][]*fakeRun{}, hookConfig: map[int64]map[string]any{},
 		conversions: map[string]map[string]any{}, fail: map[string][]int{},
+		usage: map[string][]usageItem{}, budgetList: map[string][]ghBudget{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /app-manifests/{code}/conversions", f.conversion)
@@ -113,6 +122,8 @@ func newFake(t *testing.T) *fakeGH {
 	mux.HandleFunc("GET /repos/{owner}/{repo}/actions/jobs/{id}", f.getJob)
 	mux.HandleFunc("POST /repos/{owner}/{repo}/actions/jobs/{id}/rerun", f.rerunJob)
 	mux.HandleFunc("GET /repos/{owner}/{repo}/actions/runs/{id}", f.getRun)
+	mux.HandleFunc("GET /{kind}/{owner}/settings/billing/usage", f.billingUsage)
+	mux.HandleFunc("GET /organizations/{org}/settings/billing/budgets", f.billingBudgets)
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Method + " " + r.URL.Path
 		f.mu.Lock()
@@ -207,6 +218,47 @@ func (f *fakeGH) appOf(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// billingUsage answers the usage report: to an app of an organisation
+// with the permission, or to the token of the person.
+func (f *fakeGH) billingUsage(w http.ResponseWriter, r *http.Request) {
+	kind := r.PathValue("kind")
+	auth := r.Header.Get("Authorization")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	switch {
+	case kind == "organizations" && !strings.HasPrefix(auth, "Bearer ghs_"):
+		apiErr(w, 401, "Bad credentials")
+		return
+	case kind == "organizations" && !f.billingApps:
+		apiErr(w, 403, "Resource not accessible by integration")
+		return
+	case kind == "users" && (f.userToken == "" || auth != "Bearer "+f.userToken):
+		apiErr(w, 401, "Bad credentials")
+		return
+	case kind != "organizations" && kind != "users":
+		apiErr(w, 404, "Not Found")
+		return
+	}
+	f.usageQueries = append(f.usageQueries, r.URL.RawQuery)
+	writeJSON(w, r, f, 200, map[string]any{"usageItems": f.usage[kind+"/"+r.PathValue("owner")]})
+}
+
+func (f *fakeGH) billingBudgets(w http.ResponseWriter, r *http.Request) {
+	if !f.installed(w, r) {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.billingApps {
+		apiErr(w, 403, "Resource not accessible by integration")
+		return
+	}
+	all := f.budgetList[r.PathValue("org")]
+	p, per := page(r)
+	list := slice(all, p, per)
+	writeJSON(w, r, f, 200, map[string]any{"budgets": list, "has_next_page": p*per < len(all), "total_count": len(all)})
 }
 
 // installed checks an installation token.

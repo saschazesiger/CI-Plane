@@ -75,6 +75,7 @@ func New(opts Options) (*Demo, error) {
 	d.Engine.Logf = opts.Logf
 	// The runners of pools are simulated like those of workers.
 	d.Engine.Relay = poolHosts{d.World}
+	d.Engine.Billing = d.World
 	d.Relay = &Relay{}
 	d.Workers = &Workers{d: d}
 	d.GitHub = &GitHub{d: d, states: map[string]manifestState{}, installed: map[int64]bool{}, webhooks: map[int64]int64{}}
@@ -298,11 +299,17 @@ func (d *Demo) seed() error {
 		if err := tx.SetRunnerRepos(demoRunnerAccount, []model.Repo{{ID: 9_400_001, FullName: "mia-dev/ci-plane-relay", Private: true}}); err != nil {
 			return err
 		}
-		if _, err := tx.AddPool(model.Pool{Name: "GitHub", Kind: model.PoolGitHub, AccountID: demoRunnerAccount, Repo: "mia-dev/ci-plane-relay", Tier: 9, Enabled: true,
+		pool, err := tx.AddPool(model.Pool{Name: "GitHub", Kind: model.PoolGitHub, AccountID: demoRunnerAccount, Repo: "mia-dev/ci-plane-relay", Tier: 9, Enabled: true,
 			AfterSec: 180, Max: 5, Standard: "ubuntu-latest", BudgetMin: 2000, Month: now.UTC().Format("2006-01"), UsedSec: 412 * 60,
-			CreatedAt: nowMs - 12*24*3600*1000}); err != nil {
+			CreatedAt: nowMs - 12*24*3600*1000})
+		if err != nil {
 			return err
 		}
+		// GitHub counts a little more than CI-Plane: the start of each
+		// machine. All of it within the minutes of the plan.
+		d.World.SetUsage(pool.ID, model.PoolUsage{Minutes: 431, GrossUSD: 2.586, Machines: []model.MachineUsage{
+			{SKU: "actions_linux", Minutes: 431, GrossUSD: 2.586},
+		}}, nil)
 		return d.seedHistory(tx, set, workers, now)
 	})
 	if err != nil {

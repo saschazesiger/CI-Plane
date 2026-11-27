@@ -36,6 +36,9 @@ type call struct {
 	// once sends the request a single time: for requests that must not
 	// happen twice, like starting a workflow.
 	once bool
+	// token, with authNone, is a token of a person to send instead: the
+	// one that reads the billing of a personal account.
+	token string
 }
 
 type response struct {
@@ -152,6 +155,10 @@ func (s *Service) do(ctx context.Context, c call) (*response, error) {
 				return nil, err
 			}
 			req.Header.Set("Authorization", "Bearer "+tok)
+		case authNone:
+			if c.token != "" {
+				req.Header.Set("Authorization", "Bearer "+c.token)
+			}
 		}
 		var cached condEntry
 		if c.conditional {

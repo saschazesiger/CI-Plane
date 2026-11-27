@@ -15,11 +15,12 @@ import (
 // Services are the real connections to GitHub and the workers; the
 // Cloudflare tunnel belongs to the Z-Dash server.
 type Services struct {
-	Forge   engine.Forge  // GitHub, as the engine needs it
-	Fleet   engine.Fleet  // the workers, as the engine needs it
-	Workers api.Workers   // the workers, as the interface needs them
-	GitHub  api.GitHub    // the GitHub Apps
-	Relay   *github.Relay // the failover to GitHub-hosted runners
+	Forge   engine.Forge   // GitHub, as the engine needs it
+	Fleet   engine.Fleet   // the workers, as the engine needs it
+	Workers api.Workers    // the workers, as the interface needs them
+	GitHub  api.GitHub     // the GitHub Apps
+	Relay   *github.Relay  // the failover to GitHub-hosted runners
+	Billing engine.Billing // what GitHub bills for the pools
 	// Webhook builds the handler for GitHub's webhooks on the tunnel listener.
 	Webhook func(onJob func(engine.JobEvent) error) http.Handler
 	Run     []func(ctx context.Context) // background loops, run until shutdown
@@ -38,7 +39,7 @@ func buildServices(st *store.Store, box *secret.Box, publicURL func() string, lo
 	// A runner on a machine of a pool starts with the script of a worker.
 	relay.Script = node.HostedStartScript
 	return Services{
-		Forge: gh, Fleet: nodes, Workers: nodes, GitHub: gh, Relay: relay,
+		Forge: gh, Fleet: nodes, Workers: nodes, GitHub: gh, Relay: relay, Billing: gh,
 		Webhook: gh.WebhookHandler,
 		Run:     []func(context.Context){nodes.Run, gh.Run},
 	}, nil

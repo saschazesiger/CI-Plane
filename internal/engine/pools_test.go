@@ -634,3 +634,205 @@ func TestJobOnAPoolEndsBeforeItsRunDoes(t *testing.T) {
 		t.Fatalf("marked to run again: %q", j.Rerun)
 	}
 }
+
+// billingRig is a pool rig whose pools of GitHub-hosted runners have their
+// usage read from the simulated GitHub.
+func billingRig(t *testing.T) *rig {
+	r := newPoolRig(t)
+	r.eng.Billing = r.world
+	return r
+}
+
+func TestBudgetInDollarsFollowsWhatGitHubBills(t *testing.T) {
+	r := billingRig(t)
+	p := r.pool("GitHub", 1, func(p *model.Pool) { p.BudgetKind, p.BudgetUSD = model.BudgetDollars, 5 })
+	r.world.SetUsage(p.ID, model.PoolUsage{Minutes: 100, GrossUSD: 3, NetUSD: 2}, nil)
+	a := r.queue("acme/api", 1)
+	r.run(10)
+	if j := r.job(a); j.State != model.JobCompleted {
+		t.Fatalf("within the budget: %s %q", j.State, j.Reason)
+	}
+	if got := r.poolRow(p.ID).Usage; got.At == 0 || got.NetUSD != 2 || got.Month == "" {
+		t.Fatalf("usage stored: %+v", got)
+	}
+	if n := r.world.Reads(p.ID); n != 1 {
+		t.Fatalf("read %d times within a minute", n)
+	}
+
+	// GitHub bills more than the budget: the pool stops at the next reading.
+	r.world.SetUsage(p.ID, model.PoolUsage{Minutes: 900, GrossUSD: 7, NetUSD: 5.5}, nil)
+	r.advance(16 * 60)
+	r.pass(2)
+	b := r.queue("acme/api", 1)
+	r.pass(2)
+	if j := r.job(b); j.State != model.JobQueued || !strings.Contains(j.Reason, "GitHub has cost $5.50 of its $5 this month") {
+		t.Fatalf("over the budget: %s %q", j.State, j.Reason)
+	}
+	if ev := r.events("pool.budget"); len(ev) != 1 || !strings.Contains(ev[0], "$5.50 of its $5") {
+		t.Fatalf("budget events: %v", ev)
+	}
+
+	// A new month is read at once and starts at nothing.
+	r.world.SetUsage(p.ID, model.PoolUsage{}, nil)
+	now := time.UnixMilli(r.clock.Load()).UTC()
+	r.clock.Store(time.Date(now.Year(), now.Month()+1, 1, 0, 0, 1, 0, time.UTC).UnixMilli())
+	r.run(10)
+	if j := r.job(b); j.State != model.JobCompleted {
+		t.Fatalf("next month: %s %q", j.State, j.Reason)
+	}
+}
+
+func TestDollarsCountMinutesGitHubDoesNotShowYet(t *testing.T) {
+	r := billingRig(t)
+	// $0.01 a minute so far; GitHub shows 1 minute, CI-Plane counted more.
+	p := r.pool("GitHub", 1, func(p *model.Pool) { p.BudgetKind, p.BudgetUSD = model.BudgetDollars, 1 })
+	r.world.SetUsage(p.ID, model.PoolUsage{Minutes: 1, GrossUSD: 0.01, NetUSD: 0.99}, nil)
+	r.queue("acme/api", 30) // two and a half minutes: 3 minutes counted
+	r.run(40)
+	b := r.queue("acme/api", 1)
+	r.pass(2)
+	if j := r.job(b); j.State != model.JobQueued || !strings.Contains(j.Reason, "has cost $1.01 of its $1") {
+		t.Fatalf("with the minutes not billed yet: %s %q", j.State, j.Reason)
+	}
+}
+
+func TestFreeMinutesOnly(t *testing.T) {
+	r := billingRig(t)
+	p := r.pool("GitHub", 1, func(p *model.Pool) { p.BudgetKind = model.BudgetFree })
+	r.world.SetUsage(p.ID, model.PoolUsage{Minutes: 1500, GrossUSD: 12, NetUSD: 0}, nil)
+	a := r.queue("acme/api", 1)
+	r.run(10)
+	if j := r.job(a); j.State != model.JobCompleted {
+		t.Fatalf("with included minutes left: %s %q", j.State, j.Reason)
+	}
+	// Another repository of the owner used up what was left.
+	r.world.SetUsage(p.ID, model.PoolUsage{Minutes: 1500, GrossUSD: 12, AccountNetUSD: 0.02}, nil)
+	r.advance(16 * 60)
+	r.pass(2) // GitHub is read in the background
+	b := r.queue("acme/api", 1)
+	r.pass(3)
+	if j := r.job(b); j.State != model.JobQueued || !strings.Contains(j.Reason, "only uses included minutes, and those of acme are used up this month ($0.02 billed)") {
+		t.Fatalf("included minutes used up: %s %q", j.State, j.Reason)
+	}
+}
+
+func TestPoolFollowsTheBudgetsOnGitHub(t *testing.T) {
+	r := billingRig(t)
+	p := r.pool("GitHub", 1, func(p *model.Pool) { p.BudgetKind = model.BudgetGitHub })
+	budgets := []model.GitHubBudget{
+		{Scope: "organization", Entity: "acme", SKU: "actions", AmountUSD: 50, ConsumedUSD: 60, Stop: false}, // only alerts
+		{Scope: "repository", Entity: "acme/relay", SKU: "actions", AmountUSD: 10, ConsumedUSD: 9.5, Stop: true},
+	}
+	r.world.SetUsage(p.ID, model.PoolUsage{Budgets: budgets}, nil)
+	a := r.queue("acme/api", 1)
+	r.run(10)
+	if j := r.job(a); j.State != model.JobCompleted {
+		t.Fatalf("budgets not used up: %s %q", j.State, j.Reason)
+	}
+	budgets[1].ConsumedUSD = 10
+	r.world.SetUsage(p.ID, model.PoolUsage{Budgets: budgets}, nil)
+	r.advance(16 * 60)
+	r.pass(2)
+	b := r.queue("acme/api", 1)
+	r.pass(3)
+	if j := r.job(b); j.State != model.JobQueued || !strings.Contains(j.Reason, "the budget of acme/relay for actions is used up ($10 of $10)") {
+		t.Fatalf("budget used up: %s %q", j.State, j.Reason)
+	}
+	// Raised on GitHub: it takes jobs again with the next reading.
+	budgets[1].AmountUSD = 20
+	r.world.SetUsage(p.ID, model.PoolUsage{Budgets: budgets}, nil)
+	r.advance(16 * 60)
+	r.run(10)
+	if j := r.job(b); j.State != model.JobCompleted {
+		t.Fatalf("budget raised: %s %q", j.State, j.Reason)
+	}
+	if ev := r.events("pool.budget"); len(ev) != 2 || !strings.Contains(ev[1], "takes jobs again") {
+		t.Fatalf("budget events: %v", ev)
+	}
+}
+
+func TestBillingBudgetWaitsWhileGitHubCannotBeRead(t *testing.T) {
+	r := billingRig(t)
+	p := r.pool("GitHub", 1, func(p *model.Pool) { p.BudgetKind, p.BudgetUSD = model.BudgetDollars, 100 })
+	r.world.SetUsage(p.ID, model.PoolUsage{}, fmt.Errorf("the app may not read the billing of acme"))
+	a := r.queue("acme/api", 1)
+	r.pass(3)
+	if j := r.job(a); j.State != model.JobQueued || !strings.Contains(j.Reason, "GitHub waits for its usage from GitHub, as its budget rests on it; CI-Plane cannot read it: the app may not read the billing of acme") {
+		t.Fatalf("never read: %s %q", j.State, j.Reason)
+	}
+	if ev := r.events("pool.usage"); len(ev) != 1 || !strings.Contains(ev[0], "may not read the billing") {
+		t.Fatalf("usage events: %v", ev)
+	}
+	if ev := r.events("pool.budget"); len(ev) != 0 {
+		t.Fatalf("budget events: %v", ev)
+	}
+	// Tried again after a while, and it works.
+	r.world.SetUsage(p.ID, model.PoolUsage{NetUSD: 1}, nil)
+	r.advance(4 * 60)
+	r.pass(2)
+	if n := r.world.Reads(p.ID); n != 1 {
+		t.Fatalf("read again before the retry was due: %d", n)
+	}
+	r.advance(60)
+	r.run(10)
+	if j := r.job(a); j.State != model.JobCompleted {
+		t.Fatalf("read: %s %q", j.State, j.Reason)
+	}
+	// A reading that fails for a while is no reason to stop ...
+	r.world.SetUsage(p.ID, model.PoolUsage{}, fmt.Errorf("cannot reach GitHub"))
+	r.advance(2 * 3600)
+	b := r.queue("acme/api", 1)
+	r.run(10)
+	if j := r.job(b); j.State != model.JobCompleted {
+		t.Fatalf("after two hours without a reading: %s %q", j.State, j.Reason)
+	}
+	if got := r.poolRow(p.ID).Usage; got.NetUSD != 1 || got.Error != "cannot reach GitHub" || got.FailingSince == 0 {
+		t.Fatalf("usage kept: %+v", got)
+	}
+	// ... but one that fails for longer is.
+	r.advance(3600)
+	c := r.queue("acme/api", 1)
+	r.pass(3)
+	if j := r.job(c); j.State != model.JobQueued || !strings.Contains(j.Reason, "cannot reach GitHub") {
+		t.Fatalf("after three hours without a reading: %s %q", j.State, j.Reason)
+	}
+}
+
+func TestMinutesBudgetTakesGitHubsCountWhenItIsHigher(t *testing.T) {
+	r := billingRig(t)
+	p := r.pool("GitHub", 1, func(p *model.Pool) { p.BudgetMin = 100 })
+	r.world.SetUsage(p.ID, model.PoolUsage{Minutes: 120}, nil)
+	r.pass(2)
+	a := r.queue("acme/api", 1)
+	r.pass(3)
+	if j := r.job(a); j.State != model.JobQueued || !strings.Contains(j.Reason, "GitHub has used its 100 minutes of this month") {
+		t.Fatalf("GitHub counted more: %s %q", j.State, j.Reason)
+	}
+	// Without the reading the pool goes on by its own count: a budget of
+	// minutes does not rest on GitHub's billing.
+	r.world.SetUsage(p.ID, model.PoolUsage{}, fmt.Errorf("no permission"))
+	must(t, r.st.Tx(func(tx *store.Tx) error {
+		q, err := tx.Pool(p.ID)
+		q.Usage = model.PoolUsage{}
+		if err == nil {
+			err = tx.SavePool(q)
+		}
+		return err
+	}))
+	r.run(10)
+	if j := r.job(a); j.State != model.JobCompleted {
+		t.Fatalf("own count only: %s %q", j.State, j.Reason)
+	}
+	if ev := r.events("pool.usage"); len(ev) != 0 {
+		t.Fatalf("a failed reading of a budget of minutes is no event: %v", ev)
+	}
+}
+
+func TestUsageOfOtherProvidersIsNotRead(t *testing.T) {
+	r := billingRig(t)
+	p := r.pool("Blacksmith", 1, func(p *model.Pool) { p.Kind = model.PoolBlacksmith })
+	r.pass(3)
+	if n := r.world.Reads(p.ID); n != 0 {
+		t.Fatalf("read %d times", n)
+	}
+}

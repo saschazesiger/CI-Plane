@@ -1,6 +1,7 @@
 // Package sim is a small world without GitHub and without servers: it
-// implements engine.Forge and engine.Fleet in memory. Tests drive it step by
-// step and inject failures; the demo mode lets it run by itself.
+// implements engine.Forge, engine.Fleet and engine.Billing in memory. Tests
+// drive it step by step and inject failures; the demo mode lets it run by
+// itself.
 package sim
 
 import (
@@ -10,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/saschazesiger/CI-Plane/internal/engine"
 	"github.com/saschazesiger/CI-Plane/internal/model"
@@ -62,6 +64,12 @@ type World struct {
 	JobCalls     map[int64]int                // Job calls, by job id
 	Starts       map[int64]int                // successful starts, by worker id
 	Specs        map[string]engine.RunnerSpec // what each runner was started with, by name
+
+	// GitHub's billing, by pool id: what PoolUsage returns, or the error
+	// it fails with, and how often it was asked.
+	billing     map[int64]model.PoolUsage
+	billingErr  map[int64]error
+	billingRead map[int64]int
 }
 
 // New creates an empty world.
@@ -71,7 +79,33 @@ func New() *World {
 		containers: map[int64]map[string]*container{}, status: map[int64]engine.WorkerStatus{},
 		FailStart: map[int64]int{}, FailRemove: map[int64]int{}, NeverConnect: map[int64]bool{},
 		FailProbe: map[int64]bool{}, Starts: map[int64]int{}, Specs: map[string]engine.RunnerSpec{}, Reruns: map[int64]int64{}, JobCalls: map[int64]int{},
+		billing: map[int64]model.PoolUsage{}, billingErr: map[int64]error{}, billingRead: map[int64]int{},
 	}
+}
+
+// SetUsage sets what GitHub bills for a pool from now on; err, if not nil,
+// is what reading it fails with instead.
+func (w *World) SetUsage(poolID int64, u model.PoolUsage, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.billing[poolID], w.billingErr[poolID] = u, err
+}
+
+// Reads is how often the billing of a pool was read.
+func (w *World) Reads(poolID int64) int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.billingRead[poolID]
+}
+
+// PoolUsage implements engine.Billing.
+func (w *World) PoolUsage(_ context.Context, p model.Pool, year int, month time.Month) (model.PoolUsage, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.billingRead[p.ID]++
+	u := w.billing[p.ID]
+	u.Month = fmt.Sprintf("%04d-%02d", year, int(month))
+	return u, w.billingErr[p.ID]
 }
 
 // --- control ---------------------------------------------------------------

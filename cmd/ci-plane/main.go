@@ -160,6 +160,10 @@ func run(logger *log.Logger) error {
 		if sealer, err = zsecret.New(key); err != nil {
 			return err
 		}
+		// Tokens entered in the demo are kept like real ones, until it ends.
+		if box, err = secret.New(key); err != nil {
+			return err
+		}
 	} else {
 		if err := os.MkdirAll(cfg.data, 0o700); err != nil {
 			return fmt.Errorf("create the data directory %s: %w", cfg.data, err)
@@ -188,6 +192,7 @@ func run(logger *log.Logger) error {
 		eng = engine.New(st, svc.Forge, svc.Fleet)
 		eng.Logf = logger.Printf
 		eng.Relay, relay = svc.Relay, svc.Relay
+		eng.Billing = svc.Billing
 		webhook = svc.Webhook(eng.HandleJob)
 		runners = append(runners, eng.Run)
 		runners = append(runners, svc.Run...)

@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/saschazesiger/CI-Plane/internal/engine"
 	"github.com/saschazesiger/CI-Plane/internal/model"
 	"github.com/saschazesiger/CI-Plane/internal/store"
 )
@@ -41,10 +43,22 @@ var poolPresets = []poolPreset{
 // poolView is a pool with what the interface shows next to it.
 type poolView struct {
 	model.Pool
-	Active  int   `json:"active"`  // runners on it right now
-	UsedMin int64 `json:"usedMin"` // runner minutes used this month, running ones included
-	Paused  bool  `json:"paused"`  // pausing after failed starts
-	Next    int   `json:"nextPauseSec"`
+	Active   int     `json:"active"`   // runners on it right now
+	UsedMin  int64   `json:"usedMin"`  // runner minutes used this month: CI-Plane's count or GitHub's, whichever is higher
+	OwnMin   int64   `json:"ownMin"`   // CI-Plane's own count, running runners included
+	SpentUSD float64 `json:"spentUsd"` // what it cost this month as far as known; 0 without GitHub's billing
+	// BudgetStop says why its budget lets it take no jobs now; "" if it does.
+	// BudgetWaits: because GitHub's billing, on which it rests, has not
+	// been read for a while.
+	BudgetStop  string `json:"budgetStop"`
+	BudgetWaits bool   `json:"budgetWaits"`
+	Paused      bool   `json:"paused"` // pausing after failed starts
+	Next        int    `json:"nextPauseSec"`
+	// OwnerType is that of the account that starts its runs: "User" or
+	// "Organization"; "" if unknown. HasUsageToken says whether a token
+	// that reads the billing of a personal account is stored for it.
+	OwnerType     string `json:"ownerType"`
+	HasUsageToken bool   `json:"hasUsageToken"`
 }
 
 func poolName(tx *store.Tx, workerID int64) string {
@@ -80,10 +94,47 @@ func (s *Server) poolViews(tx *store.Tx, now int64) ([]poolView, error) {
 				used += (now - x.OnlineAt) / 1000
 			}
 		}
-		v.UsedMin = (used + 59) / 60
+		v.OwnMin = (used + 59) / 60
+		v.UsedMin = int64(math.Ceil(engine.PoolMinutes(p, runners, now) - 1e-9))
+		v.SpentUSD = math.Round(engine.PoolSpent(p, runners, now)*100) / 100
+		v.BudgetStop = engine.PoolBudget(p, runners, now)
+		v.BudgetWaits = engine.UsageMissing(p, now)
+		if a, ok := poolAccount(tx, p.AccountID); ok {
+			v.OwnerType = a.OwnerType
+		}
+		v.HasUsageToken = s.hasUsageToken(tx, p.AccountID)
+		if v.Usage.Machines == nil {
+			v.Usage.Machines = []model.MachineUsage{}
+		}
+		if v.Usage.Budgets == nil {
+			v.Usage.Budgets = []model.GitHubBudget{}
+		}
 		out = append(out, v)
 	}
 	return out, nil
+}
+
+// poolAccount is the account whose app starts the runs of a pool: a runner
+// account or one of the repository integration.
+func poolAccount(tx *store.Tx, id int64) (model.Account, bool) {
+	if id == 0 {
+		return model.Account{}, false
+	}
+	a, err := tx.RunnerAccount(id)
+	if err != nil {
+		if a, err = tx.Account(id); err != nil {
+			return model.Account{}, false
+		}
+	}
+	return a, true
+}
+
+func (s *Server) hasUsageToken(tx *store.Tx, accountID int64) bool {
+	if s.d.Box == nil || accountID == 0 {
+		return false
+	}
+	b, err := s.d.Box.Get(tx, UsageTokenName(accountID))
+	return err == nil && len(b) > 0
 }
 
 // relayRepoView is a repository a pool can use, with the app that would
@@ -94,6 +145,10 @@ type relayRepoView struct {
 	Runners   bool   `json:"runners"` // the app is a runner account
 	FullName  string `json:"fullName"`
 	Private   bool   `json:"private"`
+	// OwnerType of the app's account, "User" or "Organization", and whether
+	// a token that reads the billing of the personal account is stored.
+	OwnerType     string `json:"ownerType"`
+	HasUsageToken bool   `json:"hasUsageToken"`
 }
 
 // relayRepos are the repositories pools can use: those of the runner
@@ -152,8 +207,16 @@ func (s *Server) listPools(w http.ResponseWriter, r *http.Request) {
 		if resp.Pools, err = s.poolViews(tx, time.Now().UnixMilli()); err != nil {
 			return err
 		}
-		resp.Repos, err = relayRepos(tx)
-		return err
+		if resp.Repos, err = relayRepos(tx); err != nil {
+			return err
+		}
+		for i, o := range resp.Repos {
+			if a, ok := poolAccount(tx, o.AccountID); ok {
+				resp.Repos[i].OwnerType = a.OwnerType
+			}
+			resp.Repos[i].HasUsageToken = s.hasUsageToken(tx, o.AccountID)
+		}
+		return nil
 	})
 	if err != nil {
 		s.fail(w, err)
@@ -165,17 +228,22 @@ func (s *Server) listPools(w http.ResponseWriter, r *http.Request) {
 // poolReq is what the interface sends to add or change a pool; a field
 // that is left out stays as it is.
 type poolReq struct {
-	Name      *string `json:"name"`
-	Kind      *string `json:"kind"`
-	AccountID *int64  `json:"accountId"`
-	Repo      *string `json:"repo"`
-	Tier      *int    `json:"tier"`
-	Enabled   *bool   `json:"enabled"`
-	AfterSec  *int    `json:"afterSec"`
-	Max       *int    `json:"max"`
-	Standard  *string `json:"standard"`
-	Large     *string `json:"large"`
-	BudgetMin *int    `json:"budgetMin"`
+	Name       *string `json:"name"`
+	Kind       *string `json:"kind"`
+	AccountID  *int64  `json:"accountId"`
+	Repo       *string `json:"repo"`
+	Tier       *int    `json:"tier"`
+	Enabled    *bool   `json:"enabled"`
+	AfterSec   *int    `json:"afterSec"`
+	Max        *int    `json:"max"`
+	Standard   *string `json:"standard"`
+	Large      *string `json:"large"`
+	BudgetKind *string `json:"budgetKind"`
+	BudgetMin  *int    `json:"budgetMin"`
+	BudgetUSD  *int    `json:"budgetUsd"`
+	// UsageToken, if not empty, is a new token of a person that reads the
+	// billing of the personal account the pool's runs are billed to.
+	UsageToken *string `json:"usageToken"`
 }
 
 func (q poolReq) apply(p *model.Pool) {
@@ -197,7 +265,9 @@ func (q poolReq) apply(p *model.Pool) {
 	num(&p.Tier, q.Tier)
 	num(&p.AfterSec, q.AfterSec)
 	num(&p.Max, q.Max)
+	str(&p.BudgetKind, q.BudgetKind)
 	num(&p.BudgetMin, q.BudgetMin)
+	num(&p.BudgetUSD, q.BudgetUSD)
 	if q.Enabled != nil {
 		p.Enabled = *q.Enabled
 	}
@@ -321,10 +391,56 @@ func checkPool(tx *store.Tx, p model.Pool) (map[string]string, error) {
 	case p.Large != "" && own(p.Large):
 		errs["large"] = "This is a label of CI-Plane's own runners. Enter the label of a machine of the provider, or leave it empty."
 	}
-	if p.BudgetMin < 0 || p.BudgetMin > 10_000_000 {
-		errs["budgetMin"] = "Enter the minutes per month, or 0 for no limit."
+	switch p.Budget() {
+	case model.BudgetMinutes:
+		if p.BudgetMin < 0 || p.BudgetMin > 10_000_000 {
+			errs["budgetMin"] = "Enter the minutes per month, or 0 for no limit."
+		}
+	case model.BudgetDollars:
+		if p.BudgetUSD < 1 || p.BudgetUSD > 1_000_000 {
+			errs["budgetUsd"] = "Enter the US dollars per month, a whole number from 1 to 1,000,000."
+		}
+	}
+	a, known := poolAccount(tx, p.AccountID)
+	switch {
+	case !model.ValidBudgetKind(p.Budget()):
+		errs["budgetKind"] = "Choose what limits the pool each month."
+	case !p.UsesBilling():
+	case p.Kind != model.PoolGitHub:
+		errs["budgetKind"] = "Only GitHub-hosted runners have their usage on GitHub. Limit this pool by minutes."
+	case !known:
+		if errs["repo"] == "" {
+			errs["repo"] = "Choose the repository again, with the account whose app starts its runs: CI-Plane reads the usage with that app."
+		}
+	case p.Budget() == model.BudgetGitHub && !a.IsOrg():
+		errs["budgetKind"] = "GitHub has no way to read the budgets of a personal account. Choose a budget in dollars, or included minutes only."
 	}
 	return errs, nil
+}
+
+// minTokenLen and maxTokenLen bound what is taken as a token of GitHub.
+const minTokenLen, maxTokenLen = 20, 400
+
+// checkUsageToken says what is wrong with the token of a person that reads
+// the billing of a pool's personal account; "" if nothing is.
+func (s *Server) checkUsageToken(tx *store.Tx, p model.Pool, token string) string {
+	a, known := poolAccount(tx, p.AccountID)
+	if !known || a.IsOrg() {
+		return "" // the app reads the billing of an organisation
+	}
+	owner, _, _ := strings.Cut(p.Repo, "/")
+	switch {
+	case token == "" && !p.UsesBilling():
+		// A budget of minutes needs no token; with one, the pool shows
+		// GitHub's numbers too.
+	case token != "" && (len(token) < minTokenLen || len(token) > maxTokenLen || strings.ContainsAny(token, " \t\r\n")):
+		return "This does not look like a token of GitHub. Copy it again from GitHub, like github_pat_..."
+	case token != "" && s.d.Box == nil:
+		return "This mode cannot keep tokens."
+	case token == "" && !s.hasUsageToken(tx, p.AccountID):
+		return fmt.Sprintf("Enter a token of %s with the permission Plan: read-only. GitHub lets no app read the billing of a personal account.", owner)
+	}
+	return ""
 }
 
 var errPoolFields = errors.New("fields need attention")
@@ -361,13 +477,33 @@ func (s *Server) storePool(w http.ResponseWriter, id int64, req poolReq) {
 		} else if p, err = tx.Pool(id); err != nil {
 			return err
 		}
-		tier := p.Tier
+		tier, before := p.Tier, p
 		req.apply(&p)
 		if errs, err = checkPool(tx, p); err != nil {
 			return err
 		}
+		token := ""
+		if req.UsageToken != nil {
+			token = strings.TrimSpace(*req.UsageToken)
+		}
+		if msg := s.checkUsageToken(tx, p, token); msg != "" && errs["usageToken"] == "" {
+			errs["usageToken"] = msg
+		}
 		if len(errs) > 0 {
 			return errPoolFields
+		}
+		if a, ok := poolAccount(tx, p.AccountID); !ok || a.IsOrg() {
+			token = ""
+		}
+		if token != "" {
+			if err := s.d.Box.Put(tx, UsageTokenName(p.AccountID), []byte(token)); err != nil {
+				return err
+			}
+		}
+		if token != "" || p.AccountID != before.AccountID || p.Repo != before.Repo || p.Budget() != before.Budget() {
+			// What was read belongs to another repository, account or kind
+			// of budget: the engine reads it again at once.
+			p.Usage = model.PoolUsage{}
 		}
 		if id == 0 || p.Tier != tier {
 			// The last one of its tier.
@@ -466,7 +602,14 @@ func (s *Server) checkPool(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	writeJSON(w, http.StatusOK, s.d.Relay.Check(ctx, p.AccountID, p.Repo))
+	c := s.d.Relay.Check(ctx, p.AccountID, p.Repo)
+	if p.UsesBilling() && p.Usage.Error != "" {
+		c.Problems = append(c.Problems, "CI-Plane cannot read the usage of "+p.Name+" from GitHub, on which its budget rests: "+p.Usage.Error)
+	}
+	if c.Problems == nil {
+		c.Problems = []string{}
+	}
+	writeJSON(w, http.StatusOK, c)
 }
 
 // resumePool ends the pause of a pool, so that it is tried at once.

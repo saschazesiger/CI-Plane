@@ -92,7 +92,10 @@ func (s *Service) Manifest(org, publicURL, returnURL string) (api.ManifestForm, 
 // account. That app only starts the relay workflow in repositories of its
 // owner, so that a pool can use the minutes of an account whose jobs
 // CI-Plane does not run. It may read and start workflows and nothing else:
-// no webhook, no runners, no administration.
+// no webhook, no runners. On an organisation it may also read the
+// administration, which is what GitHub asks for to read the billing: the
+// usage and the budgets that pools can follow. A personal account has no
+// such permission for apps; there a token of the person reads it.
 func (s *Service) RunnerManifest(org, returnURL string) (api.ManifestForm, error) {
 	org = strings.TrimSpace(org)
 	if org != "" && !orgName.MatchString(org) {
@@ -100,6 +103,10 @@ func (s *Service) RunnerManifest(org, returnURL string) (api.ManifestForm, error
 	}
 	if u, err := url.Parse(returnURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return api.ManifestForm{}, fmt.Errorf("%q is not an address the browser can return to", returnURL)
+	}
+	perms := map[string]string{"actions": "write", "metadata": "read"}
+	if org != "" {
+		perms["organization_administration"] = "read"
 	}
 	m := manifest{
 		Name:               runnerAppName(org, randomHex(3)),
@@ -109,7 +116,7 @@ func (s *Service) RunnerManifest(org, returnURL string) (api.ManifestForm, error
 		SetupURL:           returnURL,
 		SetupOnUpdate:      true,
 		Public:             false,
-		DefaultPermissions: map[string]string{"actions": "write", "metadata": "read"},
+		DefaultPermissions: perms,
 	}
 	return s.startManifest(org, m, pending{Org: org, ReturnURL: returnURL, Runners: true})
 }
@@ -352,7 +359,7 @@ func (s *Service) Remove(_ context.Context, accountID int64) (string, error) {
 		if err := del(accountID); err != nil {
 			return err
 		}
-		for _, n := range []string{keyName(accountID), hookName(accountID), clientName(accountID)} {
+		for _, n := range []string{keyName(accountID), hookName(accountID), clientName(accountID), api.UsageTokenName(accountID)} {
 			if err := s.box.Drop(tx, n); err != nil {
 				return err
 			}
