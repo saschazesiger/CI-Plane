@@ -446,7 +446,9 @@ func (s *snapshot) pickPool(j model.Job, z model.Size, active map[int64]int, wor
 			// After failed starts one runner shows whether the pool works
 			// again; the others wait for it instead of failing with it.
 			say(p.Name + " is being tried again after " + failedStarts(p.Fails))
-		case s.now-j.WaitingSince < int64(p.AfterSec)*1000:
+		// A job queued while this pass read the store is newer than s.now;
+		// "at once" must not make it wait for that.
+		case p.AfterSec > 0 && s.now-j.WaitingSince < int64(p.AfterSec)*1000:
 			say(fmt.Sprintf("it goes to %s once it has waited %s", p.Name, span(p.AfterSec)))
 		case j.AvoidWorker == p.WorkerID() && avoided == nil:
 			// Its last start failed there: anything else goes first.

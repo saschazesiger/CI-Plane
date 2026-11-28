@@ -195,6 +195,32 @@ func TestTiersOrderWorkersAndPools(t *testing.T) {
 	}
 }
 
+// A job that arrives while a pass reads the store is newer than the pass's
+// clock. A pool used at once must still come before a worker of a later
+// tier; it once went to the worker, as if it had to wait.
+func TestPoolUsedAtOnceTakesAJobNewerThanThePass(t *testing.T) {
+	r := newPoolRig(t)
+	w := r.worker("late", 3)
+	p := r.pool("GitHub", 2)
+	id := r.queue("acme/api", 5)
+	must(t, r.st.Tx(func(tx *store.Tx) error {
+		j, err := tx.Job(id)
+		if err != nil {
+			return err
+		}
+		j.WaitingSince = r.clock.Load() + 20
+		return tx.SaveJob(j)
+	}))
+	r.pass(1)
+	j := r.job(id)
+	if j.State != model.JobAssigned {
+		t.Fatalf("job: %s %q", j.State, j.Reason)
+	}
+	if x := r.runner(j.RunnerID); x.WorkerID != p.WorkerID() {
+		t.Fatalf("went to %d, not to the pool (worker %d):\n%s", x.WorkerID, w.ID, r.timeline(id))
+	}
+}
+
 func TestPoolLimitAndLargeJobs(t *testing.T) {
 	r := newPoolRig(t)
 	p := r.pool("GitHub", 1, func(p *model.Pool) { p.Max = 1 })
