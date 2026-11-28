@@ -307,7 +307,7 @@ func (d *Demo) seed() error {
 		}
 		// GitHub counts a little more than CI-Plane: the start of each
 		// machine. All of it within the minutes of the plan.
-		d.World.SetUsage(pool.ID, model.PoolUsage{Minutes: 431, GrossUSD: 2.586, Machines: []model.MachineUsage{
+		d.World.SetUsage(pool.ID, model.PoolUsage{Minutes: 431, GrossUSD: 2.586, Plan: "free", IncludedMin: 2000, IncludedUsedMin: 612, Machines: []model.MachineUsage{
 			{SKU: "actions_linux", Minutes: 431, GrossUSD: 2.586},
 		}}, nil)
 		return d.seedHistory(tx, set, workers, now)

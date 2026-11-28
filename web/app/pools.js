@@ -55,6 +55,9 @@ const usd = (v) => {
   return `$${(cents / 100).toLocaleString('en', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 };
 const usage = (p) => p.usage || { machines: [], budgets: [] };
+const num = (v) => (v || 0).toLocaleString('en');
+/** Whose included minutes a pool uses: those of its enterprise, or of the owner of its repository. */
+const planOwner = (p) => (p.enterprise ? `the enterprise ${p.enterprise}` : ownerOf(p.repo));
 /** The budget on GitHub that stops usage and is closest to being used up. */
 function tightest(p) {
   const fill = (b) => (b.amountUsd ? b.consumedUsd / b.amountUsd : b.consumedUsd > 0 ? 1 : 0);
@@ -97,6 +100,10 @@ function budgetMeterHtml(p) {
     const text = `${usd(p.spentUsd)} of ${usd(p.budgetUsd)}`;
     return `<span class="ds-meta">Cost ${esc(text)}</span>${meter(share(p.spentUsd, p.budgetUsd), `Cost of ${p.name} this month`, text)}`;
   }
+  if (p.limitMin > 0) {
+    const text = `${num(p.includedUsedMin)} of ${num(p.limitMin)}`;
+    return `<span class="ds-meta">Included ${esc(text)}</span>${meter(share(p.includedUsedMin, p.limitMin), `Included minutes of the plan this month`, `${text} minutes`)}`;
+  }
   const b = kind === 'github' ? tightest(p) : null;
   if (b) {
     const text = `${usd(b.consumedUsd)} of ${usd(b.amountUsd)}`;
@@ -121,8 +128,8 @@ function poolMetersHtml(p) {
 function budgetText(p) {
   switch (budgetKind(p)) {
     case 'dollars': return `${usd(p.budgetUsd)}, as GitHub bills the minutes of ${p.repo}`;
-    case 'free': return `Only the minutes included in the plan of ${ownerOf(p.repo)}`;
-    case 'github': return p.enterprise ? `The budgets set on GitHub for the enterprise ${p.enterprise}` : `The budgets set on GitHub for ${ownerOf(p.repo)}`;
+    case 'free': return p.limitMin ? `Only the ${num(p.limitMin)} minutes included in the plan of ${ownerOf(p.repo)}` : `Only the minutes included in the plan of ${ownerOf(p.repo)}`;
+    case 'github': return `The budgets set on GitHub for ${planOwner(p)}` + (p.limitMin ? `: no paid usage, so the ${num(p.limitMin)} minutes of the plan` : '');
     default: return p.budgetMin ? `${p.budgetMin.toLocaleString('en')} runner minutes` : 'No limit';
   }
 }
@@ -131,6 +138,7 @@ function budgetText(p) {
 function againText(p) {
   const kind = budgetKind(p);
   const raise = kind === 'github' ? ', or when the budget is raised on GitHub' : kind === 'free' ? '' : ', or when you raise its budget';
+  if (p.limitMin && kind === 'github') return `It takes jobs again on ${nextMonth()}, or when a budget on GitHub allows paid usage.`;
   return `It takes jobs again on ${nextMonth()}${raise}.`;
 }
 
@@ -139,7 +147,7 @@ function budgetLinesHtml(p) {
   const kind = budgetKind(p);
   const u = usage(p);
   const bar = (v) => `<span class="ds-meter${v >= 1 ? ' ds-tone-error' : v >= 0.85 ? ' ds-tone-warning' : ''}" aria-hidden="true" style="--ds-share: ${Math.min(v, 1).toFixed(3)}"></span>`;
-  const minutesLine = (limit) => `<li><span>Runner minutes</span><strong>${p.usedMin.toLocaleString('en')}${limit ? ` of ${limit.toLocaleString('en')}${p.budgetStop ? ', used up' : ''}` : kind === 'minutes' ? ', no limit' : ''}</strong>` +
+  const minutesLine = (limit) => `<li><span>${p.limitMin > 0 ? 'Runner minutes of this pool' : 'Runner minutes'}</span><strong>${p.usedMin.toLocaleString('en')}${limit ? ` of ${limit.toLocaleString('en')}${p.budgetStop ? ', used up' : ''}` : kind === 'minutes' ? ', no limit' : ''}</strong>` +
     `${limit ? bar(share(p.usedMin, limit)) : ''}</li>`;
   let html = '';
   switch (kind) {
@@ -152,14 +160,31 @@ function budgetLinesHtml(p) {
     case 'github': {
       const list = u.budgets || [];
       html += list.length
-        ? list.map((b) => `<li><span>Budget of ${esc(b.entity)} for ${esc(b.sku)}</span><strong>${usd(b.consumedUsd)} of ${usd(b.amountUsd)}${b.stop ? (b.consumedUsd > 0 && b.consumedUsd >= b.amountUsd ? ', used up' : '') : ', only alerts'}</strong>` +
-          `${bar(b.amountUsd ? share(b.consumedUsd, b.amountUsd) : b.consumedUsd > 0 ? 1 : 0)}</li>`).join('')
+        ? list.map((b) => (b.stop && !b.amountUsd
+          ? `<li><span>Budget of ${esc(b.entity)} for ${esc(b.sku)}</span><strong>$0: no paid usage</strong></li>`
+          : `<li><span>Budget of ${esc(b.entity)} for ${esc(b.sku)}</span><strong>${usd(b.consumedUsd)} of ${usd(b.amountUsd)}${b.stop ? (b.consumedUsd > 0 && b.consumedUsd >= b.amountUsd ? ', used up' : '') : ', only alerts'}</strong>` +
+            `${bar(b.amountUsd ? share(b.consumedUsd, b.amountUsd) : b.consumedUsd > 0 ? 1 : 0)}</li>`)).join('')
         : `<li><span>Budgets on GitHub</span><strong>${u.at ? 'None covers these minutes' : 'Not read yet'}</strong></li>`;
       break;
     }
     default:
   }
+  if (p.limitMin > 0) {
+    html += `<li><span>Included minutes of the plan</span><strong>${num(p.includedUsedMin)} of ${num(p.limitMin)}${p.includedUsedMin >= p.limitMin ? ', used up' : ''}</strong>${bar(share(p.includedUsedMin, p.limitMin))}</li>`;
+  }
   return html + minutesLine(kind === 'minutes' ? p.budgetMin : 0);
+}
+
+/** What the included minutes are, where they are the limit, or what GitHub says about them otherwise. */
+function includedNoteHtml(p) {
+  const u = usage(p);
+  if (!u.at || !u.includedMin) return '';
+  const who = `all private repositories of ${esc(planOwner(p))}`;
+  if (p.limitMin > 0) {
+    return `<p class="ds-meta">The plan (${esc(u.plan)}) includes ${num(u.includedMin)} minutes a month, and ${who} use them; public repositories run free of charge. ` +
+      `${budgetKind(p) === 'github' ? 'The budget on GitHub allows no paid usage, so GitHub stops the runs once they are used up' : 'This pool uses nothing beyond them'}: that is the limit of this pool.</p>`;
+  }
+  return `<p class="ds-meta">The plan (${esc(u.plan)}) includes ${num(u.includedMin)} minutes a month; ${who} have used ${num(Math.ceil(u.includedUsedMin))} of them.</p>`;
 }
 
 /** What GitHub counted, per machine, or why CI-Plane counts alone. */
@@ -264,6 +289,7 @@ function poolSheetHtml(p, d, workflowOpen) {
       `<li><span>Runners now</span><strong>${p.active} of ${p.max}</strong><span class="ds-meter" aria-hidden="true" style="--ds-share: ${share(p.active, p.max).toFixed(3)}"></span></li>` +
       budgetLinesHtml(p) +
     '</ul>' +
+    includedNoteHtml(p) +
     githubCountHtml(p) +
     `<dl class="ds-facts ds-facts--rows">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` +
     workflowHtml(d, workflowOpen) +
@@ -613,7 +639,7 @@ async function submitPool(event) {
   // The list and the sheet show it at once; the check says whether its repository is ready.
   const d = ctx.data;
   const i = d.pools.findIndex((p) => p.id === saved.id);
-  const shown = { active: 0, usedMin: 0, ownMin: 0, spentUsd: 0, budgetStop: '', budgetWaits: false, nextPauseSec: 60, ...(i >= 0 ? d.pools[i] : {}), ...saved, paused: false };
+  const shown = { active: 0, usedMin: 0, ownMin: 0, spentUsd: 0, limitMin: 0, includedUsedMin: 0, budgetStop: '', budgetWaits: false, nextPauseSec: 60, ...(i >= 0 ? d.pools[i] : {}), ...saved, paused: false };
   if (i >= 0) d.pools[i] = shown;
   else d.pools.push(shown);
   ps.checks.delete(saved.id);
@@ -834,11 +860,20 @@ function poolsCardHtml(d) {
     `<ul class="ds-list ds-list--interactive" id="pools-list" aria-labelledby="pools-title">${poolsListHtml(d)}</ul>`;
 }
 
+/* The parameters of the address the view last took its pool from; null before the first load and after leaving. */
+let applied = null;
+
 const view = {
   title: 'Pools',
   pools: true, // it shows pools and their sheet
   async load(params) {
-    ps.poolId = Number(params.get('pool')) || 0;
+    // Only when the address changed: a refresh of the data must not forget
+    // the pool whose sheet a click opened.
+    const key = params.toString();
+    if (key !== applied) {
+      applied = key;
+      ps.poolId = Number(params.get('pool')) || 0;
+    }
     const [p, a, w] = await Promise.all([api.get('/api/pools'), api.get('/api/runner-accounts'), api.get('/api/workers')]);
     return { ...p, runnerAccounts: a.accounts, workers: w.workers };
   },
@@ -868,6 +903,7 @@ const view = {
 
   leave() {
     ra.connecting = false;
+    applied = null;
   },
 
   sheetClosed() {

@@ -936,3 +936,52 @@ func TestDollarsPriceMinutesGitHubDoesNotShowWithTheLastKnownPrice(t *testing.T)
 		t.Fatalf("priced at the last known price: %s %q", j.State, j.Reason)
 	}
 }
+
+func TestIncludedMinutesAreTheLimitUnderABudgetOfNothing(t *testing.T) {
+	r := billingRig(t)
+	p := r.pool("GitHub", 1, func(p *model.Pool) { p.BudgetKind, p.Enterprise = model.BudgetGitHub, "acme-inc" })
+	budget := []model.GitHubBudget{{Scope: "organization", Entity: "Acme Labs", SKU: "actions", AmountUSD: 0, Stop: true}}
+	r.world.SetUsage(p.ID, model.PoolUsage{Minutes: 30000, Plan: "enterprise", IncludedMin: 50000, IncludedUsedMin: 49998, Budgets: budget}, nil)
+	a := r.queue("acme/api", 30) // three minutes: over the 50,000
+	r.run(40)
+	if j := r.job(a); j.State != model.JobCompleted {
+		t.Fatalf("with included minutes left: %s %q", j.State, j.Reason)
+	}
+	if got := r.poolRow(p.ID); engine.IncludedLimit(got, r.clock.Load()) != 50000 {
+		t.Fatalf("limit: %+v", got.Usage)
+	}
+	// GitHub does not show the pool's last minutes yet: CI-Plane adds its own.
+	must(t, r.st.Tx(func(tx *store.Tx) error {
+		q, err := tx.Pool(p.ID)
+		if err != nil {
+			return err
+		}
+		q.Usage.Minutes = 0
+		return tx.SavePool(q)
+	}))
+	b := r.queue("acme/api", 1)
+	r.pass(2)
+	if j := r.job(b); j.State != model.JobQueued || !strings.Contains(j.Reason, "they allow no paid usage, and the 50,000 included minutes of the plan are used up this month") {
+		t.Fatalf("included minutes used up: %s %q", j.State, j.Reason)
+	}
+	// A budget that allows paid usage is no limit of minutes.
+	budget[0].AmountUSD = 100
+	r.world.SetUsage(p.ID, model.PoolUsage{Minutes: 30003, Plan: "enterprise", IncludedMin: 50000, IncludedUsedMin: 50001, Budgets: budget}, nil)
+	r.advance(16 * 60)
+	r.run(10)
+	if j := r.job(b); j.State != model.JobCompleted {
+		t.Fatalf("with a budget of $100: %s %q", j.State, j.Reason)
+	}
+}
+
+func TestOnlyIncludedMinutesStopsAtThePlansMinutes(t *testing.T) {
+	r := billingRig(t)
+	p := r.pool("GitHub", 1, func(p *model.Pool) { p.BudgetKind = model.BudgetFree })
+	r.world.SetUsage(p.ID, model.PoolUsage{Minutes: 1500, Plan: "free", IncludedMin: 2000, IncludedUsedMin: 2000}, nil)
+	r.pass(2)
+	a := r.queue("acme/api", 1)
+	r.pass(2)
+	if j := r.job(a); j.State != model.JobQueued || !strings.Contains(j.Reason, "only uses included minutes, and the 2,000 of the plan of acme are used up this month") {
+		t.Fatalf("plan's minutes used up: %s %q", j.State, j.Reason)
+	}
+}

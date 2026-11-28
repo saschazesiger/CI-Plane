@@ -21,13 +21,21 @@ var _ engine.Billing = (*Service)(nil)
 // usageItem is one line of GitHub's usage report: one product and SKU on
 // one day in one repository.
 type usageItem struct {
-	Product        string  `json:"product"`
-	SKU            string  `json:"sku"`
-	Quantity       float64 `json:"quantity"`
-	UnitType       string  `json:"unitType"`
-	GrossAmount    float64 `json:"grossAmount"`
-	NetAmount      float64 `json:"netAmount"`
-	RepositoryName string  `json:"repositoryName"`
+	Product          string  `json:"product"`
+	SKU              string  `json:"sku"`
+	Quantity         float64 `json:"quantity"`
+	UnitType         string  `json:"unitType"`
+	GrossAmount      float64 `json:"grossAmount"`
+	DiscountAmount   float64 `json:"discountAmount"`
+	NetAmount        float64 `json:"netAmount"`
+	OrganizationName string  `json:"organizationName,omitempty"`
+	RepositoryName   string  `json:"repositoryName"`
+}
+
+// minutes reports whether the item is Actions minutes: not storage, not
+// another product.
+func (it usageItem) minutes() bool {
+	return strings.EqualFold(it.Product, "actions") && strings.HasPrefix(strings.ToLower(it.UnitType), "minute")
 }
 
 type ghBudget struct {
@@ -83,8 +91,8 @@ func (s *Service) PoolUsage(ctx context.Context, p model.Pool, year int, month t
 	}
 	machines := map[string]*model.MachineUsage{}
 	for _, it := range rep.UsageItems {
-		if !strings.EqualFold(it.Product, "actions") || !strings.HasPrefix(strings.ToLower(it.UnitType), "minute") {
-			continue // storage, other products
+		if !it.minutes() {
+			continue
 		}
 		u.AccountNetUSD += it.NetAmount
 		if !sameRepo(it.RepositoryName, p.Repo) {
@@ -109,6 +117,15 @@ func (s *Service) PoolUsage(ctx context.Context, p model.Pool, year int, month t
 		x, y := u.Machines[i], u.Machines[j]
 		return x.Minutes > y.Minutes || x.Minutes == y.Minutes && x.SKU < y.SKU
 	})
+	// What the plan includes, and how much of it is used. The budgets of
+	// an organisation name it as its profile does, not by its login.
+	names := []string{owner}
+	display, plan := s.ownerPlan(ctx, a, owner)
+	if display != "" {
+		names = append(names, display)
+	}
+	u.Plan, u.IncludedMin = plan, model.IncludedMinutes(plan)
+	items := rep.UsageItems
 	if p.Budget() == model.BudgetGitHub {
 		if !a.IsOrg() {
 			return u, errors.New("GitHub has no way to read the budgets of a personal account: choose another kind of budget for this pool")
@@ -118,15 +135,130 @@ func (s *Service) PoolUsage(ctx context.Context, p model.Pool, year int, month t
 			skus[skuKey(m.SKU)] = true
 		}
 		if p.Enterprise != "" {
-			u.Budgets, err = s.enterpriseBudgets(ctx, a, p.Enterprise, owner, p.Repo, skus)
-		} else {
-			u.Budgets, err = s.budgets(ctx, a, owner, p.Repo, skus)
+			if u.Budgets, err = s.enterpriseBudgets(ctx, a, p.Enterprise, names, p.Repo, skus); err != nil {
+				return u, err
+			}
+			// The included minutes are the enterprise's, shared by its
+			// organisations. A person who may not see its usage sees that
+			// of the organisation only.
+			if all, err := s.enterpriseUsage(ctx, a, p.Enterprise, query); err == nil {
+				items = all
+			} else if statusOf(err) == 0 {
+				return u, err
+			}
+		} else if u.Budgets, err = s.budgets(ctx, a, names, p.Repo, skus); err != nil {
+			return u, err
 		}
-		if err != nil {
+	}
+	if u.IncludedMin > 0 {
+		if u.IncludedUsedMin, err = s.includedUsed(ctx, a, owner, items); err != nil {
 			return u, err
 		}
 	}
 	return u, nil
+}
+
+// ownerPlan reads the name an owner shows on its profile and the name of
+// its plan; "" for what GitHub does not tell.
+func (s *Service) ownerPlan(ctx context.Context, a model.Account, owner string) (display, plan string) {
+	var o struct {
+		Login string `json:"login"`
+		Name  string `json:"name"`
+		Plan  struct {
+			Name string `json:"name"`
+		} `json:"plan"`
+	}
+	c := call{method: http.MethodGet, path: "/orgs/" + url.PathEscape(owner), auth: authInstallation, account: a.ID, conditional: true}
+	if !a.IsOrg() {
+		// Only the person sees the plan of a personal account.
+		tok, err := s.usageToken(a.ID)
+		if err != nil || tok == "" {
+			return "", ""
+		}
+		c = call{method: http.MethodGet, path: "/user", token: tok}
+	}
+	if _, err := s.getJSON(ctx, c, &o); err != nil || !strings.EqualFold(o.Login, owner) {
+		return "", ""
+	}
+	return o.Name, o.Plan.Name
+}
+
+// enterpriseUsage reads the usage report of an enterprise for a month,
+// with the token of the person.
+func (s *Service) enterpriseUsage(ctx context.Context, a model.Account, enterprise, query string) ([]usageItem, error) {
+	tok, err := s.usageToken(a.ID)
+	if err != nil {
+		return nil, err
+	}
+	var rep struct {
+		UsageItems []usageItem `json:"usageItems"`
+	}
+	c := call{method: http.MethodGet, path: "/enterprises/" + url.PathEscape(enterprise) + "/settings/billing/usage" + query, token: tok}
+	if _, err := s.getJSON(ctx, c, &rep); err != nil {
+		return nil, err
+	}
+	return rep.UsageItems, nil
+}
+
+// includedUsed is how many of the minutes a plan includes the items of a
+// usage report used up: those of private repositories that GitHub
+// discounted instead of billing them, Windows minutes twice and macOS
+// minutes ten times, as GitHub counts them. Public repositories run free of
+// charge and use none; a repository the app cannot see counts as private.
+func (s *Service) includedUsed(ctx context.Context, a model.Account, owner string, items []usageItem) (float64, error) {
+	repos := map[string]float64{}
+	for _, it := range items {
+		if !it.minutes() || it.GrossAmount <= 0 || it.DiscountAmount <= 0 {
+			continue // billed in full, like larger runners: not of the included minutes
+		}
+		name := it.RepositoryName
+		if !strings.Contains(name, "/") {
+			org := it.OrganizationName
+			if org == "" {
+				org = owner
+			}
+			name = org + "/" + name
+		}
+		weight := 1.0
+		switch sku := skuKey(it.SKU); {
+		case strings.Contains(sku, "windows"):
+			weight = 2
+		case strings.Contains(sku, "macos"):
+			weight = 10
+		}
+		repos[name] += it.Quantity * min(it.DiscountAmount/it.GrossAmount, 1) * weight
+	}
+	used := 0.0
+	for name, minutes := range repos {
+		public, err := s.repoPublic(ctx, a, name)
+		if err != nil {
+			return 0, err
+		}
+		if !public {
+			used += minutes
+		}
+	}
+	return used, nil
+}
+
+// repoPublic reports whether a repository (owner/name) is public. One that
+// the app cannot see, or that has no name, is not.
+func (s *Service) repoPublic(ctx context.Context, a model.Account, full string) (bool, error) {
+	path, err := repoPath(full)
+	if err != nil {
+		return false, nil
+	}
+	var r struct {
+		Private bool `json:"private"`
+	}
+	_, err = s.getJSON(ctx, call{method: http.MethodGet, path: path, auth: authInstallation, account: a.ID, conditional: true}, &r)
+	switch st := statusOf(err); {
+	case err == nil:
+		return !r.Private, nil
+	case st == http.StatusNotFound || st == http.StatusForbidden || st == http.StatusMovedPermanently:
+		return false, nil
+	}
+	return false, err
 }
 
 // budgets reads the budgets of an organisation that cover the Actions
@@ -134,7 +266,8 @@ func (s *Service) PoolUsage(ctx context.Context, p model.Pool, year int, month t
 // all of Actions, or for a SKU among skus, the machines the repository used
 // this month. Budgets of cost centres are left out, as CI-Plane cannot see
 // here what they cover.
-func (s *Service) budgets(ctx context.Context, a model.Account, org, repo string, skus map[string]bool) ([]model.GitHubBudget, error) {
+func (s *Service) budgets(ctx context.Context, a model.Account, orgs []string, repo string, skus map[string]bool) ([]model.GitHubBudget, error) {
+	org := orgs[0]
 	list, err := s.budgetPages(ctx, func(page int) call {
 		path := fmt.Sprintf("/organizations/%s/settings/billing/budgets?per_page=100&page=%d", url.PathEscape(org), page)
 		return call{method: http.MethodGet, path: path, auth: authInstallation, account: a.ID}
@@ -148,7 +281,7 @@ func (s *Service) budgets(ctx context.Context, a model.Account, org, repo string
 		}
 		return nil, s.billingError(a, org, err)
 	}
-	return coveringBudgets(list, org, repo, skus, nil), nil
+	return coveringBudgets(list, orgs, repo, skus, nil), nil
 }
 
 // enterpriseBudgets reads the budgets of the enterprise an organisation
@@ -158,7 +291,8 @@ func (s *Service) budgets(ctx context.Context, a model.Account, org, repo string
 // owner or billing manager of the enterprise; an owner of the organisation
 // sees those of the organisation and its repositories), so they are read
 // with the token entered in the pool.
-func (s *Service) enterpriseBudgets(ctx context.Context, a model.Account, enterprise, org, repo string, skus map[string]bool) ([]model.GitHubBudget, error) {
+func (s *Service) enterpriseBudgets(ctx context.Context, a model.Account, enterprise string, orgs []string, repo string, skus map[string]bool) ([]model.GitHubBudget, error) {
+	org := orgs[0]
 	tok, err := s.usageToken(a.ID)
 	if err != nil {
 		return nil, err
@@ -206,7 +340,7 @@ func (s *Service) enterpriseBudgets(ctx context.Context, a model.Account, enterp
 			centres[strings.ToLower(x.CostCenter.Name)] = true
 		}
 	}
-	return coveringBudgets(list, org, repo, skus, centres), nil
+	return coveringBudgets(list, orgs, repo, skus, centres), nil
 }
 
 // budgetPages reads every page of a list of budgets.
@@ -229,10 +363,19 @@ func (s *Service) budgetPages(ctx context.Context, req func(page int) call) ([]g
 }
 
 // coveringBudgets are the budgets among list that cover the Actions
-// minutes of repo, a repository of org: for all of Actions, or for a SKU
-// among skus; of the enterprise, the organisation, the repository, or a
-// cost centre among centres (by name, in lower case).
-func coveringBudgets(list []ghBudget, org, repo string, skus, centres map[string]bool) []model.GitHubBudget {
+// minutes of repo, a repository of the organisation orgs name (its login,
+// and its name as its profile shows it: budgets use either): for all of
+// Actions, or for a SKU among skus; of the enterprise, the organisation,
+// the repository, or a cost centre among centres (by name, in lower case).
+func coveringBudgets(list []ghBudget, orgs []string, repo string, skus, centres map[string]bool) []model.GitHubBudget {
+	isOrg := func(name string) bool {
+		for _, o := range orgs {
+			if strings.EqualFold(name, o) {
+				return true
+			}
+		}
+		return name == ""
+	}
 	out := []model.GitHubBudget{}
 	for _, b := range list {
 		sku := skuKey(b.ProductSKU)
@@ -247,7 +390,7 @@ func coveringBudgets(list []ghBudget, org, repo string, skus, centres map[string
 		switch strings.ToLower(b.Scope) {
 		case "enterprise":
 		case "organization":
-			if b.Entity != "" && !strings.EqualFold(b.Entity, org) {
+			if !isOrg(b.Entity) {
 				continue
 			}
 		case "repository":

@@ -47,6 +47,11 @@ type poolView struct {
 	UsedMin  int64   `json:"usedMin"`  // runner minutes used this month: CI-Plane's count or GitHub's, whichever is higher
 	OwnMin   int64   `json:"ownMin"`   // CI-Plane's own count, running runners included
 	SpentUSD float64 `json:"spentUsd"` // what it cost this month as far as known; 0 without GitHub's billing
+	// LimitMin is the number of minutes the owner's plan includes, when
+	// that is the pool's limit (engine.IncludedLimit), and IncludedUsed how
+	// many of them are used, by all private repositories; 0 = no such limit.
+	LimitMin     int   `json:"limitMin"`
+	IncludedUsed int64 `json:"includedUsedMin"`
 	// BudgetStop says why its budget lets it take no jobs now; "" if it does.
 	// BudgetWaits: because GitHub's billing, on which it rests, has not
 	// been read for a while.
@@ -97,6 +102,8 @@ func (s *Server) poolViews(tx *store.Tx, now int64) ([]poolView, error) {
 		v.OwnMin = (used + 59) / 60
 		v.UsedMin = int64(math.Ceil(engine.PoolMinutes(p, runners, now) - 1e-9))
 		v.SpentUSD = math.Round(engine.PoolSpent(p, runners, now)*100) / 100
+		v.LimitMin = engine.IncludedLimit(p, now)
+		v.IncludedUsed = int64(math.Ceil(engine.PoolIncluded(p, runners, now) - 1e-9))
 		v.BudgetStop = engine.PoolBudget(p, runners, now)
 		v.BudgetWaits = engine.UsageMissing(p, now)
 		if a, ok := poolAccount(tx, p.AccountID); ok {

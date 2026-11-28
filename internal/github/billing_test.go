@@ -195,3 +195,65 @@ func TestBudgetsOfAnEnterprise(t *testing.T) {
 		t.Fatalf("token in the error: %v", err)
 	}
 }
+
+func TestIncludedMinutesOfThePlan(t *testing.T) {
+	e := newEnv(t)
+	e.addRunnerApp(61, "acme", "ci-plane-runners-acme", 610, model.Repo{ID: 1, FullName: "acme/relay", Private: true})
+	e.gh.billingApps = true
+	e.gh.orgs["acme"] = [2]string{"Acme Labs", "enterprise"}
+	e.gh.visible["acme/relay"] = false
+	e.gh.visible["acme/site"] = true // public: free of charge
+	// acme/secret is private and not the app's: it cannot be read, and counts.
+	linux := func(repo string, minutes, billed float64) usageItem {
+		gross := minutes * 0.006
+		return usageItem{Product: "actions", SKU: "Actions Linux", Quantity: minutes, UnitType: "Minutes", GrossAmount: gross, DiscountAmount: gross - billed, NetAmount: billed,
+			OrganizationName: "acme", RepositoryName: repo}
+	}
+	e.gh.usage["organizations/acme"] = []usageItem{
+		linux("relay", 30000, 0), linux("relay", 4000, 0),
+		linux("site", 25000, 0),
+		linux("secret", 10000, 0),
+		{Product: "actions", SKU: "Actions Windows", Quantity: 100, UnitType: "Minutes", GrossAmount: 1, DiscountAmount: 1, OrganizationName: "acme", RepositoryName: "secret"},
+		{Product: "actions", SKU: "Actions Linux 16-core", Quantity: 500, UnitType: "Minutes", GrossAmount: 21, NetAmount: 21, OrganizationName: "acme", RepositoryName: "secret"}, // billed: not included
+		{Product: "actions", SKU: "Actions storage", Quantity: 900, UnitType: "GigabyteHours", GrossAmount: 3, DiscountAmount: 3, OrganizationName: "acme", RepositoryName: "relay"},
+	}
+	p := model.Pool{ID: 3, Name: "GitHub", Kind: model.PoolGitHub, AccountID: 61, Repo: "acme/relay", BudgetKind: model.BudgetFree}
+	u, err := e.s.PoolUsage(ctx, p, 2026, time.November)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Plan != "enterprise" || u.IncludedMin != 50000 || !near(u.IncludedUsedMin, 34000+10000+200) || u.Minutes != 34000 {
+		t.Fatalf("usage %+v", u)
+	}
+
+	// The budgets of an enterprise name the organisation as its profile
+	// does, and the included minutes are those of the whole enterprise.
+	e.gh.userToken = "ghp_owner"
+	must(t, e.st.Tx(func(tx *store.Tx) error { return e.box.Put(tx, api.UsageTokenName(61), []byte("ghp_owner")) }))
+	e.gh.budgetList["enterprise/acme-inc"] = []ghBudget{
+		{ID: "e1", Type: "ProductPricing", Amount: 0, Stop: true, Scope: "organization", Entity: "Acme Labs", ProductSKU: "actions"},
+		{ID: "e2", Type: "ProductPricing", Amount: 0, Stop: true, Scope: "organization", Entity: "Other Labs", ProductSKU: "actions"},
+	}
+	other := linux("build", 5000, 0)
+	other.OrganizationName = "other-org"
+	e.gh.usage["enterprises/acme-inc"] = append(append([]usageItem{}, e.gh.usage["organizations/acme"]...), other)
+	p.BudgetKind, p.Enterprise = model.BudgetGitHub, "acme-inc"
+	if u, err = e.s.PoolUsage(ctx, p, 2026, time.November); err != nil {
+		t.Fatal(err)
+	}
+	if len(u.Budgets) != 1 || u.Budgets[0].ID != "e1" || !u.Budgets[0].NoPaidUsage() || u.Budgets[0].UsedUp() {
+		t.Fatalf("budgets %+v", u.Budgets)
+	}
+	if !near(u.IncludedUsedMin, 44200+5000) || u.Minutes != 34000 {
+		t.Fatalf("of the enterprise: %+v", u)
+	}
+
+	// A plan CI-Plane does not know: nothing is said about included minutes.
+	e.gh.mu.Lock()
+	e.gh.orgs["acme"] = [2]string{"Acme Labs", "galaxy"}
+	e.gh.mu.Unlock()
+	e.s = e.service() // without the cached profile
+	if u, err = e.s.PoolUsage(ctx, p, 2026, time.November); err != nil || u.IncludedMin != 0 || u.IncludedUsedMin != 0 || len(u.Budgets) != 1 {
+		t.Fatalf("unknown plan: %+v %v", u, err)
+	}
+}

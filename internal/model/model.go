@@ -542,6 +542,15 @@ type PoolUsage struct {
 	// month, over all repositories: above zero, the included minutes are
 	// used up.
 	AccountNetUSD float64 `json:"accountNetUsd"`
+	// Plan is the plan of the relay repository's owner on GitHub, like
+	// enterprise, and IncludedMin the Actions minutes a month that come
+	// with it; 0 = not known. IncludedUsedMin is how many of them are used:
+	// the minutes of private repositories that GitHub did not bill, of the
+	// owner or, where the pool names one, of its whole enterprise. Public
+	// repositories use none.
+	Plan            string  `json:"plan"`
+	IncludedMin     int     `json:"includedMin"`
+	IncludedUsedMin float64 `json:"includedUsedMin"`
 	// Budgets are the budgets on GitHub that cover the relay repository's
 	// Actions minutes; read only for BudgetGitHub.
 	Budgets []GitHubBudget `json:"budgets"`
@@ -569,6 +578,25 @@ type GitHubBudget struct {
 	ConsumedUSD float64 `json:"consumedUsd"`
 	Stop        bool    `json:"stop"` // GitHub stops usage once it is used up
 }
+
+// IncludedMinutes is how many Actions minutes a month come with a plan of
+// GitHub, by its name in the API; 0 for a plan CI-Plane does not know.
+// GitHub publishes them, but not through its API.
+func IncludedMinutes(plan string) int {
+	switch strings.ToLower(plan) {
+	case "free":
+		return 2000
+	case "pro", "team":
+		return 3000
+	case "enterprise":
+		return 50000
+	}
+	return 0
+}
+
+// NoPaidUsage reports whether the budget lets nothing be billed: it stops
+// usage at 0 dollars, so what is left is what the plan includes.
+func (b GitHubBudget) NoPaidUsage() bool { return b.Stop && b.AmountUSD == 0 }
 
 // UsedUp reports whether GitHub stops usage under this budget now. A
 // budget of 0 dollars stops at the first cent billed.

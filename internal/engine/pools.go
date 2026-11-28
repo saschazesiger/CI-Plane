@@ -178,9 +178,12 @@ func PoolBudget(p model.Pool, runners []model.Runner, now int64) string {
 			return fmt.Sprintf("%s has cost %s of its %s this month", p.Name, dollars(spent), dollars(float64(p.BudgetUSD)))
 		}
 	case model.BudgetFree:
+		owner, _, _ := strings.Cut(p.Repo, "/")
 		if u.AccountNetUSD >= 0.005 {
-			owner, _, _ := strings.Cut(p.Repo, "/")
 			return fmt.Sprintf("%s only uses included minutes, and those of %s are used up this month (%s billed)", p.Name, owner, dollars(u.AccountNetUSD))
+		}
+		if limit := IncludedLimit(p, now); limit > 0 && PoolIncluded(p, runners, now) >= float64(limit) {
+			return fmt.Sprintf("%s only uses included minutes, and the %s of the plan of %s are used up this month", p.Name, thousands(limit), owner)
 		}
 	case model.BudgetGitHub:
 		for _, b := range u.Budgets {
@@ -189,8 +192,57 @@ func PoolBudget(p model.Pool, runners []model.Runner, now int64) string {
 					p.Name, b.Entity, b.SKU, dollars(b.ConsumedUSD), dollars(float64(b.AmountUSD)))
 			}
 		}
+		if limit := IncludedLimit(p, now); limit > 0 && PoolIncluded(p, runners, now) >= float64(limit) {
+			return fmt.Sprintf("%s follows the budgets on GitHub: they allow no paid usage, and the %s included minutes of the plan are used up this month", p.Name, thousands(limit))
+		}
 	}
 	return ""
+}
+
+// IncludedLimit is the number of minutes the plan includes when that is the
+// limit of the pool this month: its budget is the included minutes only,
+// or a budget on GitHub lets nothing be billed, so that GitHub stops the
+// runs once they are used up. 0 if it is not, or the number is not known.
+func IncludedLimit(p model.Pool, now int64) int {
+	u := p.Usage
+	if u.Month != monthOf(now) || u.At == 0 || u.IncludedMin <= 0 {
+		return 0
+	}
+	switch p.Budget() {
+	case model.BudgetFree:
+		return u.IncludedMin
+	case model.BudgetGitHub:
+		for _, b := range u.Budgets {
+			if b.NoPaidUsage() {
+				return u.IncludedMin
+			}
+		}
+	}
+	return 0
+}
+
+// PoolIncluded is how many of the plan's included minutes are used this
+// month: what GitHub counts for all private repositories, and the minutes
+// of this pool that GitHub does not show yet.
+func PoolIncluded(p model.Pool, runners []model.Runner, now int64) float64 {
+	u := p.Usage
+	if u.Month != monthOf(now) || u.At == 0 {
+		return 0
+	}
+	used := u.IncludedUsedMin
+	if own := float64(poolUsedSec(p, runners, now)) / 60; own > u.Minutes {
+		used += own - u.Minutes
+	}
+	return used
+}
+
+// thousands says a number with separators: 50,000.
+func thousands(n int) string {
+	s := strconv.Itoa(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
 }
 
 // UsageMissing reports whether a pool's budget rests on GitHub's billing

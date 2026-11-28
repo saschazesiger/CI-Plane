@@ -105,6 +105,7 @@ The reason a job waits is shown in the job list and its timeline.
 | *…; … pauses until … after … failed starts in a row* | A pool failed to start runners and pauses; the pool on the **Pools** page says why. Fix the cause, then **Try again now** ([Pools](pools.md#-when-a-pool-fails)). |
 | *…; … has used its … minutes of this month* | The pool's budget is used up. Raise it, or wait for the next month ([Pools](pools.md#-budget)). |
 | *…; … has cost … of its … this month*, *… only uses included minutes, and those of … are used up*, *… the budget of … for … is used up* | The pool's budget is used up. Raise it (on GitHub for its budgets), or wait for the next month ([Pools](pools.md#-budget)). |
+| *… the … included minutes of the plan are used up this month*, *… the … of the plan of … are used up this month* | The private repositories of the account have used the minutes its plan includes, and the pool's budget allows no paid usage. It takes jobs again next month, or when a budget on GitHub allows paid usage ([Pools](pools.md#-the-included-minutes)). |
 | *… waits for its usage from GitHub, as its budget rests on it; …* | CI-Plane cannot read the billing. For an organisation, give the app of the account *Administration: Read-only*; for a personal account, enter a new token with *Plan: Read-only* in the pool ([Pools](pools.md#-reading-githubs-billing)). |
 | *…; it goes to … once it has waited …* | The pool takes only jobs that have waited that long; the job starts there by itself, or earlier on a worker. |
 

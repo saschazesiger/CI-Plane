@@ -185,9 +185,9 @@ at the average list price of the latest reading that had minutes, this month's o
 stops a little early than late. Before GitHub has shown any minute of the relay repository, CI-Plane knows no price,
 and the first hours of a new pool are not limited.
 
-**Only the included minutes** uses the minutes of the owner's plan and nothing else. GitHub does not say how many are
-left, only whether it bills anything yet, so the pool stops at the first cent, a few hours late at most (the delay
-of GitHub's report). The minutes of larger runners are never included: such a pool stops at its first large job.
+**Only the included minutes** uses the minutes of the owner's plan and nothing else: the pool stops when they are
+used up ([below](#-the-included-minutes)), and in any case once GitHub bills the first cent. The minutes of larger
+runners are never included: such a pool stops at its first large job.
 
 **The budgets set on GitHub** follows the budgets of the organisation (*Settings → Billing and licensing → Budgets and
 alerts*): those of the organisation, its enterprise and the relay repository that stop usage when used up, for all of
@@ -201,9 +201,27 @@ pool, its short name as in `github.com/enterprises/NAME`, and a token that reads
 ([below](#-reading-githubs-billing)). The pool then follows the budgets of the enterprise, of the organisation, of the
 relay repository, and of the cost centres the organisation or the repository is in.
 
-A budget of $0 that stops usage (GitHub's default for paid usage) is used up at the first cent billed. Should GitHub
-stop the runs right at the end of the included minutes and bill nothing, neither *only the included minutes* nor this
-kind sees it: the pool then pauses after its failed starts, as without a budget.
+A budget of $0 that stops usage (GitHub's default for paid usage) lets nothing be billed: GitHub stops the runs once
+the minutes of the plan are used up. The **included minutes are then the limit** of the pool
+([below](#-the-included-minutes)): it shows *… of 50,000* and stops there, before GitHub does. A budget above $0 is used
+up when GitHub has billed that much.
+
+### 🎁 The included minutes
+
+GitHub's API does not say how many minutes a plan includes or how many are left, so CI-Plane works them out:
+
+- **How many**: by the plan of the relay repository's owner, as GitHub publishes them: 2,000 a month for *Free*, 3,000
+  for *Pro* and *Team*, 50,000 for *Enterprise*. For a plan CI-Plane does not know, or a contract with other numbers,
+  the pool shows no such limit and stops when GitHub bills the first cent or a budget is used up.
+- **How many are used**: the minutes of all **private** repositories that GitHub did not bill, Windows minutes
+  twice and macOS minutes ten times. Public repositories run free of charge and use none; a repository the app
+  cannot see counts as private. With an enterprise entered in the pool these are the repositories of the whole
+  enterprise, whose organisations share the minutes; without, those of the owner.
+- The minutes of the pool that GitHub does not show yet are added, as CI-Plane counted them.
+
+So the limit is that of the account, not of the pool alone: a job on a GitHub-hosted runner in another private
+repository uses the same minutes. The pool's sheet shows both, *Included minutes of the plan* and the *Runner minutes
+of this pool*.
 
 The pool shows this month's minutes, the cost, the budgets on GitHub, and GitHub's minutes and price per machine.
 
@@ -226,10 +244,13 @@ a budget that rests on it. It only reads; nothing changes on GitHub.
   permission **Plan: Read-only** and nothing else, and enter it in the pool. CI-Plane keeps it encrypted; it is never
   shown again. When it expires, the pool says so; enter a new one. GitHub has no budgets of personal accounts to read.
 
+- **The plan and the repositories**: the app reads the owner's profile for its plan, and each repository in the usage
+  report for whether it is public. No further permission is needed.
 - **Budgets of an enterprise**: GitHub shows them to a person only. Create a
   [classic token](https://github.com/settings/tokens/new?scopes=manage_billing:enterprise) of an owner or billing
   manager of the enterprise with the scope **manage_billing:enterprise** and nothing else, and enter it in the pool
-  with the enterprise's name. If the organisation asks for single sign-on, authorise the token for it. An owner of
+  with the enterprise's name; the same token reads the usage of the whole enterprise for the included minutes. If the
+  organisation asks for single sign-on, authorise the token for it. An owner of
   the organisation who is neither sees only the budgets of the organisation and its repositories, not the enterprise's
   own. The usage is still read by the app.
 

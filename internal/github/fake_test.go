@@ -92,6 +92,9 @@ type fakeGH struct {
 	budgetList   map[string][]ghBudget // by organisation, or "enterprise/x"
 	costCentres  map[string][]string   // names, by "organization/x" or "repository/x/y"
 	memberDenied bool                  // the person may not see cost centres
+	userPlan     [2]string             // login and plan of the person whose token userToken is
+	orgs         map[string][2]string  // by login: the name on its profile and its plan
+	visible      map[string]bool       // repositories the app can read, by owner/name: true = public
 	billingApps  bool
 	userToken    string
 	usageQueries []string
@@ -105,6 +108,7 @@ func newFake(t *testing.T) *fakeGH {
 		nextRunner: 100, runs: map[string][]*fakeRun{}, hookConfig: map[int64]map[string]any{},
 		conversions: map[string]map[string]any{}, fail: map[string][]int{},
 		usage: map[string][]usageItem{}, budgetList: map[string][]ghBudget{}, costCentres: map[string][]string{},
+		orgs: map[string][2]string{}, visible: map[string]bool{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /app-manifests/{code}/conversions", f.conversion)
@@ -126,6 +130,17 @@ func newFake(t *testing.T) *fakeGH {
 	mux.HandleFunc("GET /repos/{owner}/{repo}/actions/runs/{id}", f.getRun)
 	mux.HandleFunc("GET /{kind}/{owner}/settings/billing/usage", f.billingUsage)
 	mux.HandleFunc("GET /organizations/{org}/settings/billing/budgets", f.billingBudgets)
+	mux.HandleFunc("GET /orgs/{org}", f.getOrg)
+	mux.HandleFunc("GET /user", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.userToken == "" || r.Header.Get("Authorization") != "Bearer "+f.userToken {
+			apiErr(w, 401, "Bad credentials")
+			return
+		}
+		writeJSON(w, r, f, 200, map[string]any{"login": f.userPlan[0], "plan": map[string]any{"name": f.userPlan[1]}})
+	})
+	mux.HandleFunc("GET /repos/{owner}/{repo}", f.getRepo)
 	mux.HandleFunc("GET /enterprises/{enterprise}/settings/billing/budgets", f.enterpriseBudgets)
 	mux.HandleFunc("GET /enterprises/{enterprise}/settings/billing/cost-centers/memberships", f.memberships)
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -232,6 +247,10 @@ func (f *fakeGH) billingUsage(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	switch {
+	case kind == "enterprises":
+		if !f.person(w, r) {
+			return
+		}
 	case kind == "organizations" && !strings.HasPrefix(auth, "Bearer ghs_"):
 		apiErr(w, 401, "Bad credentials")
 		return
@@ -265,13 +284,43 @@ func (f *fakeGH) billingBudgets(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, f, 200, map[string]any{"budgets": list, "has_next_page": p*per < len(all), "total_count": len(all)})
 }
 
+// getOrg answers the profile of an organisation with its plan.
+func (f *fakeGH) getOrg(w http.ResponseWriter, r *http.Request) {
+	if !f.installed(w, r) {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	o, ok := f.orgs[r.PathValue("org")]
+	if !ok {
+		apiErr(w, 404, "Not Found")
+		return
+	}
+	writeJSON(w, r, f, 200, map[string]any{"login": r.PathValue("org"), "name": o[0], "plan": map[string]any{"name": o[1]}})
+}
+
+// getRepo answers a repository the app can read: its own and public ones.
+func (f *fakeGH) getRepo(w http.ResponseWriter, r *http.Request) {
+	if !f.installed(w, r) {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	public, ok := f.visible[r.PathValue("owner")+"/"+r.PathValue("repo")]
+	if !ok {
+		apiErr(w, 404, "Not Found")
+		return
+	}
+	writeJSON(w, r, f, 200, map[string]any{"name": r.PathValue("repo"), "private": !public})
+}
+
 // person checks the token of the person who may see the enterprise.
 func (f *fakeGH) person(w http.ResponseWriter, r *http.Request) bool {
 	auth := r.Header.Get("Authorization")
 	switch {
 	case f.userToken == "" || auth != "Bearer "+f.userToken:
 		apiErr(w, 401, "Bad credentials")
-	case r.PathValue("enterprise") != "acme-inc":
+	case r.PathValue("enterprise") != "acme-inc" && r.PathValue("owner") != "acme-inc":
 		apiErr(w, 404, "Not Found")
 	default:
 		return true
