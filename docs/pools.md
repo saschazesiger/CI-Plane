@@ -194,6 +194,9 @@ Actions or for a machine (SKU) the relay repository used this month. Budgets tha
 those of cost centres are left out, as CI-Plane cannot see what they cover. Without this, GitHub would stop the runs
 itself, and the pool would [pause](#-when-a-pool-fails) after failed starts, longer each time.
 
+An organisation that belongs to an enterprise has no budgets of its own: the enterprise keeps them, and GitHub does
+not hand them to the app of the organisation. The pool then says so and takes no jobs; choose another budget for it.
+
 A budget of $0 that stops usage (GitHub's default for paid usage) is used up at the first cent billed. Should GitHub
 stop the runs right at the end of the included minutes and bill nothing, neither *only the included minutes* nor this
 kind sees it: the pool then pauses after its failed starts, as without a budget.

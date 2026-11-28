@@ -115,7 +115,7 @@ func (s *Service) PoolUsage(ctx context.Context, p model.Pool, year int, month t
 		}
 		skus := map[string]bool{}
 		for _, m := range u.Machines {
-			skus[strings.ToLower(m.SKU)] = true
+			skus[skuKey(m.SKU)] = true
 		}
 		if u.Budgets, err = s.budgets(ctx, a, owner, p.Repo, skus); err != nil {
 			return u, err
@@ -138,10 +138,16 @@ func (s *Service) budgets(ctx context.Context, a model.Account, org, repo string
 		}
 		path := fmt.Sprintf("/organizations/%s/settings/billing/budgets?per_page=100&page=%d", url.PathEscape(org), page)
 		if _, err := s.getJSON(ctx, call{method: http.MethodGet, path: path, auth: authInstallation, account: a.ID}, &resp); err != nil {
+			// What GitHub answers for an organisation whose billing an
+			// enterprise keeps: its budgets are the enterprise's.
+			if statusOf(err) == http.StatusBadRequest {
+				return nil, fmt.Errorf("GitHub does not hand out the budgets of %s (it answers: %s). That is so when the organisation belongs to an enterprise, "+
+					"which keeps the budgets. Edit the pool and choose another budget: dollars, or only the included minutes", org, strings.TrimRight(messageOfErr(err), "."))
+			}
 			return nil, s.billingError(a, org, err)
 		}
 		for _, b := range resp.Budgets {
-			sku := strings.ToLower(b.ProductSKU)
+			sku := skuKey(b.ProductSKU)
 			switch {
 			case strings.EqualFold(b.Type, "SkuPricing"):
 				if !skus[sku] {
@@ -167,6 +173,21 @@ func (s *Service) budgets(ctx context.Context, a model.Account, org, repo string
 		}
 	}
 	return out, nil
+}
+
+// skuKey is a SKU as budgets name it (actions_linux), also for one the
+// usage report names in words (Actions Linux).
+func skuKey(sku string) string {
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(sku)), " ", "_")
+}
+
+// messageOfErr is GitHub's own message in an error of the API.
+func messageOfErr(err error) string {
+	var ae *apiError
+	if errors.As(err, &ae) && ae.Message != "" {
+		return ae.Message
+	}
+	return err.Error()
 }
 
 // sameRepo reports whether a repository as the billing names it, with or
