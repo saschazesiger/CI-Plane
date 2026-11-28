@@ -330,16 +330,23 @@ while :; do
   cpu=$(echo "$p $c" | awk '{t=$3-$1; i=$4-$2; printf "%.1f", (t > 0 ? 100*(t-i)/t : 0)}')
   mem=$(awk '/^MemAvailable:/{a=$2} /^MemTotal:/{t=$2} END{print int(a/1024), int(t/1024)}' /proc/meminfo)
   disk=$(df -Pm "$r" | awk 'NR==2{print $4, $2}')
-  echo "stats $(cut -d' ' -f1 /proc/loadavg) $cpu $mem $disk"
+  n=$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo)
+  echo "stats $(cut -d' ' -f1 /proc/loadavg) $cpu $mem $disk $n"
   p=$c
   sleep ` + strconv.Itoa(sec) + `
 done`
 }
 
-// parseStats reads "stats load1 cpu memAvail memTotal diskFree disk".
+// parseStats reads "stats load1 cpu memAvail memTotal diskFree disk cpus".
+// The number of CPUs is reported with every line: a server can get more of
+// them, or more memory, long after it was added.
 func parseStats(line string) (engine.WorkerStatus, bool) {
 	f := strings.Fields(line)
-	if len(f) != 7 || f[0] != "stats" {
+	if len(f) != 8 || f[0] != "stats" {
+		return engine.WorkerStatus{}, false
+	}
+	cpus, err := strconv.Atoi(f[7])
+	if err != nil || cpus < 1 {
 		return engine.WorkerStatus{}, false
 	}
 	load, err1 := strconv.ParseFloat(f[1], 64)
@@ -356,7 +363,7 @@ func parseStats(line string) (engine.WorkerStatus, bool) {
 		return engine.WorkerStatus{}, false
 	}
 	return engine.WorkerStatus{Connected: true, At: store.Now(), Load1: load, CPUPct: cpu,
-		MemAvailMB: n[0], MemTotalMB: n[1], DiskFreeMB: n[2], DiskMB: n[3]}, true
+		MemAvailMB: n[0], MemTotalMB: n[1], DiskFreeMB: n[2], DiskMB: n[3], CPUs: cpus}, true
 }
 
 // cpuWindow is the time over which the CPU value is smoothed. One sample

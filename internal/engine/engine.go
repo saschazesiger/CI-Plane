@@ -163,6 +163,7 @@ type WorkerStatus struct {
 	CPUAvgPct  float64 // the same, smoothed over about a minute; 0 = not measured
 	MemAvailMB int
 	MemTotalMB int
+	CPUs       int // how many CPUs the server has; 0 = not reported
 	DiskFreeMB int
 	DiskMB     int
 }

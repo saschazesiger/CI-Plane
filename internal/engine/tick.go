@@ -148,7 +148,8 @@ func (e *Engine) workerStates(ctx context.Context, s *snapshot) bool {
 		e.mu.Lock()
 		stale := st.Connected && s.now-e.seen[w.ID] > 60_000
 		e.mu.Unlock()
-		if state == w.State && reason == w.StateReason && !stale {
+		resized := sizeChanged(w, st)
+		if state == w.State && reason == w.StateReason && !stale && !resized {
 			continue
 		}
 		was := w.State
@@ -160,6 +161,16 @@ func (e *Engine) workerStates(ctx context.Context, s *snapshot) bool {
 			cur.State, cur.StateReason = state, reason
 			if st.Connected {
 				cur.LastSeenAt = s.now
+			}
+			if sizeChanged(cur, st) {
+				// The server was given other CPUs, memory or disk since it
+				// was added: plan with what it has. A few megabytes more or
+				// less, as after a new kernel, are not worth a line.
+				if st.CPUs != cur.CPUs || abs(st.MemTotalMB-cur.MemMB)*20 > cur.MemMB {
+					event(tx, model.LevelInfo, "worker.size", fmt.Sprintf("The server has %s and %.1f GB of memory now (%s and %.1f GB before); jobs are planned with them",
+						count(st.CPUs, "CPU"), float64(st.MemTotalMB)/1024, count(cur.CPUs, "CPU"), float64(cur.MemMB)/1024), 0, "", w.ID)
+				}
+				cur.CPUs, cur.MemMB, cur.DiskMB = st.CPUs, st.MemTotalMB, st.DiskMB
 			}
 			if state != was {
 				level := model.LevelInfo
@@ -183,11 +194,27 @@ func (e *Engine) workerStates(ctx context.Context, s *snapshot) bool {
 		e.seen[w.ID] = s.now
 		e.mu.Unlock()
 		s.workers[i], s.worker[w.ID] = w, w
-		if state != was {
+		if state != was || resized {
 			dirty = true
 		}
 	}
 	return dirty
+}
+
+// sizeChanged reports whether a worker says it has other CPUs, memory or
+// disk than is stored for it. Only a status that reports all of them counts.
+func sizeChanged(w model.Worker, st WorkerStatus) bool {
+	if !st.Connected || st.At == 0 || st.CPUs <= 0 || st.MemTotalMB <= 0 || st.DiskMB <= 0 {
+		return false
+	}
+	return st.CPUs != w.CPUs || st.MemTotalMB != w.MemMB || st.DiskMB != w.DiskMB
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // probe tests an unhealthy worker; success takes it back into rotation.

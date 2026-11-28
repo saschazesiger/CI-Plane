@@ -212,10 +212,15 @@ func TestParseList(t *testing.T) {
 }
 
 func TestParseStats(t *testing.T) {
-	st, ok := parseStats("stats 0.52 12.5 2048 8192 30000 100000")
+	st, ok := parseStats("stats 0.52 12.5 2048 8192 30000 100000 8")
 	if !ok || st.Load1 != 0.52 || st.CPUPct != 12.5 || st.MemAvailMB != 2048 || st.MemTotalMB != 8192 ||
-		st.DiskFreeMB != 30000 || st.DiskMB != 100000 || !st.Connected || st.At == 0 {
+		st.DiskFreeMB != 30000 || st.DiskMB != 100000 || st.CPUs != 8 || !st.Connected || st.At == 0 {
 		t.Fatalf("%+v %v", st, ok)
+	}
+	for _, bad := range []string{"stats 0.52 12.5 2048 8192 30000 100000", "stats 0.52 12.5 2048 8192 30000 100000 0", "stats 0.52 12.5 2048 8192 30000 100000 many"} {
+		if _, ok := parseStats(bad); ok {
+			t.Fatalf("%q accepted", bad)
+		}
 	}
 	if _, ok := parseStats("stats 1 2 3"); ok {
 		t.Fatal("short line accepted")

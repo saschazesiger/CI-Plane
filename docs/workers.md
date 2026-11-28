@@ -42,6 +42,9 @@ A worker does not have to be a server of its own. See [CPU priority](#-cpu-prior
    tools into a shared volume, start the registry mirror, run a test container. The page turns green when the
    worker is online. If a step fails, the page shows it with **Try again**.
 
+A server that gets more (or fewer) CPUs, memory or disk later needs nothing: it reports them with its live values,
+and CI-Plane plans with what it has from then on. The event *The server has … CPUs and … GB of memory now* says so.
+
 The host key seen at the first connection is pinned. If it ever changes, CI-Plane refuses the server
 ([Troubleshooting](troubleshooting.md#-workers)).
 

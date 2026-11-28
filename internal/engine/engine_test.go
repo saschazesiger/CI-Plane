@@ -1183,3 +1183,33 @@ func TestOtherLoadDoesNotBlockTheQueue(t *testing.T) {
 		t.Fatalf("large %s, small %s; want the large one waiting and the small one started", a, b)
 	}
 }
+
+func TestWorkerTakesTheCPUsItReports(t *testing.T) {
+	r := newRig(t)
+	// Added with 4 CPUs: a size-m job (4 CPUs) does not fit after the reserve.
+	w := r.workerSized("beta", 1, 4, 16*1024)
+	a := r.queue("acme/api", 1)
+	r.pass(2)
+	if j := r.job(a); j.State != model.JobQueued {
+		t.Fatalf("with 4 CPUs: %s %q", j.State, j.Reason)
+	}
+	// The server now has 8 CPUs, and says so with its live values.
+	r.world.SetStatus(w.ID, engine.WorkerStatus{Connected: true, At: 1, CPUs: 8, MemAvailMB: 16000, MemTotalMB: 16 * 1024, DiskFreeMB: 1 << 20, DiskMB: 1 << 20})
+	r.run(10)
+	got := r.workerRow(w.ID)
+	if got.CPUs != 8 || got.MemMB != 16*1024 || got.DiskMB != 1<<20 {
+		t.Fatalf("worker: %+v", got)
+	}
+	if j := r.job(a); j.State != model.JobCompleted {
+		t.Fatalf("with 8 CPUs: %s %q", j.State, j.Reason)
+	}
+	if ev := r.events("worker.size"); len(ev) != 1 || !strings.Contains(ev[0], "8 CPUs and 16.0 GB of memory now (4 CPUs and 16.0 GB before)") {
+		t.Fatalf("events: %v", ev)
+	}
+	// A status that does not report the CPUs changes nothing.
+	r.world.SetStatus(w.ID, engine.WorkerStatus{Connected: true, At: 1, MemAvailMB: 16000, MemTotalMB: 8 * 1024, DiskFreeMB: 1 << 20, DiskMB: 1 << 20})
+	r.pass(3)
+	if got := r.workerRow(w.ID); got.CPUs != 8 || got.MemMB != 16*1024 {
+		t.Fatalf("after a status without CPUs: %+v", got)
+	}
+}
