@@ -124,6 +124,7 @@ func Open(dir string) (*Store, error) {
 		{"pools", "budget_kind", "TEXT NOT NULL DEFAULT ''"},
 		{"pools", "budget_usd", "INTEGER NOT NULL DEFAULT 0"},
 		{"pools", "usage", "TEXT NOT NULL DEFAULT ''"},
+		{"pools", "enterprise", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		if err := addColumn(db, c.table, c.column, c.def); err != nil {
 			db.Close()
@@ -594,13 +595,13 @@ func (t *Tx) DeleteWorker(id int64) error {
 // --- pools -----------------------------------------------------------------
 
 const poolCols = `id, name, kind, account_id, repo, tier, position, enabled, after_sec, max, standard, large, budget_min,
- month, used_sec, fails, paused_until, pause_reason, created_at, budget_kind, budget_usd, usage`
+ month, used_sec, fails, paused_until, pause_reason, created_at, budget_kind, budget_usd, usage, enterprise`
 
 func scanPool(r interface{ Scan(...any) error }) (model.Pool, error) {
 	var p model.Pool
 	var usage string
 	err := r.Scan(&p.ID, &p.Name, &p.Kind, &p.AccountID, &p.Repo, &p.Tier, &p.Position, &p.Enabled, &p.AfterSec, &p.Max, &p.Standard, &p.Large,
-		&p.BudgetMin, &p.Month, &p.UsedSec, &p.Fails, &p.PausedUntil, &p.PauseReason, &p.CreatedAt, &p.BudgetKind, &p.BudgetUSD, &usage)
+		&p.BudgetMin, &p.Month, &p.UsedSec, &p.Fails, &p.PausedUntil, &p.PauseReason, &p.CreatedAt, &p.BudgetKind, &p.BudgetUSD, &usage, &p.Enterprise)
 	if err == nil && usage != "" {
 		// A reading that cannot be decoded is as good as none: the next
 		// one replaces it.
@@ -624,9 +625,9 @@ func (t *Tx) AddPool(p model.Pool) (model.Pool, error) {
 		p.CreatedAt = t.now()
 	}
 	res, err := t.q.Exec(`INSERT INTO pools(name, kind, account_id, repo, tier, position, enabled, after_sec, max, standard, large, budget_min,
-	  month, used_sec, fails, paused_until, pause_reason, created_at, budget_kind, budget_usd, usage) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	  month, used_sec, fails, paused_until, pause_reason, created_at, budget_kind, budget_usd, usage, enterprise) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.Name, p.Kind, p.AccountID, p.Repo, p.Tier, p.Position, b2i(p.Enabled), p.AfterSec, p.Max, p.Standard, p.Large, p.BudgetMin,
-		p.Month, p.UsedSec, p.Fails, p.PausedUntil, p.PauseReason, p.CreatedAt, p.BudgetKind, p.BudgetUSD, usageText(p.Usage))
+		p.Month, p.UsedSec, p.Fails, p.PausedUntil, p.PauseReason, p.CreatedAt, p.BudgetKind, p.BudgetUSD, usageText(p.Usage), p.Enterprise)
 	if err != nil {
 		return p, err
 	}
@@ -637,9 +638,9 @@ func (t *Tx) AddPool(p model.Pool) (model.Pool, error) {
 // SavePool stores a pool.
 func (t *Tx) SavePool(p model.Pool) error {
 	_, err := t.q.Exec(`UPDATE pools SET name=?, kind=?, account_id=?, repo=?, tier=?, position=?, enabled=?, after_sec=?, max=?, standard=?, large=?,
-	  budget_min=?, month=?, used_sec=?, fails=?, paused_until=?, pause_reason=?, budget_kind=?, budget_usd=?, usage=? WHERE id=?`,
+	  budget_min=?, month=?, used_sec=?, fails=?, paused_until=?, pause_reason=?, budget_kind=?, budget_usd=?, usage=?, enterprise=? WHERE id=?`,
 		p.Name, p.Kind, p.AccountID, p.Repo, p.Tier, p.Position, b2i(p.Enabled), p.AfterSec, p.Max, p.Standard, p.Large, p.BudgetMin,
-		p.Month, p.UsedSec, p.Fails, p.PausedUntil, p.PauseReason, p.BudgetKind, p.BudgetUSD, usageText(p.Usage), p.ID)
+		p.Month, p.UsedSec, p.Fails, p.PausedUntil, p.PauseReason, p.BudgetKind, p.BudgetUSD, usageText(p.Usage), p.Enterprise, p.ID)
 	return err
 }
 

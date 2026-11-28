@@ -378,3 +378,60 @@ func TestABillingBudgetNeedsARepositoryOfItsOwn(t *testing.T) {
 	r.expect(r.local_("POST", "/api/pools", body("Large", "minutes")), 200)
 	r.expect(r.local_("PATCH", "/api/pools/1", map[string]any{"name": "Small"}), 200)
 }
+
+func TestPoolFollowsTheBudgetsOfAnEnterprise(t *testing.T) {
+	r := newRig(t, false)
+	r.srv.d.Relay = &fakeRelay{}
+	box, err := secret.New(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.srv.d.Box = box
+	r.signIn()
+	if err := r.st.Tx(func(tx *store.Tx) error {
+		if err := tx.SaveRunnerAccount(model.Account{ID: 2, Slug: "ci-plane-runners-acme", Owner: "acme", OwnerType: "Organization", InstallationID: 6}); err != nil {
+			return err
+		}
+		return tx.SetRunnerRepos(2, []model.Repo{{ID: 7, FullName: "acme/relay", Private: true}})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := func(more map[string]any) map[string]any {
+		b := map[string]any{"name": "GitHub", "kind": "github", "accountId": 2, "repo": "acme/relay", "standard": "ubuntu-latest", "budgetKind": "github"}
+		for k, v := range more {
+			b[k] = v
+		}
+		return b
+	}
+	bad := r.expect(r.local_("POST", "/api/pools", body(map[string]any{"enterprise": "acme inc"})), 400)
+	if f := bad.body["fields"].(map[string]any); !strings.Contains(f["enterprise"].(string), "github.com/enterprises/NAME") {
+		t.Fatalf("not a slug: %s", bad.raw)
+	}
+	bad = r.expect(r.local_("POST", "/api/pools", body(map[string]any{"enterprise": "acme-inc"})), 400)
+	if f := bad.body["fields"].(map[string]any); !strings.Contains(f["usageToken"].(string), "manage_billing:enterprise") {
+		t.Fatalf("without a token: %s", bad.raw)
+	}
+	added := r.expect(r.local_("POST", "/api/pools", body(map[string]any{"enterprise": "acme-inc", "usageToken": "ghp_0123456789abcdefghijklmnop"})), 200)
+	p := added.body["pool"].(map[string]any)
+	if p["enterprise"] != "acme-inc" || strings.Contains(added.raw, "ghp_") {
+		t.Fatalf("added: %s", added.raw)
+	}
+	stored := func() string {
+		var tok []byte
+		_ = r.st.View(func(tx *store.Tx) error { tok, _ = box.Get(tx, UsageTokenName(2)); return nil })
+		return string(tok)
+	}
+	if stored() != "ghp_0123456789abcdefghijklmnop" {
+		t.Fatalf("token: %q", stored())
+	}
+	list := r.expect(r.local_("GET", "/api/pools", nil), 200)
+	if v := list.body["pools"].([]any)[0].(map[string]any); v["hasUsageToken"] != true || v["ownerType"] != "Organization" {
+		t.Fatalf("view: %s", list.raw)
+	}
+	// Another change keeps the token; another kind of budget forgets the enterprise.
+	r.expect(r.local_("PATCH", "/api/pools/1", map[string]any{"max": 7}), 200)
+	changed := r.expect(r.local_("PATCH", "/api/pools/1", map[string]any{"budgetKind": "dollars", "budgetUsd": 50}), 200)
+	if p := changed.body["pool"].(map[string]any); p["enterprise"] != "" {
+		t.Fatalf("enterprise kept: %s", changed.raw)
+	}
+}

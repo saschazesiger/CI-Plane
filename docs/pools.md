@@ -152,7 +152,8 @@ A job whose last start failed on a pool tries anything else first, as on a worke
 | Machine for standard jobs | see [Providers](#-providers) | a `runs-on` label | |
 | Machine for large jobs | see [Providers](#-providers) | a `runs-on` label, or empty | Empty: large jobs do not go to this pool. |
 | Budget | runner minutes, 0 (no limit) | runner minutes (0 to 10,000,000), US dollars (1 to 1,000,000), only the included minutes, the budgets set on GitHub | Per calendar month. All but minutes are for GitHub-hosted runners only. See [below](#-budget). |
-| Token to read the billing | | a fine-grained token with *Plan: Read-only* | Only for a relay repository of a personal account. See [below](#-reading-githubs-billing). |
+| Enterprise | empty | the short name of an enterprise | Only for *the budgets set on GitHub*, when the organisation belongs to an enterprise. See [below](#-budget). |
+| Token to read the billing | | a token of a person | For a relay repository of a personal account, and for the budgets of an enterprise. See [below](#-reading-githubs-billing). |
 | On | on | | Off: the pool takes no new jobs; its runners finish. |
 
 A pool with runners on it cannot be removed: switch it off, wait until they are done, then remove it.
@@ -195,7 +196,10 @@ those of cost centres are left out, as CI-Plane cannot see what they cover. With
 itself, and the pool would [pause](#-when-a-pool-fails) after failed starts, longer each time.
 
 An organisation that belongs to an enterprise has no budgets of its own: the enterprise keeps them, and GitHub does
-not hand them to the app of the organisation. The pool then says so and takes no jobs; choose another budget for it.
+not hand them to the app of the organisation. The pool then says so and takes no jobs. Enter the **enterprise** in the
+pool, its short name as in `github.com/enterprises/NAME`, and a token that reads its budgets
+([below](#-reading-githubs-billing)). The pool then follows the budgets of the enterprise, of the organisation, of the
+relay repository, and of the cost centres the organisation or the repository is in.
 
 A budget of $0 that stops usage (GitHub's default for paid usage) is used up at the first cent billed. Should GitHub
 stop the runs right at the end of the included minutes and bill nothing, neither *only the included minutes* nor this
@@ -221,6 +225,13 @@ a budget that rests on it. It only reads; nothing changes on GitHub.
   [fine-grained token](https://github.com/settings/personal-access-tokens/new) of the account with the account
   permission **Plan: Read-only** and nothing else, and enter it in the pool. CI-Plane keeps it encrypted; it is never
   shown again. When it expires, the pool says so; enter a new one. GitHub has no budgets of personal accounts to read.
+
+- **Budgets of an enterprise**: GitHub shows them to a person only. Create a
+  [classic token](https://github.com/settings/tokens/new?scopes=manage_billing:enterprise) of an owner or billing
+  manager of the enterprise with the scope **manage_billing:enterprise** and nothing else, and enter it in the pool
+  with the enterprise's name. If the organisation asks for single sign-on, authorise the token for it. An owner of
+  the organisation who is neither sees only the budgets of the organisation and its repositories, not the enterprise's
+  own. The usage is still read by the app.
 
 A budget of minutes works without the billing: the pool then counts by itself. The other kinds rest on it, so the
 pool takes no jobs while CI-Plane has no reading of this month, or the last one is older than three hours (an outage of

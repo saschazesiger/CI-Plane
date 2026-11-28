@@ -235,7 +235,7 @@ func (e *Engine) readUsage(ctx context.Context, s *snapshot) {
 		}
 		// The key changes with what the reading depends on, so that a
 		// changed pool and a new month are read at once.
-		base := fmt.Sprintf("usage:%d:%d:%s:%s:%s", p.ID, p.AccountID, p.Repo, p.Budget(), month)
+		base := fmt.Sprintf("usage:%d:%d:%s:%s:%s:%s", p.ID, p.AccountID, p.Repo, p.Budget(), p.Enterprise, month)
 		key, fresh := base, dropped(p.Usage)
 		if fresh {
 			key += ":new" // the reading was dropped, as when a token was entered
@@ -290,7 +290,7 @@ func (e *Engine) saveUsage(read model.Pool, u model.PoolUsage, readErr error, at
 		if err != nil {
 			return ignoreMissing(err)
 		}
-		if p.AccountID != read.AccountID || p.Repo != read.Repo || p.Budget() != read.Budget() {
+		if p.AccountID != read.AccountID || p.Repo != read.Repo || p.Budget() != read.Budget() || p.Enterprise != read.Enterprise {
 			return nil
 		}
 		// A reading that began before a newer one, or before the person

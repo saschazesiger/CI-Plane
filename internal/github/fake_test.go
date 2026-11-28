@@ -89,7 +89,9 @@ type fakeGH struct {
 	// budgets of organisations, whether apps may read them ("Administration:
 	// read"), and the token of a person that reads a user's.
 	usage        map[string][]usageItem
-	budgetList   map[string][]ghBudget
+	budgetList   map[string][]ghBudget // by organisation, or "enterprise/x"
+	costCentres  map[string][]string   // names, by "organization/x" or "repository/x/y"
+	memberDenied bool                  // the person may not see cost centres
 	billingApps  bool
 	userToken    string
 	usageQueries []string
@@ -102,7 +104,7 @@ func newFake(t *testing.T) *fakeGH {
 		installations: map[int64]int64{}, instOwner: map[int64]string{}, runners: map[string][]*fakeRunner{},
 		nextRunner: 100, runs: map[string][]*fakeRun{}, hookConfig: map[int64]map[string]any{},
 		conversions: map[string]map[string]any{}, fail: map[string][]int{},
-		usage: map[string][]usageItem{}, budgetList: map[string][]ghBudget{},
+		usage: map[string][]usageItem{}, budgetList: map[string][]ghBudget{}, costCentres: map[string][]string{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /app-manifests/{code}/conversions", f.conversion)
@@ -124,6 +126,8 @@ func newFake(t *testing.T) *fakeGH {
 	mux.HandleFunc("GET /repos/{owner}/{repo}/actions/runs/{id}", f.getRun)
 	mux.HandleFunc("GET /{kind}/{owner}/settings/billing/usage", f.billingUsage)
 	mux.HandleFunc("GET /organizations/{org}/settings/billing/budgets", f.billingBudgets)
+	mux.HandleFunc("GET /enterprises/{enterprise}/settings/billing/budgets", f.enterpriseBudgets)
+	mux.HandleFunc("GET /enterprises/{enterprise}/settings/billing/cost-centers/memberships", f.memberships)
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Method + " " + r.URL.Path
 		f.mu.Lock()
@@ -259,6 +263,48 @@ func (f *fakeGH) billingBudgets(w http.ResponseWriter, r *http.Request) {
 	p, per := page(r)
 	list := slice(all, p, per)
 	writeJSON(w, r, f, 200, map[string]any{"budgets": list, "has_next_page": p*per < len(all), "total_count": len(all)})
+}
+
+// person checks the token of the person who may see the enterprise.
+func (f *fakeGH) person(w http.ResponseWriter, r *http.Request) bool {
+	auth := r.Header.Get("Authorization")
+	switch {
+	case f.userToken == "" || auth != "Bearer "+f.userToken:
+		apiErr(w, 401, "Bad credentials")
+	case r.PathValue("enterprise") != "acme-inc":
+		apiErr(w, 404, "Not Found")
+	default:
+		return true
+	}
+	return false
+}
+
+func (f *fakeGH) enterpriseBudgets(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.person(w, r) {
+		return
+	}
+	all := f.budgetList["enterprise/"+r.PathValue("enterprise")]
+	p, per := page(r)
+	writeJSON(w, r, f, 200, map[string]any{"budgets": slice(all, p, per), "has_next_page": p*per < len(all), "total_count": len(all)})
+}
+
+func (f *fakeGH) memberships(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.person(w, r) {
+		return
+	}
+	if f.memberDenied {
+		apiErr(w, 403, "Forbidden")
+		return
+	}
+	out := []map[string]any{}
+	for _, n := range f.costCentres[r.URL.Query().Get("resource_type")+"/"+r.URL.Query().Get("name")] {
+		out = append(out, map[string]any{"cost_center": map[string]any{"id": "cc-" + n, "name": n}})
+	}
+	writeJSON(w, r, f, 200, map[string]any{"memberships": out})
 }
 
 // installed checks an installation token.

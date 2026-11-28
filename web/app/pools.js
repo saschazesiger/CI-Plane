@@ -122,7 +122,7 @@ function budgetText(p) {
   switch (budgetKind(p)) {
     case 'dollars': return `${usd(p.budgetUsd)}, as GitHub bills the minutes of ${p.repo}`;
     case 'free': return `Only the minutes included in the plan of ${ownerOf(p.repo)}`;
-    case 'github': return `The budgets set on GitHub for ${ownerOf(p.repo)}`;
+    case 'github': return p.enterprise ? `The budgets set on GitHub for the enterprise ${p.enterprise}` : `The budgets set on GitHub for ${ownerOf(p.repo)}`;
     default: return p.budgetMin ? `${p.budgetMin.toLocaleString('en')} runner minutes` : 'No limit';
   }
 }
@@ -377,7 +377,7 @@ const preset = (kind) => (ctx.data.presets || []).find((x) => x.kind === kind) |
 
 function valuesFrom(p) {
   return { name: p.name, accountId: p.accountId, repo: p.repo, tier: p.tier, afterSec: p.afterSec, max: p.max, standard: p.standard, large: p.large,
-    budgetKind: budgetKind(p), budgetMin: p.budgetMin, budgetUsd: p.budgetUsd };
+    budgetKind: budgetKind(p), budgetMin: p.budgetMin, budgetUsd: p.budgetUsd, enterprise: p.enterprise || '' };
 }
 
 function kindStepHtml() {
@@ -431,11 +431,17 @@ function budgetFieldsHtml(v) {
         '<small class="ds-field__hint" id="pool-budget-usd-hint">What GitHub bills after the included minutes.</small></div>' +
     '</div>' +
     '<p class="ds-meta" id="pool-billing-org" hidden>CI-Plane reads the billing with the app of the account: on GitHub it needs the organisation permission <strong>Administration: Read-only</strong>. Apps CI-Plane creates now ask for it.</p>' +
+    '<div class="ds-field" id="pool-enterprise-field" hidden><label class="ds-field__label" for="pool-enterprise">Enterprise (optional)</label>' +
+      `<div class="ds-input-group"><span class="ds-input-group__prefix" aria-hidden="true">github.com/enterprises/</span><input class="ds-input" id="pool-enterprise" data-field="enterprise" autocomplete="off" spellcheck="false" maxlength="100" value="${esc(v.enterprise || '')}" aria-describedby="pool-enterprise-hint"></div>` +
+      '<small class="ds-field__hint" id="pool-enterprise-hint">Only if the organisation belongs to an enterprise: the enterprise keeps the budgets then, and GitHub shows them to a person, not to the app. Empty: the budgets of the organisation itself.</small></div>' +
     '<div class="ds-field" id="pool-token-field" hidden><label class="ds-field__label" for="pool-token">Token to read the billing</label>' +
       `<input class="ds-input" id="pool-token" data-field="usageToken" type="password" autocomplete="off" spellcheck="false" placeholder="${stored ? 'Stored; enter a new one to replace it' : 'github_pat_...'}" aria-describedby="pool-token-hint">` +
-      '<small class="ds-field__hint" id="pool-token-hint">GitHub lets no app read the billing of a personal account. Create a fine-grained token of the account with the account permission ' +
+      '<small class="ds-field__hint" id="pool-token-hint"><span id="pool-token-hint-user">GitHub lets no app read the billing of a personal account. Create a fine-grained token of the account with the account permission ' +
       `<strong>Plan: Read-only</strong> and nothing else: <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">new token on GitHub${icon('external', 16)}</a>. ` +
-      'CI-Plane keeps it encrypted. With a budget of minutes it is optional, and shows GitHub\'s numbers.</small></div>' +
+      'CI-Plane keeps it encrypted. With a budget of minutes it is optional, and shows GitHub\'s numbers.</span>' +
+      '<span id="pool-token-hint-enterprise" hidden>A classic token of an owner or billing manager of the enterprise, with the scope <strong>manage_billing:enterprise</strong> and nothing else: ' +
+      `<a href="https://github.com/settings/tokens/new?scopes=manage_billing:enterprise&amp;description=CI-Plane%20budgets" target="_blank" rel="noopener">new token on GitHub${icon('external', 16)}</a>. ` +
+      'If the organisation asks for single sign-on, authorise the token for it. CI-Plane keeps it encrypted and only reads the budgets with it.</span></small></div>' +
     '</fieldset>';
 }
 
@@ -445,11 +451,17 @@ function syncBudgetFields() {
   const kind = $('input[name="pool-budget-kind"]:checked')?.value || 'minutes';
   const repo = chosenRepo();
   const user = repo && repo.ownerType === 'User';
+  const org = repo && repo.ownerType === 'Organization';
+  // The budgets of an enterprise are read with a token of a person, like the billing of a personal account.
+  const enterprise = !!(org && kind === 'github' && $('#pool-enterprise').value.trim());
   $('#pool-budget-min-field').hidden = kind !== 'minutes';
   $('#pool-budget-usd-field').hidden = kind !== 'dollars';
-  $('#pool-billing-org').hidden = !(repo && repo.ownerType === 'Organization' && kind !== 'minutes');
-  $('#pool-token-field').hidden = !user;
-  $('#pool-token').placeholder = user && repo.hasUsageToken ? 'Stored; enter a new one to replace it' : 'github_pat_...';
+  $('#pool-billing-org').hidden = !(org && kind !== 'minutes');
+  $('#pool-enterprise-field').hidden = !(org && kind === 'github');
+  $('#pool-token-field').hidden = !(user || enterprise);
+  $('#pool-token-hint-user').hidden = enterprise;
+  $('#pool-token-hint-enterprise').hidden = !enterprise;
+  $('#pool-token').placeholder = repo && repo.hasUsageToken ? 'Stored; enter a new one to replace it' : enterprise ? 'ghp_...' : 'github_pat_...';
   const follow = $('input[name="pool-budget-kind"][value="github"]');
   follow.disabled = !!user;
   if (user && follow.checked) {
@@ -555,6 +567,7 @@ function readPoolForm() {
     budgetKind: dlg.kind === 'github' ? ($('input[name="pool-budget-kind"]:checked')?.value || 'minutes') : 'minutes',
     budgetMin: num('#pool-budget'),
     budgetUsd: $('#pool-budget-usd') ? num('#pool-budget-usd') : 0,
+    enterprise: $('#pool-enterprise') && !$('#pool-enterprise-field').hidden ? $('#pool-enterprise').value.trim() : '',
     usageToken: $('#pool-token') && !$('#pool-token-field').hidden ? $('#pool-token').value.trim() : '',
   };
 }
@@ -576,7 +589,7 @@ async function submitPool(event) {
     if (!dlg.values || kind !== dlg.kind) {
       const x = preset(kind);
       dlg.values = { name: x.name, accountId: dlg.values?.accountId || 0, repo: dlg.values?.repo || '', tier: MAX_TIER, afterSec: 180, max: 5, standard: x.standard, large: x.large,
-        budgetKind: 'minutes', budgetMin: 0, budgetUsd: 0 };
+        budgetKind: 'minutes', budgetMin: 0, budgetUsd: 0, enterprise: '' };
     }
     dlg.kind = kind;
     dlg.step = 'form';
@@ -615,6 +628,9 @@ poolForm.addEventListener('submit', submitPool);
 poolForm.addEventListener('change', (event) => {
   if (event.target.name === 'pool-use') $('#pool-wait-field').hidden = event.target.value !== 'wait';
   if (event.target.name === 'pool-budget-kind' || event.target.id === 'pool-repo') syncBudgetFields();
+});
+poolForm.addEventListener('input', (event) => {
+  if (event.target.id === 'pool-enterprise') syncBudgetFields();
 });
 poolForm.addEventListener('click', (event) => {
   if (!event.target.closest('[data-pool-back]')) return;

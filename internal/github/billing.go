@@ -117,7 +117,12 @@ func (s *Service) PoolUsage(ctx context.Context, p model.Pool, year int, month t
 		for _, m := range u.Machines {
 			skus[skuKey(m.SKU)] = true
 		}
-		if u.Budgets, err = s.budgets(ctx, a, owner, p.Repo, skus); err != nil {
+		if p.Enterprise != "" {
+			u.Budgets, err = s.enterpriseBudgets(ctx, a, p.Enterprise, owner, p.Repo, skus)
+		} else {
+			u.Budgets, err = s.budgets(ctx, a, owner, p.Repo, skus)
+		}
+		if err != nil {
 			return u, err
 		}
 	}
@@ -125,54 +130,141 @@ func (s *Service) PoolUsage(ctx context.Context, p model.Pool, year int, month t
 }
 
 // budgets reads the budgets of an organisation that cover the Actions
-// minutes of repo: those of the organisation, of its enterprise, and of the
-// repository; for all of Actions, or for a SKU among skus, the machines the
-// repository used this month. Budgets of cost centres are left out, as
-// CI-Plane cannot see what they cover.
+// minutes of repo: those of the organisation and of the repository; for
+// all of Actions, or for a SKU among skus, the machines the repository used
+// this month. Budgets of cost centres are left out, as CI-Plane cannot see
+// here what they cover.
 func (s *Service) budgets(ctx context.Context, a model.Account, org, repo string, skus map[string]bool) ([]model.GitHubBudget, error) {
-	out := []model.GitHubBudget{}
+	list, err := s.budgetPages(ctx, func(page int) call {
+		path := fmt.Sprintf("/organizations/%s/settings/billing/budgets?per_page=100&page=%d", url.PathEscape(org), page)
+		return call{method: http.MethodGet, path: path, auth: authInstallation, account: a.ID}
+	})
+	if err != nil {
+		// What GitHub answers for an organisation whose billing an
+		// enterprise keeps: its budgets are the enterprise's.
+		if statusOf(err) == http.StatusBadRequest {
+			return nil, fmt.Errorf("GitHub does not hand out the budgets of %s (it answers: %s). That is so when the organisation belongs to an enterprise, "+
+				"which keeps the budgets. Edit the pool and enter the enterprise and a token that reads its budgets, or choose another budget", org, strings.TrimRight(messageOfErr(err), "."))
+		}
+		return nil, s.billingError(a, org, err)
+	}
+	return coveringBudgets(list, org, repo, skus, nil), nil
+}
+
+// enterpriseBudgets reads the budgets of the enterprise an organisation
+// belongs to that cover the Actions minutes of repo: those of the
+// enterprise, of the organisation, of the repository, and of the cost
+// centres either of them is in. GitHub shows them to a person only (an
+// owner or billing manager of the enterprise; an owner of the organisation
+// sees those of the organisation and its repositories), so they are read
+// with the token entered in the pool.
+func (s *Service) enterpriseBudgets(ctx context.Context, a model.Account, enterprise, org, repo string, skus map[string]bool) ([]model.GitHubBudget, error) {
+	tok, err := s.usageToken(a.ID)
+	if err != nil {
+		return nil, err
+	}
+	if tok == "" {
+		return nil, fmt.Errorf("GitHub shows the budgets of an enterprise to a person only: edit the pool and enter a token of an owner or billing manager of %s", enterprise)
+	}
+	base := "/enterprises/" + url.PathEscape(enterprise) + "/settings/billing"
+	explain := func(err error) error {
+		switch statusOf(err) {
+		case http.StatusUnauthorized:
+			return fmt.Errorf("GitHub does not accept the token for the budgets of %s any more; it may have expired. Edit the pool and enter a new one", enterprise)
+		case http.StatusForbidden, http.StatusNotFound:
+			return fmt.Errorf("the token may not read the budgets of the enterprise %s (GitHub answers: %s). Check the name of the enterprise, as in github.com/enterprises/NAME, "+
+				"and enter a classic token of one of its owners or billing managers with the scope manage_billing:enterprise; "+
+				"if %s asks for single sign-on, authorise the token for it", enterprise, strings.TrimRight(messageOfErr(err), "."), org)
+		}
+		return err
+	}
+	list, err := s.budgetPages(ctx, func(page int) call {
+		return call{method: http.MethodGet, path: fmt.Sprintf("%s/budgets?per_page=100&page=%d", base, page), token: tok}
+	})
+	if err != nil {
+		return nil, explain(err)
+	}
+	// The cost centres the organisation and the repository are in. A person
+	// who may not see them sees no budget of a cost centre either.
+	centres := map[string]bool{}
+	for kind, name := range map[string]string{"organization": org, "repository": repo} {
+		var m struct {
+			Memberships []struct {
+				CostCenter struct {
+					Name string `json:"name"`
+				} `json:"cost_center"`
+			} `json:"memberships"`
+		}
+		path := base + "/cost-centers/memberships?resource_type=" + kind + "&name=" + url.QueryEscape(name)
+		if _, err := s.getJSON(ctx, call{method: http.MethodGet, path: path, token: tok}, &m); err != nil {
+			if statusOf(err) == 0 {
+				return nil, err // the network, not an answer
+			}
+			continue
+		}
+		for _, x := range m.Memberships {
+			centres[strings.ToLower(x.CostCenter.Name)] = true
+		}
+	}
+	return coveringBudgets(list, org, repo, skus, centres), nil
+}
+
+// budgetPages reads every page of a list of budgets.
+func (s *Service) budgetPages(ctx context.Context, req func(page int) call) ([]ghBudget, error) {
+	var all []ghBudget
 	for page := 1; page <= maxBudgetPages; page++ {
 		var resp struct {
 			Budgets []ghBudget `json:"budgets"`
 			HasNext bool       `json:"has_next_page"`
 		}
-		path := fmt.Sprintf("/organizations/%s/settings/billing/budgets?per_page=100&page=%d", url.PathEscape(org), page)
-		if _, err := s.getJSON(ctx, call{method: http.MethodGet, path: path, auth: authInstallation, account: a.ID}, &resp); err != nil {
-			// What GitHub answers for an organisation whose billing an
-			// enterprise keeps: its budgets are the enterprise's.
-			if statusOf(err) == http.StatusBadRequest {
-				return nil, fmt.Errorf("GitHub does not hand out the budgets of %s (it answers: %s). That is so when the organisation belongs to an enterprise, "+
-					"which keeps the budgets. Edit the pool and choose another budget: dollars, or only the included minutes", org, strings.TrimRight(messageOfErr(err), "."))
-			}
-			return nil, s.billingError(a, org, err)
+		if _, err := s.getJSON(ctx, req(page), &resp); err != nil {
+			return nil, err
 		}
-		for _, b := range resp.Budgets {
-			sku := skuKey(b.ProductSKU)
-			switch {
-			case strings.EqualFold(b.Type, "SkuPricing"):
-				if !skus[sku] {
-					continue // another machine, or storage
-				}
-			case sku != "actions":
-				continue // another product
-			}
-			switch strings.ToLower(b.Scope) {
-			case "organization", "enterprise":
-			case "repository":
-				if !sameRepo(b.Entity, repo) {
-					continue
-				}
-			default:
-				continue
-			}
-			out = append(out, model.GitHubBudget{ID: b.ID, Scope: strings.ToLower(b.Scope), Entity: b.Entity, SKU: b.ProductSKU,
-				AmountUSD: b.Amount, ConsumedUSD: b.Consumed, Stop: b.Stop})
-		}
+		all = append(all, resp.Budgets...)
 		if !resp.HasNext || len(resp.Budgets) == 0 {
 			break
 		}
 	}
-	return out, nil
+	return all, nil
+}
+
+// coveringBudgets are the budgets among list that cover the Actions
+// minutes of repo, a repository of org: for all of Actions, or for a SKU
+// among skus; of the enterprise, the organisation, the repository, or a
+// cost centre among centres (by name, in lower case).
+func coveringBudgets(list []ghBudget, org, repo string, skus, centres map[string]bool) []model.GitHubBudget {
+	out := []model.GitHubBudget{}
+	for _, b := range list {
+		sku := skuKey(b.ProductSKU)
+		switch {
+		case strings.EqualFold(b.Type, "SkuPricing"):
+			if !skus[sku] {
+				continue // another machine, or storage
+			}
+		case sku != "actions":
+			continue // another product
+		}
+		switch strings.ToLower(b.Scope) {
+		case "enterprise":
+		case "organization":
+			if b.Entity != "" && !strings.EqualFold(b.Entity, org) {
+				continue
+			}
+		case "repository":
+			if !sameRepo(b.Entity, repo) {
+				continue
+			}
+		case "cost_center":
+			if !centres[strings.ToLower(b.Entity)] {
+				continue
+			}
+		default:
+			continue
+		}
+		out = append(out, model.GitHubBudget{ID: b.ID, Scope: strings.ToLower(b.Scope), Entity: b.Entity, SKU: b.ProductSKU,
+			AmountUSD: b.Amount, ConsumedUSD: b.Consumed, Stop: b.Stop})
+	}
+	return out
 }
 
 // skuKey is a SKU as budgets name it (actions_linux), also for one the

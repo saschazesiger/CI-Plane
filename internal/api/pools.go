@@ -241,8 +241,10 @@ type poolReq struct {
 	BudgetKind *string `json:"budgetKind"`
 	BudgetMin  *int    `json:"budgetMin"`
 	BudgetUSD  *int    `json:"budgetUsd"`
+	Enterprise *string `json:"enterprise"`
 	// UsageToken, if not empty, is a new token of a person that reads the
-	// billing of the personal account the pool's runs are billed to.
+	// billing of the personal account the pool's runs are billed to, or
+	// the budgets of the enterprise its organisation belongs to.
 	UsageToken *string `json:"usageToken"`
 }
 
@@ -266,6 +268,7 @@ func (q poolReq) apply(p *model.Pool) {
 	num(&p.AfterSec, q.AfterSec)
 	num(&p.Max, q.Max)
 	str(&p.BudgetKind, q.BudgetKind)
+	str(&p.Enterprise, q.Enterprise)
 	num(&p.BudgetMin, q.BudgetMin)
 	num(&p.BudgetUSD, q.BudgetUSD)
 	if q.Enabled != nil {
@@ -415,6 +418,11 @@ func checkPool(tx *store.Tx, p model.Pool) (map[string]string, error) {
 	case p.Budget() == model.BudgetGitHub && !a.IsOrg():
 		errs["budgetKind"] = "GitHub has no way to read the budgets of a personal account. Choose a budget in dollars, or included minutes only."
 	}
+	switch {
+	case p.Budget() != model.BudgetGitHub:
+	case p.Enterprise != "" && !enterpriseRe.MatchString(p.Enterprise):
+		errs["enterprise"] = "Enter the short name of the enterprise as in its address on GitHub, github.com/enterprises/NAME, or leave it empty."
+	}
 	// GitHub bills by repository: a pool whose budget rests on it needs a
 	// relay repository of its own, or it would count another pool's minutes.
 	for _, o := range pools {
@@ -431,23 +439,36 @@ func checkPool(tx *store.Tx, p model.Pool) (map[string]string, error) {
 	return errs, nil
 }
 
+// enterpriseRe is the slug of an enterprise on GitHub.
+var enterpriseRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,99}$`)
+
+// needsToken reports whether GitHub's billing of a pool is read with a
+// token of a person: that of a personal account, and the budgets of an
+// enterprise. Everything else of an organisation is read by its app.
+func needsToken(a model.Account, p model.Pool) bool {
+	return !a.IsOrg() || p.Budget() == model.BudgetGitHub && p.Enterprise != ""
+}
+
 // minTokenLen and maxTokenLen bound what is taken as a token of GitHub.
 const minTokenLen, maxTokenLen = 20, 400
 
 // checkUsageToken says what is wrong with the token of a person that reads
-// the billing of a pool's personal account; "" if nothing is.
+// the billing of a pool's personal account, or the budgets of its
+// enterprise; "" if nothing is.
 func (s *Server) checkUsageToken(tx *store.Tx, p model.Pool, token string) string {
 	a, known := poolAccount(tx, p.AccountID)
-	if !known || a.IsOrg() {
+	if !known || !needsToken(a, p) {
 		return "" // the app reads the billing of an organisation
 	}
 	owner, _, _ := strings.Cut(p.Repo, "/")
 	switch {
+	case a.IsOrg() && token == "" && !s.hasUsageToken(tx, p.AccountID):
+		return fmt.Sprintf("Enter a classic token of an owner or billing manager of the enterprise %s with the scope manage_billing:enterprise. GitHub shows the budgets of an enterprise to a person only.", p.Enterprise)
 	case token == "" && !p.UsesBilling():
 		// A budget of minutes needs no token; with one, the pool shows
 		// GitHub's numbers too.
 	case token != "" && (len(token) < minTokenLen || len(token) > maxTokenLen || strings.ContainsAny(token, " \t\r\n")):
-		return "This does not look like a token of GitHub. Copy it again from GitHub, like github_pat_..."
+		return "This does not look like a token of GitHub. Copy it again from GitHub, like github_pat_... or ghp_..."
 	case token != "" && s.d.Box == nil:
 		return "This mode cannot keep tokens."
 	case token == "" && !s.hasUsageToken(tx, p.AccountID):
@@ -505,15 +526,18 @@ func (s *Server) storePool(w http.ResponseWriter, id int64, req poolReq) {
 		if len(errs) > 0 {
 			return errPoolFields
 		}
-		if a, ok := poolAccount(tx, p.AccountID); !ok || a.IsOrg() {
+		if a, ok := poolAccount(tx, p.AccountID); !ok || !needsToken(a, p) {
 			token = ""
+		}
+		if p.Budget() != model.BudgetGitHub {
+			p.Enterprise = "" // only the budgets on GitHub are an enterprise's
 		}
 		if token != "" {
 			if err := s.d.Box.Put(tx, UsageTokenName(p.AccountID), []byte(token)); err != nil {
 				return err
 			}
 		}
-		if token != "" || p.AccountID != before.AccountID || p.Repo != before.Repo || p.Budget() != before.Budget() {
+		if token != "" || p.AccountID != before.AccountID || p.Repo != before.Repo || p.Budget() != before.Budget() || p.Enterprise != before.Enterprise {
 			// What was read belongs to another repository, account or kind
 			// of budget: the engine reads it again at once.
 			p.Usage = model.PoolUsage{}

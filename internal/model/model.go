@@ -478,6 +478,10 @@ type Pool struct {
 	// BudgetUSD is how many US dollars the pool may cost per month under
 	// BudgetDollars, as GitHub bills them.
 	BudgetUSD int `json:"budgetUsd"`
+	// Enterprise is the slug of the enterprise the relay repository's
+	// organisation belongs to, for BudgetGitHub: such an organisation has
+	// its budgets there. Empty: the budgets of the organisation itself.
+	Enterprise string `json:"enterprise"`
 
 	// Kept by the engine.
 	Month       string `json:"month"`       // the month UsedSec belongs to, like 2026-11
